@@ -63,7 +63,7 @@ pub async fn run(update_only: bool, prerelease: Option<bool>) {
         let file = file.unwrap();
         let file_name = file.file_name().into_string().unwrap();
 
-        if file_name.contains("iw4x-launcher")
+        if (file_name.contains("iw4x-launcher") || file_name.contains("alterware-launcher"))
             && (file_name.contains(".__relocated__.exe")
                 || file_name.contains(".__selfdelete__.exe"))
         {
