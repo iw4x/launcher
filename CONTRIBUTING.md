@@ -1,6 +1,6 @@
-# Contributing to AlterWare Launcher
+# Contributing to IW4x Launcher
 
-We welcome contributions to the AlterWare Launcher! Here are some guidelines to follow:
+We welcome contributions to the IW4x Launcher! Here are some guidelines to follow:
 
 > [!NOTE]
 > Always run `cargo fmt` and `cargo clippy` to ensure your code is formatted correctly and passes lint checks.
@@ -15,8 +15,8 @@ We welcome contributions to the AlterWare Launcher! Here are some guidelines to 
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/mxve/alterware-launcher.git
-   cd alterware-launcher
+   git clone https://github.com/iw4x/launcher.git
+   cd iw4x-launcher
    ```
 
 2. Build the project:
@@ -25,7 +25,7 @@ We welcome contributions to the AlterWare Launcher! Here are some guidelines to 
    ```
 
 3. Find the executable:
-   The compiled binary will be located at `target/release/alterware-launcher(.exe)`
+   The compiled binary will be located at `target/release/iw4x-launcher(.exe)`
 
 ### Additional Notes
 
@@ -42,4 +42,4 @@ We welcome contributions to the AlterWare Launcher! Here are some guidelines to 
 
 ## License
 
-By contributing to AlterWare Launcher, you agree that your contributions will be licensed under the [GPLv3 license](LICENSE).
+By contributing to IW4x Launcher, you agree that your contributions will be licensed under the [GPLv3 license](LICENSE).
