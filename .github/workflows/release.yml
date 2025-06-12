@@ -33,7 +33,7 @@ jobs:
       - uses: taiki-e/upload-rust-binary-action@v1.25.0
         with:
           target: ${{ matrix.target }}
-          bin: alterware-launcher
+          bin: iw4x-launcher
           tar: unix
           zip: windows
         env:
