@@ -27,21 +27,21 @@ simple-log = "2.3"
 walkdir = "2.5"
 
 [target.'cfg(unix)'.dependencies]
-openssl = { version = "0.10.71", default-features = false, features = ["vendored"] }
+openssl = { version = "0.10", default-features = false, features = ["vendored"] }
 
 [target.'cfg(windows)'.dependencies]
 # todo: update to 2.0.x; needs testing on windows
 steamlocate = "=2.0.0-beta.2"
-mslnk = "0.1.8"
-self-replace = "1.5.0"
+mslnk = "0.1"
+self-replace = "1.5"
 
 [build-dependencies]
-winresource = "0.1.19"
+winresource = "0.1"
 static_vcruntime = "2.0"
 
 [dev-dependencies]
-strip-ansi-escapes = "0.2.1"
-serial_test = "3.2.0"
+strip-ansi-escapes = "0.2"
+serial_test = "3.2"
 
 [package.metadata.winresource]
 OriginalFilename = "iw4x-launcher.exe"
