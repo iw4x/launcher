@@ -24,7 +24,7 @@ pub async fn download_file_progress(
         .header(
             "User-Agent",
             format!(
-                "AlterWare Launcher | github.com/{}/{}",
+                "IW4x Launcher | github.com/{}/{}",
                 crate::global::GH_OWNER,
                 crate::global::GH_REPO
             ),
@@ -82,7 +82,7 @@ pub async fn get_body(url: &str) -> Result<Vec<u8>, String> {
         .header(
             "User-Agent",
             format!(
-                "AlterWare Launcher | github.com/{}/{}",
+                "IW4x Launcher | github.com/{}/{}",
                 crate::global::GH_OWNER,
                 crate::global::GH_REPO
             ),
@@ -111,7 +111,7 @@ pub async fn get_json<T: serde::de::DeserializeOwned>(url: &str) -> Result<T, St
         .header(
             "User-Agent",
             format!(
-                "AlterWare Launcher | github.com/{}/{}",
+                "IW4x Launcher | github.com/{}/{}",
                 crate::global::GH_OWNER,
                 crate::global::GH_REPO
             ),

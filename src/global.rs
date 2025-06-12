@@ -8,8 +8,8 @@ use std::sync::Mutex;
 
 use crate::cdn::{Hosts, Region, Server};
 
-pub const GH_OWNER: &str = "mxve";
-pub const GH_REPO: &str = "alterware-launcher";
+pub const GH_OWNER: &str = "iw4x";
+pub const GH_REPO: &str = "launcher";
 pub const GH_IW4X_OWNER: &str = "iw4x";
 pub const GH_IW4X_REPO: &str = "iw4x-client";
 pub const DEFAULT_MASTER: &str = "https://cdn.alterware.ovh";
@@ -28,7 +28,7 @@ pub const IP2ASN: &str = "https://ip2asn.getserve.rs/v1/as/ip/self";
 
 pub static USER_AGENT: Lazy<String> = Lazy::new(|| {
     format!(
-        "AlterWare Launcher v{} on {} | github.com/{}/{}",
+        "IW4x Launcher v{} on {} | github.com/{}/{}",
         env!("CARGO_PKG_VERSION"),
         std::env::consts::OS,
         GH_OWNER,

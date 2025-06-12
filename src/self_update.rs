@@ -26,7 +26,7 @@ pub async fn self_update_available(prerelease: Option<bool>) -> bool {
 #[cfg(not(windows))]
 pub async fn run(_update_only: bool, _prerelease: Option<bool>) {
     if self_update_available(None).await {
-        crate::println_info!("A new version of the AlterWare launcher is available.");
+        crate::println_info!("A new version of the IW4x launcher is available.");
         crate::println_info!(
             "Download it at {}",
             github::download_url(GH_OWNER, GH_REPO, None)
@@ -63,7 +63,7 @@ pub async fn run(update_only: bool, prerelease: Option<bool>) {
         let file = file.unwrap();
         let file_name = file.file_name().into_string().unwrap();
 
-        if file_name.contains("alterware-launcher")
+        if file_name.contains("iw4x-launcher")
             && (file_name.contains(".__relocated__.exe")
                 || file_name.contains(".__selfdelete__.exe"))
         {
@@ -80,7 +80,7 @@ pub async fn run(update_only: bool, prerelease: Option<bool>) {
             github::download_url(GH_OWNER, GH_REPO, None)
         );
 
-        let update_binary = PathBuf::from("alterware-launcher-update.exe");
+        let update_binary = PathBuf::from("iw4x-launcher-update.exe");
         let file_path = working_dir.join(&update_binary);
 
         if update_binary.exists() {
@@ -88,9 +88,9 @@ pub async fn run(update_only: bool, prerelease: Option<bool>) {
         }
 
         let launcher_name = if cfg!(target_arch = "x86") {
-            "alterware-launcher-x86.exe"
+            "iw4x-launcher-x86.exe"
         } else {
-            "alterware-launcher.exe"
+            "iw4x-launcher.exe"
         };
 
         http_async::download_file(
@@ -109,7 +109,7 @@ pub async fn run(update_only: bool, prerelease: Option<bool>) {
             return;
         }
 
-        self_replace::self_replace("alterware-launcher-update.exe").unwrap();
+        self_replace::self_replace("iw4x-launcher-update.exe").unwrap();
         fs::remove_file(&file_path).unwrap();
 
         // restarting spawns a new console, automation should manually restart on exit code 201

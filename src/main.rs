@@ -77,20 +77,18 @@ fn create_shortcut(path: &Path, target: &Path, icon: String, args: String) {
 
 #[cfg(windows)]
 fn setup_client_links(game: &Game, game_dir: &Path) {
-    if game.client.len() > 1 {
-        println!("Multiple clients installed, use the shortcuts (launch-<client>.lnk in the game directory or on the desktop) to launch a specific client.");
-    }
-
     for c in game.client.iter() {
-        create_shortcut(
-            &game_dir.join(format!("launch-{c}.lnk")),
-            &game_dir.join("alterware-launcher.exe"),
-            game_dir
-                .join(format!("{c}.exe"))
-                .to_string_lossy()
-                .into_owned(),
-            c.to_string(),
-        );
+        if *c == "iw4x" {
+            create_shortcut(
+                &game_dir.join(format!("launch-{c}.lnk")),
+                &game_dir.join("iw4x-launcher.exe"),
+                game_dir
+                    .join(format!("{c}.exe"))
+                    .to_string_lossy()
+                    .into_owned(),
+                c.to_string(),
+            );
+        }
     }
 }
 
@@ -103,14 +101,72 @@ fn setup_desktop_links(path: &Path, game: &Game) {
         let desktop = PathBuf::from(&format!("{}\\Desktop", env::var("USERPROFILE").unwrap()));
 
         for c in game.client.iter() {
-            create_shortcut(
-                &desktop.join(format!("{c}.lnk")),
-                &path.join("alterware-launcher.exe"),
-                path.join(format!("{c}.exe")).to_string_lossy().into_owned(),
-                c.to_string(),
-            );
+            if *c == "iw4x" {
+                create_shortcut(
+                    &desktop.join(format!("{c}.lnk")),
+                    &path.join("iw4x-launcher.exe"),
+                    path.join(format!("{c}.exe")).to_string_lossy().into_owned(),
+                    c.to_string(),
+                );
+            }
         }
     }
+}
+
+#[cfg(windows)]
+fn update_existing_shortcuts(game_dir: &Path) -> bool {
+    let mut shortcuts_updated = false;
+    let shortcut_path = game_dir.join("launch-iw4x.lnk");
+
+    // If the shortcut exists, recreate it with the new target
+    if shortcut_path.exists() {
+        create_shortcut(
+            &shortcut_path,
+            &game_dir.join("iw4x-launcher.exe"),
+            game_dir.join("iw4x.exe").to_string_lossy().into_owned(),
+            "iw4x".to_string(),
+        );
+        shortcuts_updated = true;
+        crate::println_info!("Updated shortcut: {}", shortcut_path.display());
+    }
+
+    // Update desktop shortcut
+    if let Ok(desktop_path) = env::var("USERPROFILE") {
+        let desktop = PathBuf::from(&format!("{}\\Desktop", desktop_path));
+        let desktop_shortcut = desktop.join("iw4x.lnk");
+
+        if desktop_shortcut.exists() {
+            create_shortcut(
+                &desktop_shortcut,
+                &game_dir.join("iw4x-launcher.exe"),
+                game_dir.join("iw4x.exe").to_string_lossy().into_owned(),
+                "iw4x".to_string(),
+            );
+            shortcuts_updated = true;
+            crate::println_info!("Updated desktop shortcut: {}", desktop_shortcut.display());
+        }
+    }
+
+    shortcuts_updated
+}
+
+fn check_first_time_run(install_path: &Path) -> bool {
+    let new_config = install_path.join("iw4x-launcher.json");
+    let old_config = install_path.join("alterware-launcher.json");
+
+    if !new_config.exists() {
+        if old_config.exists() {
+            if let Err(e) = fs::copy(&old_config, &new_config) {
+                crate::println_error!("Failed to copy config file: {}", e);
+            } else {
+                crate::println_info!(
+                    "Copied configuration from alterware-launcher.json to iw4x-launcher.json"
+                );
+            }
+        }
+        return true;
+    }
+    false
 }
 
 #[cfg(windows)]
@@ -156,7 +212,7 @@ async fn windows_launcher_install(games: &Vec<Game<'_>>) {
                 let game = games.iter().find(|&g| g.app_id == input).unwrap();
 
                 let launcher_path = env::current_exe().unwrap();
-                let target_path = path.join("alterware-launcher.exe");
+                let target_path = path.join("iw4x-launcher.exe");
 
                 if launcher_path != target_path {
                     fs::copy(launcher_path, &target_path).unwrap();
@@ -523,7 +579,7 @@ fn launch(file_path: &PathBuf, args: &str) {
         file_path.display(),
         args
     );
-    println!("\n\nJoin the AlterWare Discord server:\nhttps://discord.gg/2ETE8engZM\n\n");
+    println!("\n\nJoin the AlterWare Discord server:\nhttps://discord.com/invite/pV2qJscTXf \n\n");
     crate::println_info!("Launching {} {args}", file_path.display());
     let exit_status = std::process::Command::new(file_path)
         .args(args.trim().split(' '))
@@ -547,7 +603,7 @@ fn launch(file_path: &PathBuf, args: &str) {
 
 #[cfg(unix)]
 fn launch(file_path: &PathBuf, args: &str) {
-    println!("\n\nJoin the AlterWare Discord server:\nhttps://discord.gg/2ETE8engZM\n\n");
+    println!("\n\nJoin the AlterWare Discord server:\nhttps://discord.com/invite/pV2qJscTXf \n\n");
     crate::println_info!("Launching {} {args}", file_path.display());
     let exit_status = if misc::is_program_in_path("wine") {
         println!("Found wine, launching game using wine.\nIf you run into issues or want to launch a different way, run {} manually.", file_path.display());
@@ -667,16 +723,14 @@ async fn main() {
         println!("    --offline: Run in offline mode");
         println!("    --skip-connectivity-check: Don't check connectivity");
         println!("    --rate: Display CDN rating information and exit");
-        println!(
-            "\nExample:\n    alterware-launcher.exe iw4x --bonus --pass \"-console -nointro\""
-        );
+        println!("\nExample:\n    iw4x-launcher.exe iw4x --bonus --pass \"-console -nointro\"");
         return;
     }
 
     if arg_bool(&args, "--version") || arg_bool(&args, "-v") {
         println!(
             "{} v{}",
-            "AlterWare Launcher".bright_green(),
+            "IW4x Launcher".bright_green(),
             env!("CARGO_PKG_VERSION")
         );
         println!("https://github.com/{GH_OWNER}/{GH_REPO}");
@@ -704,6 +758,43 @@ async fn main() {
         install_path = env::current_dir().unwrap();
     }
 
+    let is_first_time = check_first_time_run(&install_path);
+    #[cfg(windows)]
+    {
+        let _ = update_existing_shortcuts(&install_path);
+    }
+
+    if is_first_time {
+        println!("===============================================");
+        println!(
+            "{}",
+            "IMPORTANT: Please use iw4x-launcher.exe from now on!"
+                .on_red()
+                .bold()
+        );
+        println!(
+            "{}",
+            "The AlterWare launcher will no longer work for IW4x, you've automatically been updated to the new launcher."
+                .on_red()
+                .bold()
+        );
+        println!(
+            "{}",
+            "You can now find IW4x on www.IW4x.dev and discord.gg/pV2qJscTXf"
+                .on_red()
+                .bold()
+        );
+        println!(
+            "{}",
+            "All other AlterWare clients are still available through the AlterWare Launcher at github.com/alterware/alterware-launcher"
+                .on_red()
+                .bold()
+        );
+        println!("===============================================");
+        println!("{}", "Press any key to continue...".on_green().bold());
+        misc::stdin();
+    }
+
     let mut is_iw4x = false;
     if args.len() > 1 && args[1] == "iw4x" {
         is_iw4x = true;
@@ -722,7 +813,7 @@ async fn main() {
         return;
     }
 
-    let mut cfg = config::load(install_path.join("alterware-launcher.json"));
+    let mut cfg = config::load(install_path.join("iw4x-launcher.json"));
 
     if let Some(cdn_url) = arg_value(&args, "--cdn-url") {
         cfg.cdn_url = cdn_url;
@@ -787,18 +878,18 @@ async fn main() {
 
         // Get client from args, config, or prompt user
         let client = if args.len() > 1 {
-            args[1].clone()
-        } else if let Some(engine) = stored_data
-            .as_ref()
-            .and_then(|d| d.clients.get(&cfg.engine))
-        {
-            if engine.len() > 1 {
-                println!("Multiple clients available, select one to launch:");
-                for (i, c) in engine.iter().enumerate() {
-                    println!("{i}: {c}");
-                }
-                info!("Multiple clients available, prompting user for selection");
-                engine[misc::stdin().parse::<usize>().unwrap()].clone()
+            let requested_client = &args[1];
+            if requested_client != "iw4x" {
+                println!("This client is available through the AlterWare Launcher at github.com/alterware/alterware-launcher");
+                println!("Press enter to exit...");
+                misc::stdin();
+                std::process::exit(0);
+            }
+            requested_client.clone()
+        } else if let Some(engine) = stored_data.as_ref().and_then(|d| d.clients.get("iw4")) {
+            if engine.contains(&"iw4x".to_string()) {
+                info!("Using iw4x client in offline mode");
+                "iw4x".to_string()
             } else if !engine.is_empty() {
                 info!("Using single available client: {}", engine[0]);
                 engine[0].clone()
@@ -903,30 +994,26 @@ async fn main() {
 
     let mut game: String = String::new();
     if args.len() > 1 {
-        game = String::from(&args[1]);
+        let requested_client = &args[1];
+        if requested_client != "iw4x" {
+            println!("This client is available through the AlterWare Launcher at github.com/alterware/alterware-launcher");
+            println!("Press enter to exit...");
+            misc::stdin();
+            std::process::exit(0);
+        }
+        game = String::from(requested_client);
     } else {
         'main: for g in games.iter() {
             for r in g.references.iter() {
                 if install_path.join(r).exists() {
-                    if g.client.len() > 1 {
-                        if cfg.update_only {
-                            game = String::from(g.client[0]);
-                            break 'main;
-                        }
-
-                        #[cfg(windows)]
-                        setup_client_links(g, &env::current_dir().unwrap());
-
-                        #[cfg(not(windows))]
-                        println!("Multiple clients installed, set the client as the first argument to launch a specific client.");
-                        println!("Select a client to launch:");
-                        for (i, c) in g.client.iter().enumerate() {
-                            println!("{i}: {c}");
-                        }
-                        game = String::from(g.client[misc::stdin().parse::<usize>().unwrap()]);
-                        break 'main;
+                    if g.engine != "iw4" {
+                        println!("This client is available through the AlterWare Launcher at github.com/alterware/alterware-launcher");
+                        println!("Press enter to exit...");
+                        misc::stdin();
+                        std::process::exit(0);
                     }
-                    game = String::from(g.client[0]);
+
+                    game = String::from("iw4x");
                     break 'main;
                 }
             }
@@ -936,17 +1023,24 @@ async fn main() {
     for g in games.iter() {
         for c in g.client.iter() {
             if c == &game {
+                if g.engine != "iw4" || c != &"iw4x" {
+                    println!("This client is available through the AlterWare Launcher at github.com/alterware/alterware-launcher");
+                    println!("Press enter to exit...");
+                    misc::stdin();
+                    std::process::exit(0);
+                }
+
                 if cfg.engine.is_empty() {
                     cfg.engine = String::from(g.engine);
                     config::save_value_s(
-                        install_path.join("alterware-launcher.json"),
+                        install_path.join("iw4x-launcher.json"),
                         "engine",
                         cfg.engine.clone(),
                     );
                     if cfg.engine == "iw4" && cfg.args.is_empty() {
                         cfg.args = String::from("-stdout");
                         config::save_value_s(
-                            install_path.join("alterware-launcher.json"),
+                            install_path.join("iw4x-launcher.json"),
                             "args",
                             cfg.args.clone(),
                         );
@@ -963,12 +1057,12 @@ async fn main() {
                     let input = misc::stdin().to_ascii_lowercase();
                     cfg.download_bonus_content = input != "n";
                     config::save_value(
-                        install_path.join("alterware-launcher.json"),
+                        install_path.join("iw4x-launcher.json"),
                         "download_bonus_content",
                         cfg.download_bonus_content,
                     );
                     config::save_value(
-                        install_path.join("alterware-launcher.json"),
+                        install_path.join("iw4x-launcher.json"),
                         "ask_bonus_content",
                         false,
                     );
@@ -1012,10 +1106,19 @@ async fn main() {
     }
 
     #[cfg(windows)]
-    windows_launcher_install(&games).await;
+    {
+        let iw4_games: Vec<Game> = games.into_iter().filter(|g| g.engine == "iw4").collect();
+        if iw4_games.is_empty() {
+            println!("This client is available through the AlterWare Launcher at github.com/alterware/alterware-launcher");
+            println!("Press enter to exit...");
+            misc::stdin();
+            std::process::exit(0);
+        }
+        windows_launcher_install(&iw4_games).await;
+    }
 
     crate::println_error!("Game not found!");
-    println!("Place the launcher in the game folder, if that doesn't work specify the client on the command line (ex. alterware-launcher.exe iw4-sp)");
+    println!("Place the launcher in the game folder, if that doesn't work specify the client on the command line (ex. iw4x-launcher.exe iw4x)");
     println!("Press enter to exit...");
     std::io::stdin().read_line(&mut String::new()).unwrap();
 }

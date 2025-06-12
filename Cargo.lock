@@ -18,34 +18,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f26201604c87b1e01bd3d98f8d5d9a8fcbb815e8cedb41ffccbeb4bf593a35fe"
 
 [[package]]
-name = "alterware-launcher"
-version = "0.10.8"
-dependencies = [
- "blake3",
- "colored",
- "futures",
- "futures-util",
- "indicatif",
- "mslnk",
- "once_cell",
- "openssl",
- "rand 0.9.0",
- "reqwest",
- "self-replace",
- "semver",
- "serde",
- "serde_json",
- "serial_test",
- "simple-log",
- "static_vcruntime",
- "steamlocate",
- "strip-ansi-escapes",
- "tokio",
- "walkdir",
- "winresource",
-]
-
-[[package]]
 name = "android-tzdata"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -746,6 +718,34 @@ name = "itoa"
 version = "1.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "453ad9f582a441959e5f0d088b02ce04cfe8d51a8eaf077f12ac6d3e94164ca6"
+
+[[package]]
+name = "iw4x-launcher"
+version = "0.10.9"
+dependencies = [
+ "blake3",
+ "colored",
+ "futures",
+ "futures-util",
+ "indicatif",
+ "mslnk",
+ "once_cell",
+ "openssl",
+ "rand 0.9.0",
+ "reqwest",
+ "self-replace",
+ "semver",
+ "serde",
+ "serde_json",
+ "serial_test",
+ "simple-log",
+ "static_vcruntime",
+ "steamlocate",
+ "strip-ansi-escapes",
+ "tokio",
+ "walkdir",
+ "winresource",
+]
 
 [[package]]
 name = "js-sys"
