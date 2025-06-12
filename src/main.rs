@@ -579,7 +579,7 @@ fn launch(file_path: &PathBuf, args: &str) {
         file_path.display(),
         args
     );
-    println!("\n\nJoin the AlterWare Discord server:\nhttps://discord.com/invite/pV2qJscTXf \n\n");
+    println!("\n\nJoin the IW4x Discord server:\nhttps://discord.com/invite/pV2qJscTXf \n\n");
     crate::println_info!("Launching {} {args}", file_path.display());
     let exit_status = std::process::Command::new(file_path)
         .args(args.trim().split(' '))
@@ -603,7 +603,7 @@ fn launch(file_path: &PathBuf, args: &str) {
 
 #[cfg(unix)]
 fn launch(file_path: &PathBuf, args: &str) {
-    println!("\n\nJoin the AlterWare Discord server:\nhttps://discord.com/invite/pV2qJscTXf \n\n");
+    println!("\n\nJoin the IW4x Discord server:\nhttps://discord.com/invite/pV2qJscTXf \n\n");
     crate::println_info!("Launching {} {args}", file_path.display());
     let exit_status = if misc::is_program_in_path("wine") {
         println!("Found wine, launching game using wine.\nIf you run into issues or want to launch a different way, run {} manually.", file_path.display());
