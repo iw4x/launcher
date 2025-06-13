@@ -791,7 +791,7 @@ async fn main() {
                 .bold()
         );
         println!("===============================================");
-        println!("{}", "Press any key to continue...".on_green().bold());
+        println!("{}", "Press Enter to continue...".on_green().bold());
         misc::stdin();
     }
 
