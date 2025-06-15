@@ -104,7 +104,7 @@ pub async fn get_body_string(url: &str) -> Result<String, String> {
     Ok(String::from_utf8(body).unwrap())
 }
 
-pub async fn get_json<T: serde::de::DeserializeOwned>(url: &str) -> Result<T, String> {
+pub async fn _get_json<T: serde::de::DeserializeOwned>(url: &str) -> Result<T, String> {
     let client = Client::new();
     let res = client
         .get(url)

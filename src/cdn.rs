@@ -3,6 +3,7 @@ use futures::future::join_all;
 use simple_log::*;
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::Duration;
+use tokio::time::timeout;
 
 static CURRENT_CDN: Mutex<Option<Arc<Server>>> = Mutex::new(None);
 
@@ -13,6 +14,7 @@ pub enum Region {
     Europe,
     NorthAmerica,
     Oceania,
+    Russia,
     SouthAmerica,
     Global,
     Unknown,
@@ -25,8 +27,9 @@ impl Region {
             "Asia" => Region::Asia,
             "Europe" => Region::Europe,
             "NorthAmerica" => Region::NorthAmerica,
-            "Oceania" => Region::Oceania,
+            "Russia" => Region::Russia,
             "SouthAmerica" => Region::SouthAmerica,
+            "Oceania" => Region::Oceania,
             _ => Region::Unknown,
         }
     }
@@ -36,6 +39,7 @@ impl Region {
             Region::Europe => Some((54.0, 15.0)),
             Region::Asia => Some((35.0, 105.0)),
             Region::NorthAmerica => Some((45.0, -100.0)),
+            Region::Russia => Some((60.0, 100.0)),
             Region::SouthAmerica => Some((-15.0, -60.0)),
             Region::Africa => Some((0.0, 20.0)),
             Region::Oceania => Some((-25.0, 140.0)),
@@ -163,6 +167,11 @@ impl Server {
             if asn == 3320 || asn == 5483 {
                 rating = (rating as f32 * 0.1) as u8;
             }
+
+            // russia is unimpressed by cf
+            if user_region == Region::Russia {
+                rating = 0;
+            }
         }
 
         let distance_km = user_region.distance_to(self.region);
@@ -258,10 +267,25 @@ impl Hosts {
         let rating_futures: Vec<_> = self
             .servers
             .iter_mut()
-            .map(|server| server.rate(asn, user_region, is_initial))
+            .map(|server| {
+                let server_rate_future = server.rate(asn, user_region, is_initial);
+                timeout(Duration::from_secs(20), server_rate_future)
+            })
             .collect();
 
-        join_all(rating_futures).await;
+        let results = join_all(rating_futures).await;
+
+        for (i, result) in results.iter().enumerate() {
+            if result.is_err() {
+                warn!(
+                    "Rating operation for server {} timed out after 20 seconds",
+                    self.servers[i].host
+                );
+                // Set rating to 0 and latency to None for timed-out servers
+                self.servers[i].rating = 0;
+                self.servers[i].latency = None;
+            }
+        }
 
         // reset state and select best host
         *self.active_index.write().unwrap() = None;
