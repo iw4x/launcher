@@ -795,21 +795,8 @@ async fn main() {
         misc::stdin();
     }
 
-    let mut is_iw4x = false;
-    if args.len() > 1 && args[1] == "iw4x" {
-        is_iw4x = true;
-    } else {
-        let iw4x_reference_files = ["iw4mp.exe", "iw4sp.exe", "iw4x.exe"];
-        for ref_file in iw4x_reference_files.iter() {
-            if install_path.join(ref_file).exists() {
-                is_iw4x = true;
-                break;
-            }
-        }
-    }
-
     if arg_bool(&args, "--rate") {
-        cdn::rate_cdns_and_display(is_iw4x).await;
+        cdn::rate_cdns_and_display().await;
         return;
     }
 
@@ -841,9 +828,7 @@ async fn main() {
         if initial_cdn.is_some() {
             cfg.offline = !global::check_connectivity(initial_cdn).await;
         } else {
-            cfg.offline = !global::check_connectivity_and_rate_cdns(is_iw4x)
-                .await
-                .await;
+            cfg.offline = !global::check_connectivity_and_rate_cdns().await.await;
         }
     }
 
