@@ -313,7 +313,6 @@ pub async fn rate_cdns_and_display() {
 
     println!("Rating CDNs...");
 
-
     let mut hosts = Hosts {
         servers: crate::global::CDN_HOSTS.to_vec(),
         active_index: RwLock::new(None),
