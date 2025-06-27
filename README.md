@@ -1,6 +1,6 @@
 <div align="center">
 
-# IW4x Launcher <a href="https://iw4x.dev"><img src=".github/images/logo.png" align="right" width="128" height="128"></a>
+# IW4x Launcher
 ### Official launcher for the IW4x mod
 
 #### [Installation Guide](https://iw4x.dev/install) • [Discord Server](https://iw4x.dev/discord) • [Website](https://iw4x.dev)
