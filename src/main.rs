@@ -302,13 +302,7 @@ async fn run_launcher() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    game::update(
-        &game_data,
-        &install_path,
-        &cdn_url,
-        &mut cache,
-    )
-    .await?;
+    game::update(&game_data, &install_path, &cdn_url, &mut cache).await?;
     cache::save_cache(&launcher_dir, cache);
 
     crate::println_info!("Update completed successfully");
