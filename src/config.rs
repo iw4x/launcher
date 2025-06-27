@@ -1,61 +1,88 @@
-use crate::structs::Config;
-
 use std::{fs, path::PathBuf};
 
+use crate::extend::CutePath;
+
+#[derive(serde::Deserialize, serde::Serialize, PartialEq, Debug, Clone)]
+pub struct Config {
+    #[serde(default)]
+    pub update_only: bool,
+    #[serde(default)]
+    pub skip_self_update: bool,
+    #[serde(default)]
+    pub force_update: bool,
+    #[serde(default = "default_args")]
+    pub args: String,
+    #[serde(default)]
+    pub cdn_url: String,
+    #[serde(default)]
+    pub offline: bool,
+    #[serde(default)]
+    pub testing: bool,
+    #[serde(default)]
+    pub disable_art: bool,
+}
+
+fn default_args() -> String {
+    "-stdout".to_string()
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            update_only: false,
+            skip_self_update: false,
+            force_update: false,
+            args: "-stdout".to_string(),
+            cdn_url: String::new(),
+            offline: false,
+            testing: false,
+            disable_art: false,
+        }
+    }
+}
+
 pub fn load(config_path: PathBuf) -> Config {
-    debug!("Loading config from: {}", config_path.display());
-    if config_path.exists() {
-        let cfg = fs::read_to_string(&config_path).unwrap();
-        let cfg: Config = serde_json::from_str(&cfg).unwrap_or_else(|e| {
-            warn!("Failed to parse config file: {}", e);
+    log::debug!("Loading config from: {}", config_path.cute_path());
+    let cfg = if config_path.exists() {
+        let cfg_str = fs::read_to_string(&config_path).unwrap_or_default();
+        let cfg: Config = serde_json::from_str(&cfg_str).unwrap_or_else(|e| {
+            log::warn!("Failed to parse config file: {}", e);
             Config::default()
         });
-        debug!("Loaded config: {:?}", cfg);
-        return cfg;
-    }
-    info!("No config file found, creating default config");
-    save(config_path.clone(), Config::default());
-    Config::default()
+        log::debug!("Loaded config: {:?}", cfg);
+        cfg
+    } else {
+        log::info!("No config file found, creating default config");
+        Config::default()
+    };
+
+    save(config_path, cfg.clone());
+    cfg
 }
 
 pub fn save(config_path: PathBuf, config: Config) {
-    match fs::write(
-        config_path.clone(),
-        serde_json::to_string_pretty(&config).unwrap(),
-    ) {
-        Ok(_) => (),
+    let config_json = match serde_json::to_string_pretty(&config) {
+        Ok(json) => json,
+        Err(e) => {
+            log::error!("Could not serialize config: {}", e);
+            return;
+        }
+    };
+    match fs::write(config_path.clone(), config_json) {
+        Ok(_) => log::debug!("Saved config to: {}", config_path.cute_path()),
         Err(e) => match e.kind() {
             std::io::ErrorKind::NotFound => {
-                fs::create_dir_all(config_path.parent().unwrap()).unwrap();
-                save(config_path, config);
+                if let Some(parent) = config_path.parent() {
+                    if fs::create_dir_all(parent).is_ok() {
+                        if let Ok(json_config) = serde_json::to_string_pretty(&config) {
+                            if let Err(e) = fs::write(config_path, json_config) {
+                                crate::println_error!("Error while saving config: {}", e);
+                            }
+                        }
+                    }
+                }
             }
-            _ => crate::println_error!("Error while saving config {}", e.to_string()),
+            _ => crate::println_error!("Error while saving config: {}", e),
         },
     }
-}
-
-pub fn save_value(config_path: PathBuf, key: &str, value: bool) {
-    let mut config = load(config_path.clone());
-    match key {
-        "update_only" => config.update_only = value,
-        "skip_self_update" => config.skip_self_update = value,
-        "download_bonus_content" => config.download_bonus_content = value,
-        "ask_bonus_content" => config.ask_bonus_content = value,
-        "force_update" => config.force_update = value,
-        "use_https" => config.use_https = value,
-        "skip_redist" => config.skip_redist = value,
-        "prerelease" => config.prerelease = value,
-        _ => (),
-    }
-    save(config_path, config);
-}
-
-pub fn save_value_s(config_path: PathBuf, key: &str, value: String) {
-    let mut config = load(config_path.clone());
-    match key {
-        "args" => config.args = value.to_string(),
-        "engine" => config.engine = value.to_string(),
-        _ => (),
-    }
-    save(config_path, config);
 }

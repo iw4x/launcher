@@ -1,11 +1,9 @@
-use crate::http;
+use std::{sync::RwLock, time::Duration};
+
 use futures::future::join_all;
-use simple_log::*;
-use std::sync::{Arc, Mutex, RwLock};
-use std::time::Duration;
 use tokio::time::timeout;
 
-static CURRENT_CDN: Mutex<Option<Arc<Server>>> = Mutex::new(None);
+use crate::http;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Region {
@@ -115,7 +113,7 @@ impl Server {
                 self.latency = Some(latency);
                 self.rating = self.calculate_rating(latency, is_cloudflare, asn, user_region);
 
-                info!(
+                log::info!(
                     "Server {} rated {} ({}ms, rating: {}, cloudflare: {}, region: {:?})",
                     self.host,
                     self.rating,
@@ -126,7 +124,7 @@ impl Server {
                 );
             }
             Err(e) => {
-                error!("Failed to connect to {}: {}", self.host, e);
+                log::error!("Failed to connect to {}: {}", self.host, e);
                 self.rating = 0;
                 self.latency = None;
             }
@@ -174,13 +172,16 @@ impl Server {
             }
         }
 
-        let distance_km = user_region.distance_to(self.region);
+        let distance_km = if self.region != Region::Unknown {
+            user_region.distance_to(self.region)
+        } else {
+            20000.0
+        };
+
         let region_multiplier = if self.region == Region::Global {
             1.4
         } else if distance_km == 0.0 {
             1.3
-        } else if user_region == Region::Unknown {
-            1.0
         } else if distance_km <= 2000.0 {
             1.25
         } else if distance_km <= 5000.0 {
@@ -214,15 +215,16 @@ impl Hosts {
 
         let (asn, region_str) = crate::http::get_location_info().await;
         let user_region = Region::from_str(&region_str);
-        info!(
+        log::info!(
             "Detected user region as {:?} (region: {})",
-            user_region, region_str
+            user_region,
+            region_str
         );
 
         hosts.rate(asn, user_region, true).await;
 
         if hosts.servers.iter().all(|server| server.rating == 0) {
-            info!("All CDN servers failed with 1000ms timeout, retrying with 5000ms timeout");
+            log::info!("All CDN servers failed with 1000ms timeout, retrying with 5000ms timeout");
             hosts.rate(asn, user_region, false).await;
         }
 
@@ -231,7 +233,10 @@ impl Hosts {
 
     /// get the URL of the currently active CDN
     pub fn active_url(&self) -> Option<String> {
-        CURRENT_CDN.lock().unwrap().as_ref().map(|s| s.url())
+        self.active_index
+            .read()
+            .unwrap()
+            .map(|i| self.servers[i].url())
     }
 
     /// set the next best host based on ratings
@@ -249,8 +254,6 @@ impl Hosts {
                     .map_or(0, |l| u64::MAX - l.as_millis() as u64),
             )
         }) {
-            let server = &self.servers[idx];
-            *CURRENT_CDN.lock().unwrap() = Some(Arc::new(*server));
             *self.active_index.write().unwrap() = Some(idx);
             true
         } else {
@@ -273,7 +276,7 @@ impl Hosts {
 
         for (i, result) in results.iter().enumerate() {
             if result.is_err() {
-                warn!(
+                log::warn!(
                     "Rating operation for server {} timed out after 20 seconds",
                     self.servers[i].host
                 );
@@ -285,7 +288,6 @@ impl Hosts {
 
         // reset state and select best host
         *self.active_index.write().unwrap() = None;
-        *CURRENT_CDN.lock().unwrap() = None;
         self.next();
     }
 
@@ -311,7 +313,7 @@ pub async fn rate_cdns_and_display() {
         println!("User region: {:?}", user_region);
     }
 
-    println!("Rating CDNs...");
+    println!("Rating CDNs..");
 
     let mut hosts = Hosts {
         servers: crate::global::CDN_HOSTS.to_vec(),
@@ -321,7 +323,7 @@ pub async fn rate_cdns_and_display() {
     hosts.rate(asn, user_region, true).await;
 
     if hosts.servers.iter().all(|server| server.rating == 0) {
-        println!("Retrying with longer timeout...");
+        println!("Retrying with longer timeout..");
         hosts.rate(asn, user_region, false).await;
     }
 
@@ -334,12 +336,11 @@ pub async fn rate_cdns_and_display() {
         println!(
             "{}: rating {}, latency {}",
             server.host.bright_white(),
-            server.rating.to_string().bright_cyan(),
+            server.rating.to_string().bright_green(),
             latency_str
         );
     }
 
-    // Show selected CDN
     if hosts.next() {
         if let Some(best_url) = hosts.active_url() {
             println!();
@@ -347,6 +348,6 @@ pub async fn rate_cdns_and_display() {
         }
     } else {
         println!();
-        println!("{}", "No available CDN servers".bright_red());
+        crate::println_error!("No available CDN servers");
     }
 }

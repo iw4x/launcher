@@ -1,2 +1,4 @@
-/target
-/tests_tmp
+target
+iw4x-launcher.log
+iw4x-launcher.json
+launcher

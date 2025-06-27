@@ -16,13 +16,10 @@ pub async fn latest_tag_full(
     owner: &str,
     repo: &str,
 ) -> Result<String, Box<dyn std::error::Error>> {
-    let github_body = crate::http_async::get_body_string(
-        format!(
-            "https://api.github.com/repos/{}/{}/releases/latest",
-            owner, repo
-        )
-        .as_str(),
-    )
+    let github_body = crate::http::get_body_string(&format!(
+        "https://api.github.com/repos/{}/{}/releases/latest",
+        owner, repo
+    ))
     .await
     .map_err(|e| format!("Failed to fetch GitHub API: {}", e))?;
 
@@ -42,9 +39,10 @@ pub async fn latest_tag_prerelease(
     owner: &str,
     repo: &str,
 ) -> Result<String, Box<dyn std::error::Error>> {
-    let github_body = crate::http_async::get_body_string(
-        format!("https://api.github.com/repos/{}/{}/releases", owner, repo).as_str(),
-    )
+    let github_body = crate::http::get_body_string(&format!(
+        "https://api.github.com/repos/{}/{}/releases",
+        owner, repo
+    ))
     .await
     .map_err(|e| format!("Failed to fetch GitHub API: {}", e))?;
 

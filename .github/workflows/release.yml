@@ -15,24 +15,26 @@ jobs:
           draft: true
           token: ${{ secrets.GITHUB_TOKEN }}
 
-  upload-assets:
-    strategy:
-      matrix:
-        include:
-          - target: x86_64-unknown-linux-gnu
-            os: ubuntu-22.04
-          - target: x86_64-unknown-linux-musl
-            os: ubuntu-latest
-          - target: x86_64-pc-windows-msvc
-            os: windows-latest
-          - target: i686-pc-windows-msvc
-            os: windows-latest
-    runs-on: ${{ matrix.os }}
+  upload-linux-assets:
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
-      - uses: taiki-e/upload-rust-binary-action@v1.26.0
+      - uses: taiki-e/upload-rust-binary-action@v1.27.0
         with:
-          target: ${{ matrix.target }}
+          target: x86_64-unknown-linux-gnu
+          bin: iw4x-launcher
+          tar: unix
+          zip: windows
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  upload-windows-assets:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: taiki-e/upload-rust-binary-action@v1.27.0
+        with:
+          target: i686-pc-windows-msvc
           bin: iw4x-launcher
           tar: unix
           zip: windows

@@ -1,40 +1,41 @@
-use reqwest::header::HeaderMap;
+use std::{
+    cmp::min,
+    fs::File,
+    io::Write,
+    path::PathBuf,
+    time::{Duration, Instant},
+};
+
+use futures_util::StreamExt;
+use indicatif::ProgressBar;
+use once_cell::sync::Lazy;
+use reqwest::{header::HeaderMap, Client};
 use serde_json::Value;
-use simple_log::*;
-use std::time::{Duration, Instant};
 
-/// Wrapper to make a quick request and get body
-pub async fn quick_request(url: &str) -> Result<String, Box<dyn std::error::Error>> {
-    info!("Making a quick request to: {}", url);
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(5))
-        .build()?;
+use crate::{extend::CutePath, misc};
 
-    let res = client
-        .get(url)
-        .header("User-Agent", crate::global::USER_AGENT.to_string())
+/// shared HTTP client
+static HTTP_CLIENT: Lazy<Client> = Lazy::new(|| {
+    reqwest::Client::builder()
+        .user_agent(crate::global::USER_AGENT.as_str())
+        .build()
+        .expect("Failed to build HTTP client")
+});
+
+pub async fn get_body_string(url: &str) -> Result<String, Box<dyn std::error::Error>> {
+    let request = HTTP_CLIENT.get(url).timeout(crate::global::HTTP_TIMEOUT);
+
+    let res = request
         .send()
-        .await;
+        .await
+        .map_err(|e| format!("Failed to send request to {}: {}", url, e))?;
 
-    if let Err(e) = &res {
-        error!("Failed to get {}: {}", url, e);
-        return Err(format!("Failed to get {} {}", url, e).into());
-    }
-
-    let res = res.unwrap();
-    match res.text().await {
-        Ok(text) => {
-            info!("Successfully received response from: {}", url);
-            Ok(text)
-        }
-        Err(e) => {
-            warn!("Failed to get response text from {}: {}", url, e);
-            Err(e.into())
-        }
-    }
+    res.text()
+        .await
+        .map_err(|e| format!("Failed to get body: {}", e).into())
 }
 
-/// Check if server is using Cloudflare based on headers
+/// check if server is using Cloudflare based on headers
 fn is_cloudflare(headers: &HeaderMap) -> bool {
     headers.contains_key("cf-ray")
         || headers.contains_key("cf-cache-status")
@@ -43,54 +44,28 @@ fn is_cloudflare(headers: &HeaderMap) -> bool {
             .is_some_and(|v| v.as_bytes().starts_with(b"cloudflare"))
 }
 
-/// Make a request for rating purposes, measuring latency and detecting Cloudflare
+/// get url and track rating info
 pub async fn rating_request(
     url: &str,
     timeout: Duration,
 ) -> Result<(Duration, bool), Box<dyn std::error::Error>> {
-    info!(
-        "Making a rating request to: {} with timeout {:?}",
-        url, timeout
-    );
-    let client = reqwest::Client::builder().timeout(timeout).build()?;
-
     let start = Instant::now();
-    let res = client
-        .get(url)
-        .header("User-Agent", crate::global::USER_AGENT.to_string())
-        .send()
-        .await;
-
+    let res = HTTP_CLIENT.get(url).timeout(timeout).send().await;
     let latency = start.elapsed();
 
-    if let Err(e) = &res {
-        error!("Failed to get {}: {} (after {:?})", url, e, latency);
-        return Err(format!("Failed to get {} {} (after {:?})", url, e, latency).into());
-    }
+    let res = res.map_err(|e| format!("Request to {} failed: {} (after {:?})", url, e, latency))?;
 
-    let res = res.unwrap();
     let headers = res.headers().clone();
     let is_cloudflare = is_cloudflare(&headers);
 
-    // We don't need the response body for rating
-    if let Err(e) = res.text().await {
-        warn!(
-            "Failed to get response text from {}: {} (after {:?})",
-            url, e, latency
-        );
-        return Err(e.into());
-    }
+    res.text().await?;
 
-    info!(
-        "Successfully rated {} in {:?} (cloudflare: {})",
-        url, latency, is_cloudflare
-    );
     Ok((latency, is_cloudflare))
 }
 
-/// Retrieve client ASN and region
+/// retrieve user asn and region
 pub async fn get_location_info() -> (u32, String) {
-    let response = quick_request(crate::global::IP2ASN).await;
+    let response = get_body_string(crate::global::IP2ASN_URL).await;
     if let Ok(as_data_str) = response {
         if let Ok(as_data) = serde_json::from_str::<Value>(&as_data_str) {
             let as_number = as_data
@@ -106,4 +81,76 @@ pub async fn get_location_info() -> (u32, String) {
         }
     }
     (0, "Unknown".to_string())
+}
+
+/// download file in chunks with progress bars
+pub async fn download_file_progress(
+    file_pb: &ProgressBar,
+    total_pb: &ProgressBar,
+    url: &str,
+    path: &PathBuf,
+    size: u64,
+    start_position: u64,
+    relative_path: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let res = HTTP_CLIENT
+        .get(url)
+        .send()
+        .await
+        .map_err(|_| format!("Failed to GET from '{url}'"))?;
+
+    let file_size = res.content_length().unwrap_or(size);
+
+    log::debug!(
+        "Starting download of {} ({})",
+        relative_path,
+        misc::human_readable_bytes(file_size)
+    );
+
+    let mut file =
+        File::create(path).map_err(|_| format!("Failed to create file '{}'", path.cute_path()))?;
+    let mut downloaded: u64 = 0;
+    let mut stream = res.bytes_stream();
+
+    while let Some(item) = stream.next().await {
+        let chunk = item.map_err(|e| format!("Error while downloading file: {e}"))?;
+        file.write_all(&chunk)
+            .map_err(|e| format!("Error while writing to file: {e}"))?;
+
+        downloaded = min(downloaded + (chunk.len() as u64), file_size);
+
+        if let Some(file_name) = path.file_name().and_then(|n| n.to_str()) {
+            file_pb.set_message(file_name.to_string());
+        }
+        file_pb.set_position(downloaded);
+
+        total_pb.set_position(start_position + downloaded);
+    }
+
+    file_pb.set_message(String::default());
+
+    // not really necessary, but i'll leave it here for "now"
+    // let msg = format!("{}{}", misc::prefix("updated"), relative_path);
+    // total_pb.println(&msg);
+
+    Ok(())
+}
+
+/// download to file
+pub async fn download_file(
+    url: &str,
+    path: &std::path::Path,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let res = HTTP_CLIENT
+        .get(url)
+        .send()
+        .await
+        .map_err(|e| format!("Failed to GET from '{url}': {}", e))?;
+
+    let bytes = res
+        .bytes()
+        .await
+        .map_err(|e| format!("Failed to get bytes: {}", e))?;
+
+    std::fs::write(path, bytes).map_err(|e| format!("Failed to write file: {}", e).into())
 }
