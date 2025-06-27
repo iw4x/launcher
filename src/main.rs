@@ -305,7 +305,6 @@ async fn run_launcher() -> Result<(), Box<dyn std::error::Error>> {
     game::update(
         &game_data,
         &install_path,
-        cfg.force_update,
         &cdn_url,
         &mut cache,
     )

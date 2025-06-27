@@ -47,16 +47,20 @@ pub fn load(config_path: PathBuf) -> Config {
         let cfg_str = fs::read_to_string(&config_path).unwrap_or_default();
         let cfg: Config = serde_json::from_str(&cfg_str).unwrap_or_else(|e| {
             log::warn!("Failed to parse config file: {}", e);
-            Config::default()
+            log::info!("Creating default config due to parsing error");
+            let default_cfg = Config::default();
+            save(config_path.clone(), default_cfg.clone());
+            default_cfg
         });
         log::debug!("Loaded config: {:?}", cfg);
         cfg
     } else {
         log::info!("No config file found, creating default config");
-        Config::default()
+        let default_cfg = Config::default();
+        save(config_path.clone(), default_cfg.clone());
+        default_cfg
     };
 
-    save(config_path, cfg.clone());
     cfg
 }
 

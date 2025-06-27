@@ -95,7 +95,6 @@ fn process_renames(cdn_data: &CdnData, dir: &Path) -> Result<(), Box<dyn std::er
 fn verify_files<'a>(
     cdn_data: &'a CdnData,
     dir: &Path,
-    force: bool,
     hashes: &mut std::collections::HashMap<String, String>,
 ) -> Result<Vec<&'a CdnFile>, Box<dyn std::error::Error>> {
     log::info!("Checking {} files for updates", cdn_data.files.len());
@@ -111,10 +110,8 @@ fn verify_files<'a>(
 
     for file in &cdn_data.files {
         let file_path = dir.join(&file.path);
-        let needs_download = if !file_path.exists() || force {
-            if !file_path.exists() {
-                log::debug!("File {} does not exist, will download", file.path);
-            }
+        let needs_download = if !file_path.exists() {
+            log::debug!("File {} does not exist, will download", file.path);
             true
         } else {
             let hash_remote = file.blake3.to_lowercase();
@@ -200,10 +197,9 @@ async fn download_files(
     cdn_data: &CdnData,
     dir: &Path,
     cdn_url: &str,
-    force: bool,
     hashes: &mut std::collections::HashMap<String, String>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let files_to_download = verify_files(cdn_data, dir, force, hashes)?;
+    let files_to_download = verify_files(cdn_data, dir, hashes)?;
     if files_to_download.is_empty() {
         log::info!("All files are up to date");
         crate::println_info!("No update required - all files are up to date");
@@ -368,7 +364,6 @@ fn process_deletions(cdn_data: &CdnData, dir: &Path) -> Result<(), Box<dyn std::
 pub async fn update(
     cdn_data: &CdnData,
     dir: &Path,
-    force: bool,
     cdn_url: &str,
     hashes: &mut std::collections::HashMap<String, String>,
 ) -> Result<(), Box<dyn std::error::Error>> {
@@ -376,7 +371,7 @@ pub async fn update(
     log::info!("Starting game update process");
 
     process_renames(cdn_data, dir)?;
-    download_files(cdn_data, dir, cdn_url, force, hashes).await?;
+    download_files(cdn_data, dir, cdn_url, hashes).await?;
     process_deletions(cdn_data, dir)?;
 
     log::info!("Game update completed successfully");
