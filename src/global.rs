@@ -15,8 +15,9 @@ pub const CDN_HOSTS: [Server; 2] = [
 pub const DEFAULT_CDN_URL: &str = "https://cdn.iw4x.dev";
 pub const IP2ASN_URL: &str = "https://ip2asn.iw4x.dev/v1/as/ip/self";
 
-pub const GAME_EXECUTABLE: &str = "iw4x.exe";
+#[cfg(windows)]
 pub const DESKTOP_SHORTCUT_NAME: &str = "IW4x.lnk";
+pub const GAME_EXECUTABLE: &str = "iw4x.exe";
 pub const LAUNCHER_DIR: &str = "launcher";
 
 pub const TESTING_INFO: &str = "testing.json";

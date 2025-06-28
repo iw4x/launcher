@@ -137,6 +137,7 @@ pub async fn download_file_progress(
 }
 
 /// download to file
+#[cfg(windows)]
 pub async fn download_file(
     url: &str,
     path: &std::path::Path,
