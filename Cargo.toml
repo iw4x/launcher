@@ -8,10 +8,6 @@ build = "build.rs"
 opt-level = "s"
 panic = "abort"
 
-[[bin]]
-name = "iw4x-launcher"
-path = "src/main.rs"
-
 [dependencies]
 tokio = { version = "1", features = ["full"] }
 reqwest = { version = "0.12", features = ["json", "stream"] }
@@ -29,7 +25,6 @@ clap = { version = "4.4", features = ["derive"] }
 semver = "1.0"
 rand = "0.9"
 crossterm = "0.29"
-rayon = "1.8"
 
 [target.'cfg(unix)'.dependencies]
 openssl = { version = "0.10", default-features = false, features = ["vendored"] }
