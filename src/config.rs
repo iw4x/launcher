@@ -52,6 +52,14 @@ pub fn load(config_path: PathBuf) -> Config {
             save(config_path.clone(), default_cfg.clone());
             default_cfg
         });
+        
+        if let Ok(current_json) = serde_json::to_string_pretty(&cfg) {
+            if cfg_str.trim() != current_json.trim() {
+                log::info!("Adding missing fields to config file");
+                save(config_path.clone(), cfg.clone());
+            }
+        }
+        
         log::debug!("Loaded config: {:?}", cfg);
         cfg
     } else {
