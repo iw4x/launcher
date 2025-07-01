@@ -46,7 +46,7 @@ impl Default for Config {
 
 pub fn load(config_path: PathBuf) -> Config {
     log::debug!("Loading config from: {}", config_path.cute_path());
-    let cfg = if config_path.exists() {
+    if config_path.exists() {
         let cfg_str = fs::read_to_string(&config_path).unwrap_or_default();
         let cfg: Config = serde_json::from_str(&cfg_str).unwrap_or_else(|e| {
             log::warn!("Failed to parse config file: {}", e);
@@ -70,9 +70,7 @@ pub fn load(config_path: PathBuf) -> Config {
         let default_cfg = Config::default();
         save(config_path.clone(), default_cfg.clone());
         default_cfg
-    };
-
-    cfg
+    }
 }
 
 pub fn save(config_path: PathBuf, config: Config) {

@@ -100,7 +100,7 @@ pub async fn update_dxvk(
                 })?;
             }
 
-            let download_url = format!("{}/{}", cdn_url, file.blake3);
+            let download_url = format!("{}/dxvk/{}", cdn_url, file.blake3);
             http::download_file(&download_url, &file_path)
                 .await
                 .map_err(|e| {
