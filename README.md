@@ -39,6 +39,7 @@
 | `offline` | `false` | Run in offline mode |
 | `testing` | `false` | Install from testing branch (IW4x & Launcher) |
 | `disable_art` | `false` | Disable ASCII art |
+| `dxvk` | `false` | Install DXVK for better AMD performance |
 
 ---
 
@@ -59,6 +60,7 @@
 | `--rate` | Rate CDN servers and print results |
 | `--cdn-url` | Specify custom CDN url |
 | `--disable-art` | Disable ASCII art |
+| `--dxvk` | Install DXVK for better AMD performance |
 
 ---
 

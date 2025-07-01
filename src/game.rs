@@ -60,6 +60,69 @@ pub async fn fetch_game_data(
     Ok(cdn_data)
 }
 
+pub async fn update_dxvk(
+    dir: &Path,
+    cdn_url: &str,
+    hashes: &mut std::collections::HashMap<String, String>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let url = format!("{}/dxvk.json?{}", cdn_url, misc::random_string(10));
+    let response = http::get_body_string(&url).await.map_err(|e| {
+        log::error!("Failed to fetch DXVK data from {}: {}", url, e);
+        e
+    })?;
+    let dxvk_data: CdnData = serde_json::from_str(&response).map_err(|e| {
+        log::error!("Failed to parse DXVK JSON: {}", e);
+        e
+    })?;
+
+    log::info!("Processing {} DXVK files", dxvk_data.files.len());
+
+    for file in &dxvk_data.files {
+        let file_path = dir.join(&file.path);
+
+        let needs_download = if !file_path.exists() {
+            true
+        } else {
+            let hash_local = hashes
+                .get(&file.path)
+                .cloned()
+                .unwrap_or_else(|| file_path.get_blake3().unwrap_or_default())
+                .to_lowercase();
+            hash_local != file.blake3.to_lowercase()
+        };
+
+        if needs_download {
+            log::info!("Downloading DXVK file: {}", file.path);
+            if let Some(parent) = file_path.parent() {
+                fs::create_dir_all(parent).map_err(|e| {
+                    log::error!("Failed to create directory {}: {}", parent.cute_path(), e);
+                    e
+                })?;
+            }
+
+            let download_url = format!("{}/{}", cdn_url, file.blake3);
+            http::download_file(&download_url, &file_path)
+                .await
+                .map_err(|e| {
+                    log::error!(
+                        "Failed to download DXVK file {} from {}: {}",
+                        file.path,
+                        download_url,
+                        e
+                    );
+                    e
+                })?;
+            hashes.insert(file.path.clone(), file.blake3.to_lowercase());
+            log::info!("Successfully downloaded DXVK file: {}", file.path);
+        } else {
+            log::debug!("DXVK file {} is up to date", file.path);
+        }
+    }
+
+    log::info!("DXVK update completed successfully");
+    Ok(())
+}
+
 fn process_renames(cdn_data: &CdnData, dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
     if cdn_data.rename.is_empty() {
         return Ok(());

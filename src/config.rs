@@ -20,6 +20,8 @@ pub struct Config {
     pub testing: bool,
     #[serde(default)]
     pub disable_art: bool,
+    #[serde(default)]
+    pub dxvk: bool,
 }
 
 fn default_args() -> String {
@@ -37,6 +39,7 @@ impl Default for Config {
             offline: false,
             testing: false,
             disable_art: false,
+            dxvk: false,
         }
     }
 }
@@ -52,14 +55,14 @@ pub fn load(config_path: PathBuf) -> Config {
             save(config_path.clone(), default_cfg.clone());
             default_cfg
         });
-        
+
         if let Ok(current_json) = serde_json::to_string_pretty(&cfg) {
             if cfg_str.trim() != current_json.trim() {
                 log::info!("Adding missing fields to config file");
                 save(config_path.clone(), cfg.clone());
             }
         }
-        
+
         log::debug!("Loaded config: {:?}", cfg);
         cfg
     } else {

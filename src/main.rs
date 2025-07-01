@@ -85,6 +85,10 @@ struct Args {
     /// Disable ASCII art
     #[arg(long = "disable-art")]
     disable_art: bool,
+
+    /// Install DXVK for better AMD performance
+    #[arg(long)]
+    dxvk: bool,
 }
 
 fn setup_logging(install_path: &Path) -> Result<(), Box<dyn std::error::Error>> {
@@ -222,6 +226,9 @@ async fn run_launcher() -> Result<(), Box<dyn std::error::Error>> {
     if args.disable_art {
         cfg.disable_art = true;
     }
+    if args.dxvk {
+        cfg.dxvk = true;
+    }
     if let Some(game_args) = args.args.or(args.pass) {
         cfg.args = game_args;
     }
@@ -303,6 +310,17 @@ async fn run_launcher() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     game::update(&game_data, &install_path, &cdn_url, &mut cache).await?;
+
+    if cfg.dxvk {
+        match game::update_dxvk(&install_path, &cdn_url, &mut cache).await {
+            Ok(_) => log::info!("DXVK update completed successfully"),
+            Err(e) => {
+                log::warn!("DXVK update failed: {}", e);
+                crate::println_error!("Warning: DXVK update failed, continuing without DXVK");
+            }
+        }
+    }
+
     cache::save_cache(&launcher_dir, cache);
 
     crate::println_info!("Update completed successfully");
