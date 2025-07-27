@@ -2,6 +2,7 @@ mod ascii_art;
 mod cache;
 mod cdn;
 mod config;
+mod directx;
 mod extend;
 mod game;
 mod github;
@@ -89,6 +90,10 @@ struct Args {
     /// Install DXVK for better AMD performance
     #[arg(long)]
     dxvk: bool,
+
+    /// Skip DirectX detection and installation
+    #[arg(long)]
+    skip_directx: bool,
 }
 
 fn setup_logging(install_path: &Path) -> Result<(), Box<dyn std::error::Error>> {
@@ -306,6 +311,10 @@ async fn run_launcher() -> Result<(), Box<dyn std::error::Error>> {
                     log::info!("Desktop shortcut created successfully");
                 }
             }
+        }
+
+        if !args.skip_directx {
+            log::info!("Checking for DirectX runtime");
         }
     }
 
