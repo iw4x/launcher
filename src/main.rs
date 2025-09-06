@@ -153,6 +153,11 @@ fn setup_terminal() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+fn cleanup_terminal() {
+    let mut stdout = io::stdout();
+    let _ = execute!(stdout, cursor::Show);
+}
+
 async fn run_launcher() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
 
@@ -347,8 +352,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let result = run_launcher().await;
     if let Err(e) = &result {
         println_error!("{}", e);
+        cleanup_terminal();
         misc::enter_exit(1);
     }
 
+    cleanup_terminal();
     result
 }
