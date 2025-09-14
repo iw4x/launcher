@@ -1,6 +1,5 @@
 mod ascii_art;
 mod cache;
-mod cdn;
 mod config;
 mod extend;
 mod game;
@@ -59,10 +58,6 @@ struct Args {
     #[arg(long)]
     ignore_required_files: bool,
 
-    /// Disable CDN rating and use default CDN
-    #[arg(long)]
-    skip_connectivity_check: bool,
-
     /// Run in offline mode
     #[arg(long)]
     offline: bool,
@@ -70,14 +65,6 @@ struct Args {
     /// Install from testing branch (IW4x & Launcher)
     #[arg(long)]
     testing: bool,
-
-    /// Rate CDN servers and print results
-    #[arg(long)]
-    rate: bool,
-
-    /// Specify custom CDN url
-    #[arg(long)]
-    cdn_url: Option<String>,
 
     #[arg(long = "art-attack", hide = true)]
     art_attack: bool,
@@ -161,11 +148,6 @@ fn cleanup_terminal() {
 async fn run_launcher() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
 
-    if args.rate {
-        cdn::rate_cdns_and_display().await;
-        return Ok(());
-    }
-
     if args.art_attack {
         println!("This is an art attack.");
         println!("THIS is an art attack.");
@@ -213,9 +195,6 @@ async fn run_launcher() -> Result<(), Box<dyn std::error::Error>> {
         self_update::run(false, Some(args.testing)).await;
     }
 
-    if let Some(cdn_url) = args.cdn_url {
-        cfg.cdn_url = cdn_url;
-    }
     if args.offline {
         cfg.offline = true;
     }
@@ -248,7 +227,8 @@ async fn run_launcher() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     log::info!("Fetching game data from CDN");
-    // let game_data = game::fetch_game_data(cfg.testing, &cdn_url).await?;
+    let cdn_url = "";
+    let game_data = game::fetch_game_data(cfg.testing, cdn_url).await?;
 
     if !args.ignore_required_files && !game_data.required_files_exist(&install_path) {
         println!("{}", "\n\nRequired game files are missing, are you sure you placed the launcher in the game folder?".red());
@@ -284,10 +264,10 @@ async fn run_launcher() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    game::update(&game_data, &install_path, &cdn_url, &mut cache).await?;
+    game::update(&game_data, &install_path, cdn_url, &mut cache).await?;
 
     if cfg.dxvk {
-        match game::update_dxvk(&install_path, &cdn_url, &mut cache).await {
+        match game::update_dxvk(&install_path, cdn_url, &mut cache).await {
             Ok(_) => log::info!("DXVK update completed successfully"),
             Err(e) => {
                 log::warn!("DXVK update failed: {}", e);

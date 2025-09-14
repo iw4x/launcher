@@ -5,23 +5,23 @@ use indicatif::ProgressBar;
 use crate::{extend::*, global::*, http, misc};
 
 #[derive(serde::Deserialize, serde::Serialize, Clone, Debug)]
-pub struct CdnFile {
+pub struct UpdateFile {
     pub blake3: String,
     pub size: u32,
     pub path: String,
 }
 
 #[derive(serde::Deserialize, serde::Serialize, Debug)]
-pub struct CdnData {
+pub struct UpdateData {
     pub base_dir: String,
     pub references: Vec<String>,
     pub required: Vec<String>,
     pub delete: Vec<String>,
     pub rename: Vec<(String, String)>,
-    pub files: Vec<CdnFile>,
+    pub files: Vec<UpdateFile>,
 }
 
-impl CdnData {
+impl UpdateData {
     pub fn required_files_exist(&self, dir: &Path) -> bool {
         for required_file in &self.required {
             let file_path = dir.join(required_file);
@@ -37,7 +37,7 @@ impl CdnData {
 pub async fn fetch_game_data(
     testing: bool,
     cdn_url: &str,
-) -> Result<CdnData, Box<dyn std::error::Error>> {
+) -> Result<UpdateData, Box<dyn std::error::Error>> {
     let config_file = if testing { TESTING_INFO } else { STABLE_INFO };
     let url = format!("{}/{}?{}", cdn_url, config_file, misc::random_string(10));
 
@@ -47,7 +47,7 @@ pub async fn fetch_game_data(
         format!("Failed to fetch game data: {}", e)
     })?;
 
-    let cdn_data: CdnData = serde_json::from_str(&response).map_err(|e| {
+    let cdn_data: UpdateData = serde_json::from_str(&response).map_err(|e| {
         log::error!("Failed to parse game data JSON: {}", e);
         format!("Failed to parse game data: {}", e)
     })?;
@@ -70,7 +70,7 @@ pub async fn update_dxvk(
         log::error!("Failed to fetch DXVK data from {}: {}", url, e);
         e
     })?;
-    let dxvk_data: CdnData = serde_json::from_str(&response).map_err(|e| {
+    let dxvk_data: UpdateData = serde_json::from_str(&response).map_err(|e| {
         log::error!("Failed to parse DXVK JSON: {}", e);
         e
     })?;
@@ -123,7 +123,7 @@ pub async fn update_dxvk(
     Ok(())
 }
 
-fn process_renames(cdn_data: &CdnData, dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
+fn process_renames(cdn_data: &UpdateData, dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
     if cdn_data.rename.is_empty() {
         return Ok(());
     }
@@ -156,10 +156,10 @@ fn process_renames(cdn_data: &CdnData, dir: &Path) -> Result<(), Box<dyn std::er
 }
 
 fn verify_files<'a>(
-    cdn_data: &'a CdnData,
+    cdn_data: &'a UpdateData,
     dir: &Path,
     hashes: &mut std::collections::HashMap<String, String>,
-) -> Result<Vec<&'a CdnFile>, Box<dyn std::error::Error>> {
+) -> Result<Vec<&'a UpdateFile>, Box<dyn std::error::Error>> {
     log::info!("Checking {} files for updates", cdn_data.files.len());
 
     let pb = ProgressBar::new(cdn_data.files.len() as u64);
@@ -169,7 +169,7 @@ fn verify_files<'a>(
     pb.set_style(pb_style.unwrap());
 
     let pb_arc = Arc::new(pb);
-    let mut files_to_download: Vec<&CdnFile> = Vec::new();
+    let mut files_to_download: Vec<&UpdateFile> = Vec::new();
 
     for file in &cdn_data.files {
         let file_path = dir.join(&file.path);
@@ -257,7 +257,7 @@ fn setup_progress_bars(total_size: u64) -> (ProgressBar, ProgressBar) {
 }
 
 async fn download_files(
-    cdn_data: &CdnData,
+    cdn_data: &UpdateData,
     dir: &Path,
     cdn_url: &str,
     hashes: &mut std::collections::HashMap<String, String>,
@@ -380,7 +380,7 @@ async fn download_files(
     Ok(())
 }
 
-fn process_deletions(cdn_data: &CdnData, dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
+fn process_deletions(cdn_data: &UpdateData, dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
     if cdn_data.delete.is_empty() {
         return Ok(());
     }
@@ -425,7 +425,7 @@ fn process_deletions(cdn_data: &CdnData, dir: &Path) -> Result<(), Box<dyn std::
 }
 
 pub async fn update(
-    cdn_data: &CdnData,
+    cdn_data: &UpdateData,
     dir: &Path,
     cdn_url: &str,
     hashes: &mut std::collections::HashMap<String, String>,

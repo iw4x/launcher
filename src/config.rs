@@ -13,8 +13,6 @@ pub struct Config {
     #[serde(default = "default_args")]
     pub args: String,
     #[serde(default)]
-    pub cdn_url: String,
-    #[serde(default)]
     pub offline: bool,
     #[serde(default)]
     pub testing: bool,
@@ -35,7 +33,6 @@ impl Default for Config {
             skip_self_update: false,
             force_update: false,
             args: "-stdout".to_string(),
-            cdn_url: String::new(),
             offline: false,
             testing: false,
             disable_art: false,

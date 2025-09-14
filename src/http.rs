@@ -1,16 +1,9 @@
-use std::{
-    cmp::min,
-    fs::File,
-    io::Write,
-    path::PathBuf,
-    time::{Duration, Instant},
-};
+use std::{cmp::min, fs::File, io::Write, path::PathBuf};
 
 use futures_util::StreamExt;
 use indicatif::ProgressBar;
 use once_cell::sync::Lazy;
-use reqwest::{header::HeaderMap, Client};
-use serde_json::Value;
+use reqwest::Client;
 
 use crate::{extend::CutePath, misc};
 
@@ -33,54 +26,6 @@ pub async fn get_body_string(url: &str) -> Result<String, Box<dyn std::error::Er
     res.text()
         .await
         .map_err(|e| format!("Failed to get body: {}", e).into())
-}
-
-/// check if server is using Cloudflare based on headers
-fn is_cloudflare(headers: &HeaderMap) -> bool {
-    headers.contains_key("cf-ray")
-        || headers.contains_key("cf-cache-status")
-        || headers
-            .get("server")
-            .is_some_and(|v| v.as_bytes().starts_with(b"cloudflare"))
-}
-
-/// get url and track rating info
-pub async fn rating_request(
-    url: &str,
-    timeout: Duration,
-) -> Result<(Duration, bool), Box<dyn std::error::Error>> {
-    let start = Instant::now();
-    let res = HTTP_CLIENT.get(url).timeout(timeout).send().await;
-    let latency = start.elapsed();
-
-    let res = res.map_err(|e| format!("Request to {} failed: {} (after {:?})", url, e, latency))?;
-
-    let headers = res.headers().clone();
-    let is_cloudflare = is_cloudflare(&headers);
-
-    res.text().await?;
-
-    Ok((latency, is_cloudflare))
-}
-
-/// retrieve user asn and region
-pub async fn get_location_info() -> (u32, String) {
-    let response = get_body_string(crate::global::IP2ASN_URL).await;
-    if let Ok(as_data_str) = response {
-        if let Ok(as_data) = serde_json::from_str::<Value>(&as_data_str) {
-            let as_number = as_data
-                .get("as_number")
-                .and_then(|v| v.as_u64())
-                .unwrap_or(0) as u32;
-            let region = as_data
-                .get("region")
-                .and_then(|v| v.as_str())
-                .unwrap_or("Unknown")
-                .to_string();
-            return (as_number, region);
-        }
-    }
-    (0, "Unknown".to_string())
 }
 
 /// download file in chunks with progress bars
