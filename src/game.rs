@@ -41,15 +41,15 @@ pub async fn fetch_game_data(
     let config_file = if testing { TESTING_INFO } else { STABLE_INFO };
     let url = format!("{}/{}?{}", cdn_url, config_file, misc::random_string(10));
 
-    log::info!("Fetching game data from: {}", url);
+    log::info!("Fetching game data from: {url}");
     let response = http::get_body_string(&url).await.map_err(|e| {
-        log::error!("Failed to fetch game data from {}: {}", url, e);
-        format!("Failed to fetch game data: {}", e)
+        log::error!("Failed to fetch game data from {url}: {e}");
+        format!("Failed to fetch game data: {e}")
     })?;
 
     let cdn_data: UpdateData = serde_json::from_str(&response).map_err(|e| {
-        log::error!("Failed to parse game data JSON: {}", e);
-        format!("Failed to parse game data: {}", e)
+        log::error!("Failed to parse game data JSON: {e}");
+        format!("Failed to parse game data: {e}")
     })?;
 
     log::info!(
@@ -67,11 +67,11 @@ pub async fn update_dxvk(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let url = format!("{}/dxvk.json?{}", cdn_url, misc::random_string(10));
     let response = http::get_body_string(&url).await.map_err(|e| {
-        log::error!("Failed to fetch DXVK data from {}: {}", url, e);
+        log::error!("Failed to fetch DXVK data from {url}: {e}");
         e
     })?;
     let dxvk_data: UpdateData = serde_json::from_str(&response).map_err(|e| {
-        log::error!("Failed to parse DXVK JSON: {}", e);
+        log::error!("Failed to parse DXVK JSON: {e}");
         e
     })?;
 
@@ -143,10 +143,10 @@ fn process_renames(cdn_data: &UpdateData, dir: &Path) -> Result<(), Box<dyn std:
             }
             match fs::rename(&old_file, &new_file) {
                 Ok(_) => {
-                    log::info!("Renamed {} -> {}", old_path, new_path);
+                    log::info!("Renamed {old_path} -> {new_path}");
                 }
                 Err(e) => {
-                    log::error!("Failed to rename {} -> {}: {}", old_path, new_path, e);
+                    log::error!("Failed to rename {old_path} -> {new_path}: {e}");
                 }
             }
         }
@@ -212,24 +212,17 @@ fn verify_downloaded_file(
     match file_path.get_blake3() {
         Ok(local_hash) => {
             if local_hash.to_lowercase() == expected_hash.to_lowercase() {
-                log::info!("Successfully downloaded and verified {}", file_name);
+                log::info!("Successfully downloaded and verified {file_name}");
                 Ok(true)
             } else {
                 log::error!(
-                    "Hash verification failed for {}: expected {}, got {}",
-                    file_name,
-                    expected_hash,
-                    local_hash
+                    "Hash verification failed for {file_name}: expected {expected_hash}, got {local_hash}"
                 );
                 Ok(false)
             }
         }
         Err(e) => {
-            log::error!(
-                "Failed to calculate hash for downloaded file {}: {}",
-                file_name,
-                e
-            );
+            log::error!("Failed to calculate hash for downloaded file {file_name}: {e}");
             Err(e.into())
         }
     }
@@ -290,7 +283,7 @@ async fn download_files(
         if let Some(parent) = file_path.parent() {
             fs::create_dir_all(parent).map_err(|e| {
                 let error_msg = format!("Failed to create directory {}: {}", parent.cute_path(), e);
-                log::error!("{}", error_msg);
+                log::error!("{error_msg}");
                 error_msg
             })?;
         }
@@ -341,10 +334,7 @@ async fn download_files(
                         }
                         false => {
                             if attempts < MAX_DOWNLOAD_ATTEMPTS {
-                                log::info!(
-                                    "Waiting {} seconds before retry..",
-                                    RETRY_DELAY_SECONDS
-                                );
+                                log::info!("Waiting {RETRY_DELAY_SECONDS} seconds before retry..");
                                 tokio::time::sleep(tokio::time::Duration::from_secs(
                                     RETRY_DELAY_SECONDS,
                                 ))
@@ -369,7 +359,7 @@ async fn download_files(
                 "Failed to download {} after {} attempts",
                 file.path, MAX_DOWNLOAD_ATTEMPTS
             );
-            log::error!("{}", error_msg);
+            log::error!("{error_msg}");
             return Err(error_msg.into());
         }
     }
@@ -395,29 +385,23 @@ fn process_deletions(cdn_data: &UpdateData, dir: &Path) -> Result<(), Box<dyn st
         if target_path.exists() {
             if target_path.is_file() {
                 fs::remove_file(&target_path).map_err(|e| {
-                    let error_msg = format!("Failed to delete file {}: {}", delete_path, e);
-                    log::error!("{}", error_msg);
+                    let error_msg = format!("Failed to delete file {delete_path}: {e}");
+                    log::error!("{error_msg}");
                     error_msg
                 })?;
-                log::info!("Deleted file: {}", delete_path);
+                log::info!("Deleted file: {delete_path}");
             } else if target_path.is_dir() {
                 fs::remove_dir_all(&target_path).map_err(|e| {
-                    let error_msg = format!("Failed to delete directory {}: {}", delete_path, e);
-                    log::error!("{}", error_msg);
+                    let error_msg = format!("Failed to delete directory {delete_path}: {e}");
+                    log::error!("{error_msg}");
                     error_msg
                 })?;
-                log::info!("Deleted directory: {}", delete_path);
+                log::info!("Deleted directory: {delete_path}");
             } else {
-                log::warn!(
-                    "Path {} exists but is neither a file nor a directory",
-                    delete_path
-                );
+                log::warn!("Path {delete_path} exists but is neither a file nor a directory");
             }
         } else {
-            log::debug!(
-                "Path {} already doesn't exist, skipping deletion",
-                delete_path
-            );
+            log::debug!("Path {delete_path} already doesn't exist, skipping deletion");
         }
     }
 
@@ -447,14 +431,11 @@ pub fn launch_game(dir: &Path, args: &str) -> Result<(), Box<dyn std::error::Err
 
     if !exe_path.exists() {
         let error_msg = format!("IW4x executable not found: {}", exe_path.cute_path());
-        log::error!("{}", error_msg);
+        log::error!("{error_msg}");
         return Err(error_msg.into());
     }
 
-    println!(
-        "\n\nJoin the IW4x Discord server:\n{}\n{} \n\n",
-        DISCORD_INVITE_1, DISCORD_INVITE_2
-    );
+    println!("\n\nJoin the IW4x Discord server:\n{DISCORD_INVITE_1}\n{DISCORD_INVITE_2}\n\n");
 
     crate::println_info!("Launching IW4x {}", args);
 
@@ -469,12 +450,12 @@ pub fn launch_game(dir: &Path, args: &str) -> Result<(), Box<dyn std::error::Err
             .current_dir(dir)
             .spawn()
             .map_err(|e| {
-                log::error!("Failed to spawn IW4x process: {}", e);
+                log::error!("Failed to spawn IW4x process: {e}");
                 e
             })?
             .wait()
             .map_err(|e| {
-                log::error!("Failed to wait for IW4x process: {}", e);
+                log::error!("Failed to wait for IW4x process: {e}");
                 e
             })?;
     }
@@ -526,10 +507,10 @@ pub fn launch_game(dir: &Path, args: &str) -> Result<(), Box<dyn std::error::Err
     }
 
     if exit_status.success() {
-        log::info!("IW4x exited successfully with status: {}", exit_status);
+        log::info!("IW4x exited successfully with status: {exit_status}");
     } else {
-        log::error!("IW4x exited with error status: {}", exit_status);
-        crate::println_error!("IW4x exited with {}", exit_status);
+        log::error!("IW4x exited with error status: {exit_status}");
+        crate::println_error!("IW4x exited with {exit_status}");
         misc::enter_exit(exit_status.code().unwrap_or(1));
     }
 

@@ -96,7 +96,7 @@ fn setup_logging(install_path: &Path) -> Result<(), Box<dyn std::error::Error>> 
         .path(log_file_str)
         .time_format(LOG_TIME_FORMAT)
         .level(LOG_LEVEL)
-        .map_err(|e| format!("Failed to configure logger: {}", e))?
+        .map_err(|e| format!("Failed to configure logger: {e}"))?
         .output_file()
         .build();
 
@@ -120,7 +120,7 @@ fn create_desktop_shortcut(launcher_path: &Path) -> Result<(), Box<dyn std::erro
 
                 match sl.create_lnk(&shortcut_path) {
                     Ok(_) => println_info!("Created desktop shortcut: {}", DESKTOP_SHORTCUT_NAME),
-                    Err(e) => log::warn!("Failed to create desktop shortcut: {}", e),
+                    Err(e) => log::warn!("Failed to create desktop shortcut: {e}"),
                 }
             }
         }
@@ -169,7 +169,7 @@ async fn run_launcher() -> Result<(), Box<dyn std::error::Error>> {
     setup_logging(&install_path)?;
 
     log::info!("IW4x Launcher v{} starting up", env!("CARGO_PKG_VERSION"));
-    log::info!("Command line arguments: {:?}", args);
+    log::info!("Command line arguments: {args:?}");
     log::info!("Using install path: {}", install_path.cute_path());
     log::info!("Launcher directory: {}", launcher_dir.cute_path());
 
@@ -256,7 +256,7 @@ async fn run_launcher() -> Result<(), Box<dyn std::error::Error>> {
             log::info!("First run detected, creating desktop shortcut");
             if let Ok(current_exe) = env::current_exe() {
                 if let Err(e) = create_desktop_shortcut(&current_exe) {
-                    log::warn!("Failed to create desktop shortcut: {}", e);
+                    log::warn!("Failed to create desktop shortcut: {e}");
                 } else {
                     log::info!("Desktop shortcut created successfully");
                 }
@@ -270,7 +270,7 @@ async fn run_launcher() -> Result<(), Box<dyn std::error::Error>> {
         match game::update_dxvk(&install_path, cdn_url, &mut cache).await {
             Ok(_) => log::info!("DXVK update completed successfully"),
             Err(e) => {
-                log::warn!("DXVK update failed: {}", e);
+                log::warn!("DXVK update failed: {e}");
                 crate::println_error!("Warning: DXVK update failed, continuing without DXVK");
             }
         }

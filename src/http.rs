@@ -21,11 +21,11 @@ pub async fn get_body_string(url: &str) -> Result<String, Box<dyn std::error::Er
     let res = request
         .send()
         .await
-        .map_err(|e| format!("Failed to send request to {}: {}", url, e))?;
+        .map_err(|e| format!("Failed to send request to {url}: {e}"))?;
 
     res.text()
         .await
-        .map_err(|e| format!("Failed to get body: {}", e).into())
+        .map_err(|e| format!("Failed to get body: {e}").into())
 }
 
 /// download file in chunks with progress bars
@@ -90,12 +90,12 @@ pub async fn download_file(
         .get(url)
         .send()
         .await
-        .map_err(|e| format!("Failed to GET from '{url}': {}", e))?;
+        .map_err(|e| format!("Failed to GET from '{url}': {e}"))?;
 
     let bytes = res
         .bytes()
         .await
-        .map_err(|e| format!("Failed to get bytes: {}", e))?;
+        .map_err(|e| format!("Failed to get bytes: {e}"))?;
 
-    std::fs::write(path, bytes).map_err(|e| format!("Failed to write file: {}", e).into())
+    std::fs::write(path, bytes).map_err(|e| format!("Failed to write file: {e}").into())
 }
