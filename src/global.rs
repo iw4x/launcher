@@ -25,10 +25,10 @@ pub const MAX_DOWNLOAD_ATTEMPTS: usize = 2;
 pub const RETRY_DELAY_SECONDS: u64 = 5;
 pub const HTTP_TIMEOUT: Duration = Duration::from_secs(5);
 
-pub const DISCORD_INVITE_1: &str = "https://iw4x.dev/discord";
+pub const DISCORD_INVITE_1: &str = "https://iw4x.io/discord";
 pub const DISCORD_INVITE_2: &str = "https://discord.com/invite/pV2qJscTXf";
 
-pub const INSTALL_GUIDE: &str = "https://iw4x.dev/install";
+pub const INSTALL_GUIDE: &str = "https://iw4x.io/install";
 
 pub const LOG_TIME_FORMAT: &str = "%Y-%m-%d %H:%M:%S.%f";
 pub const LOG_LEVEL: &str = "debug";

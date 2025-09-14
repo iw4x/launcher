@@ -3,7 +3,7 @@
 # IW4x Launcher
 ### Official launcher for the IW4x mod
 
-#### [Installation Guide](https://iw4x.dev/install) • [Discord Server](https://iw4x.dev/discord) • [Website](https://iw4x.dev)
+#### [Installation Guide](https://iw4x.io/install) • [Discord Server](https://iw4x.io/discord) • [Website](https://iw4x.io)
 
 </div>
 
@@ -20,7 +20,7 @@
     - [Linux](https://github.com/iw4x/launcher/releases/latest/download/iw4x-launcher-x86_64-unknown-linux-gnu.tar.gz)
 3. Move the launcher to the game folder and run it
 
-[Detailed installation instructions are available here](https://iw4x.dev/install)
+[Detailed installation instructions are available here](https://iw4x.io/install)
 
 ---
 
