@@ -7,13 +7,10 @@ use crate::cdn::{Region, Server};
 pub const GH_OWNER: &str = "iw4x";
 pub const GH_REPO: &str = "launcher";
 
-pub const CDN_HOSTS: [Server; 2] = [
-    Server::new("cdn.iw4x.dev", Region::Europe),
-    Server::new("cf-cdn.iw4x.dev", Region::Global),
-];
+pub const CDN_HOSTS: [Server; 0] = [];
 
-pub const DEFAULT_CDN_URL: &str = "https://cdn.iw4x.dev";
-pub const IP2ASN_URL: &str = "https://ip2asn.iw4x.dev/v1/as/ip/self";
+pub const DEFAULT_CDN_URL: &str = "";
+pub const IP2ASN_URL: &str = "";
 
 #[cfg(windows)]
 pub const DESKTOP_SHORTCUT_NAME: &str = "IW4x.lnk";
@@ -27,10 +24,10 @@ pub const MAX_DOWNLOAD_ATTEMPTS: usize = 2;
 pub const RETRY_DELAY_SECONDS: u64 = 5;
 pub const HTTP_TIMEOUT: Duration = Duration::from_secs(5);
 
-pub const DISCORD_INVITE_1: &str = "https://iw4x.dev/discord";
+pub const DISCORD_INVITE_1: &str = "https://iw4x.io/discord";
 pub const DISCORD_INVITE_2: &str = "https://discord.com/invite/pV2qJscTXf";
 
-pub const INSTALL_GUIDE: &str = "https://iw4x.dev/install";
+pub const INSTALL_GUIDE: &str = "https://iw4x.io/install";
 
 pub const LOG_TIME_FORMAT: &str = "%Y-%m-%d %H:%M:%S.%f";
 pub const LOG_LEVEL: &str = "debug";
