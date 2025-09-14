@@ -242,9 +242,73 @@ async fn run_launcher() -> Result<(), Box<dyn std::error::Error>> {
         ascii_art::print_random(true);
     }
 
-    log::warn!("The launcher is currently not able to update due to infrastructure changes.");
-    log::warn!("We are working on a solution, sorry for the inconvenience!");
-    game::launch_game(&install_path, &cfg.args)
+    if cfg.offline {
+        log::info!("Running in offline mode, launching game directly");
+        return game::launch_game(&install_path, &cfg.args);
+    }
+
+    log::info!("Fetching game data from CDN");
+    // let game_data = game::fetch_game_data(cfg.testing, &cdn_url).await?;
+
+    if !args.ignore_required_files && !game_data.required_files_exist(&install_path) {
+        println!("{}", "\n\nRequired game files are missing, are you sure you placed the launcher in the game folder?".red());
+        println!(
+            "Check the installation guide for help:\n{}\n",
+            global::INSTALL_GUIDE.blue()
+        );
+        println!(
+            "Or join our Discord server:\n{}\n{}\n\n",
+            global::DISCORD_INVITE_1.blue(),
+            global::DISCORD_INVITE_2.blue()
+        );
+        return Err("Required files are missing".into());
+    }
+
+    let mut cache = if cfg.force_update {
+        std::collections::HashMap::new()
+    } else {
+        cache::get_cache(&launcher_dir)
+    };
+
+    #[cfg(windows)]
+    {
+        if _is_first_run {
+            log::info!("First run detected, creating desktop shortcut");
+            if let Ok(current_exe) = env::current_exe() {
+                if let Err(e) = create_desktop_shortcut(&current_exe) {
+                    log::warn!("Failed to create desktop shortcut: {}", e);
+                } else {
+                    log::info!("Desktop shortcut created successfully");
+                }
+            }
+        }
+    }
+
+    game::update(&game_data, &install_path, &cdn_url, &mut cache).await?;
+
+    if cfg.dxvk {
+        match game::update_dxvk(&install_path, &cdn_url, &mut cache).await {
+            Ok(_) => log::info!("DXVK update completed successfully"),
+            Err(e) => {
+                log::warn!("DXVK update failed: {}", e);
+                crate::println_error!("Warning: DXVK update failed, continuing without DXVK");
+            }
+        }
+    }
+
+    cache::save_cache(&launcher_dir, cache);
+
+    crate::println_info!("Update completed successfully");
+    log::info!("Update process finished");
+
+    if !cfg.update_only {
+        log::info!("Launching IW4x client");
+        game::launch_game(&install_path, &cfg.args)?;
+    } else {
+        log::info!("Update-only mode, not launching IW4x");
+    }
+
+    Ok(())
 }
 
 #[tokio::main]
