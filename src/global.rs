@@ -7,8 +7,7 @@ use crate::cdn::{Region, Server};
 pub const GH_OWNER: &str = "iw4x";
 pub const GH_REPO: &str = "launcher";
 
-pub const CDN_HOSTS: [Server; 0] = [
-];
+pub const CDN_HOSTS: [Server; 0] = [];
 
 pub const DEFAULT_CDN_URL: &str = "";
 pub const IP2ASN_URL: &str = "";
