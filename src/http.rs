@@ -36,7 +36,7 @@ pub async fn download_file_progress(
     path: &PathBuf,
     size: u64,
     start_position: u64,
-    relative_path: &str,
+    file_name: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let res = HTTP_CLIENT
         .get(url)
@@ -48,7 +48,7 @@ pub async fn download_file_progress(
 
     log::debug!(
         "Starting download of {} ({})",
-        relative_path,
+        file_name,
         misc::human_readable_bytes(file_size)
     );
 

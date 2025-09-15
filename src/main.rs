@@ -3,6 +3,7 @@ mod cache;
 mod config;
 mod extend;
 mod game;
+mod game_files;
 mod github;
 mod global;
 mod http;
@@ -20,6 +21,7 @@ use colored::Colorize;
 use crossterm::{cursor, execute, terminal};
 use simple_log::LogConfigBuilder;
 
+use crate::game_files::required_files_exist;
 use crate::{extend::CutePath, global::*};
 
 // ignore_errors = true is used to prevent the launcher from exiting if an unknown argument is used
@@ -221,34 +223,53 @@ async fn run_launcher() -> Result<(), Box<dyn std::error::Error>> {
         ascii_art::print_random(true);
     }
 
+    if !args.ignore_required_files && !required_files_exist(&install_path) {
+        println!("{}", "\n\nRequired game files are missing, are you sure you placed the launcher in the game folder?".red());
+        println!(
+            "Check the installation guide for help:\n{}\n",
+            INSTALL_GUIDE.blue()
+        );
+        println!(
+            "Or join our Discord server:\n{}\n{}\n\n",
+            DISCORD_INVITE_1.blue(),
+            DISCORD_INVITE_2.blue()
+        );
+        return Err("Required files are missing".into());
+    }
+
     if cfg.offline {
         log::info!("Running in offline mode, launching game directly");
         return game::launch_game(&install_path, &cfg.args);
     }
 
-    log::info!("Fetching game data from CDN");
-    let cdn_url = "";
-    let game_data = game::fetch_game_data(cfg.testing, cdn_url).await?;
-
-    if !args.ignore_required_files && !game_data.required_files_exist(&install_path) {
-        println!("{}", "\n\nRequired game files are missing, are you sure you placed the launcher in the game folder?".red());
-        println!(
-            "Check the installation guide for help:\n{}\n",
-            global::INSTALL_GUIDE.blue()
-        );
-        println!(
-            "Or join our Discord server:\n{}\n{}\n\n",
-            global::DISCORD_INVITE_1.blue(),
-            global::DISCORD_INVITE_2.blue()
-        );
-        return Err("Required files are missing".into());
-    }
+    log::info!("Fetching game data from GitHub");
+    let client_update_data =
+        game_files::fetch_release_update_data(GH_OWNER, GH_REPO_CLIENT).await?;
+    let raw_file_update_data =
+        game_files::fetch_release_update_data(GH_OWNER, GH_REPO_RAW_FILES).await?;
 
     let mut cache = if cfg.force_update {
         std::collections::HashMap::new()
     } else {
         cache::get_cache(&launcher_dir)
     };
+
+    game::update(
+        GH_REPO_CLIENT,
+        &client_update_data,
+        &install_path,
+        &mut cache,
+    )
+    .await?;
+    game::update(
+        GH_REPO_RAW_FILES,
+        &raw_file_update_data,
+        &install_path,
+        &mut cache,
+    )
+    .await?;
+
+    cache::save_cache(&launcher_dir, cache);
 
     #[cfg(windows)]
     {
@@ -263,20 +284,6 @@ async fn run_launcher() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
     }
-
-    game::update(&game_data, &install_path, cdn_url, &mut cache).await?;
-
-    if cfg.dxvk {
-        match game::update_dxvk(&install_path, cdn_url, &mut cache).await {
-            Ok(_) => log::info!("DXVK update completed successfully"),
-            Err(e) => {
-                log::warn!("DXVK update failed: {e}");
-                crate::println_error!("Warning: DXVK update failed, continuing without DXVK");
-            }
-        }
-    }
-
-    cache::save_cache(&launcher_dir, cache);
 
     crate::println_info!("Update completed successfully");
     log::info!("Update process finished");

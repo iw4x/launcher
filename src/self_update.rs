@@ -11,7 +11,8 @@ pub async fn self_update_available(prerelease: Option<bool>) -> bool {
         }
     };
 
-    let latest_version = match github::latest_version(GH_OWNER, GH_REPO, prerelease).await {
+    let latest_version = match github::latest_version(GH_OWNER, GH_REPO_LAUNCHER, prerelease).await
+    {
         Ok(v) => v,
         Err(e) => {
             log::error!("Failed to get latest version: {e}");
@@ -76,7 +77,7 @@ pub async fn run(update_only: bool, prerelease: Option<bool>) {
         crate::println_info!("Performing launcher self-update");
         println!(
             "If you run into any issues, please download the latest version at {}",
-            github::download_url(GH_OWNER, GH_REPO, None)
+            github::download_url(GH_OWNER, GH_REPO_LAUNCHER, None)
         );
 
         let update_binary = PathBuf::from("iw4x-launcher-update.exe");
@@ -92,7 +93,7 @@ pub async fn run(update_only: bool, prerelease: Option<bool>) {
 
         let download_url = format!(
             "{}/download/{}",
-            github::download_url(GH_OWNER, GH_REPO, None),
+            github::download_url(GH_OWNER, GH_REPO_LAUNCHER, None),
             launcher_name
         );
 
