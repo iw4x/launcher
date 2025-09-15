@@ -1,9 +1,12 @@
-use indicatif::ProgressBar;
-use std::path::PathBuf;
-use std::{fs, path::Path, sync::Arc};
-
 use crate::game_files::{UpdateArchive, UpdateData, UpdateFile, UpdateFileData};
 use crate::{extend::*, global::*, http, misc, println_info};
+use indicatif::ProgressBar;
+use log::info;
+use std::fs::File;
+use std::io::BufReader;
+use std::path::PathBuf;
+use std::{fs, path::Path, sync::Arc};
+use zip::ZipArchive;
 
 /// Retrieves the total count of files to verify (Count of all direct files + count of all files in archives).
 fn get_total_verify_count(update_data: &UpdateData) -> usize {
@@ -142,12 +145,22 @@ fn setup_progress_bars(total_size: u64) -> (ProgressBar, ProgressBar) {
     (file_progress, total_progress)
 }
 
+fn ensure_parent_dir_exists(path: &PathBuf) -> Result<(), Box<dyn std::error::Error>> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|e| {
+            let error_msg = format!("Failed to create directory {}: {}", parent.cute_path(), e);
+            log::error!("{error_msg}");
+            error_msg
+        })?;
+    }
+
+    Ok(())
+}
+
 async fn download_file_to_disk(
     url: &str,
     target_path: &PathBuf,
-    file_name: &str,
-    expected_size: u64,
-    expected_blake3: &str,
+    update_file_data: &UpdateFileData,
     hashes: &mut std::collections::HashMap<String, String>,
     file_pb: &ProgressBar,
     total_pb: &ProgressBar,
@@ -158,7 +171,11 @@ async fn download_file_to_disk(
 
     while !download_successful && attempts < MAX_DOWNLOAD_ATTEMPTS {
         attempts += 1;
-        log::debug!("Download attempt {} for {}", attempts, file_name);
+        log::debug!(
+            "Download attempt {} for {}",
+            attempts,
+            update_file_data.path
+        );
 
         let url_with_cache_bust = if attempts > 1 {
             format!("{}?{}", url, misc::random_string(10))
@@ -166,27 +183,37 @@ async fn download_file_to_disk(
             url.to_string()
         };
 
-        file_pb.set_length(expected_size);
+        file_pb.set_length(update_file_data.size as u64);
         file_pb.set_position(0);
 
         match http::download_file_progress(
-            &file_pb,
-            &total_pb,
+            file_pb,
+            total_pb,
             &url_with_cache_bust,
             target_path,
-            expected_size,
+            update_file_data.size as u64,
             *cumulative_downloaded,
-            &file_name,
+            &update_file_data.path,
         )
         .await
         {
             Ok(_) => {
-                log::debug!("Download completed for {}, verifying hash", file_name);
-                match verify_downloaded_file(target_path, &expected_blake3, file_name)? {
+                log::debug!(
+                    "Download completed for {}, verifying hash",
+                    update_file_data.path
+                );
+                match verify_downloaded_file(
+                    target_path,
+                    &update_file_data.blake3,
+                    &update_file_data.path,
+                )? {
                     true => {
-                        hashes.insert(file_name.to_string(), expected_blake3.to_lowercase());
+                        hashes.insert(
+                            update_file_data.path.to_string(),
+                            update_file_data.blake3.to_lowercase(),
+                        );
                         download_successful = true;
-                        *cumulative_downloaded += expected_size;
+                        *cumulative_downloaded += update_file_data.size as u64;
                     }
                     false => {
                         if attempts < MAX_DOWNLOAD_ATTEMPTS {
@@ -203,7 +230,7 @@ async fn download_file_to_disk(
                 log::error!(
                     "Download attempt {} failed for {}: {}",
                     attempts,
-                    file_name,
+                    update_file_data.path,
                     e
                 );
             }
@@ -213,7 +240,7 @@ async fn download_file_to_disk(
     if !download_successful {
         let error_msg = format!(
             "Failed to download {} after {} attempts",
-            file_name, MAX_DOWNLOAD_ATTEMPTS
+            update_file_data.path, MAX_DOWNLOAD_ATTEMPTS
         );
         log::error!("{error_msg}");
         return Err(error_msg.into());
@@ -222,13 +249,59 @@ async fn download_file_to_disk(
     Ok(())
 }
 
+fn extract_archive(
+    archive_path: &PathBuf,
+    install_path: &Path,
+    archive: &UpdateArchive,
+) -> Result<(), Box<dyn std::error::Error>> {
+    println_info!("Extracting archive {}", archive.file_data.path);
+
+    let file = File::open(archive_path)?;
+    let mut buf_reader = BufReader::new(file);
+    let mut zip = ZipArchive::new(&mut buf_reader)?;
+
+    for archive_file in archive.files.iter() {
+        match zip.by_name(&archive_file.path) {
+            Ok(mut zip_file) => {
+                let extract_file_path = install_path.join(&archive_file.path);
+                ensure_parent_dir_exists(&extract_file_path)?;
+
+                let mut file = File::options()
+                    .create(true)
+                    .truncate(true)
+                    .write(true)
+                    .open(extract_file_path)?;
+                std::io::copy(&mut zip_file, &mut file)?;
+
+                info!(
+                    "Extracted file {} from archive {}",
+                    archive_file.path, archive.file_data.path
+                )
+            }
+            Err(_) => {
+                let message = format!(
+                    "Could not find file {} in archive {}",
+                    archive_file.path, archive.file_data.path
+                );
+                log::error!("{message}");
+                crate::println_error!("{message}");
+                return Err(Box::from(message));
+            }
+        }
+    }
+
+    Ok(())
+}
+
 /// Verifies files whether they are outdated and afterward attempts to download any outdated ones.
 async fn download_files(
     update_data: &UpdateData,
-    dir: &Path,
+    install_path: &Path,
+    launcher_dir: &Path,
     hashes: &mut std::collections::HashMap<String, String>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (archives_to_download, files_to_download) = verify_files(update_data, dir, hashes)?;
+    let (archives_to_download, files_to_download) =
+        verify_files(update_data, install_path, hashes)?;
     if archives_to_download.is_empty() && files_to_download.is_empty() {
         log::info!("All files are up to date");
         crate::println_info!("No update required - all files are up to date");
@@ -257,15 +330,8 @@ async fn download_files(
     let mut cumulative_downloaded = 0u64;
 
     for (file_idx, file) in files_to_download.iter().enumerate() {
-        let file_path = dir.join(&file.file_data.path);
-
-        if let Some(parent) = file_path.parent() {
-            fs::create_dir_all(parent).map_err(|e| {
-                let error_msg = format!("Failed to create directory {}: {}", parent.cute_path(), e);
-                log::error!("{error_msg}");
-                error_msg
-            })?;
-        }
+        let file_path = install_path.join(&file.file_data.path);
+        ensure_parent_dir_exists(&file_path)?;
 
         log::info!(
             "Downloading file {}/{}: {} from {}",
@@ -278,15 +344,49 @@ async fn download_files(
         download_file_to_disk(
             file.url.as_str(),
             &file_path,
-            file.file_data.path.as_str(),
-            file.file_data.size as u64,
-            file.file_data.blake3.as_str(),
+            &file.file_data,
             hashes,
             &file_pb,
             &total_pb,
             &mut cumulative_downloaded,
         )
         .await?;
+    }
+
+    for (archive_idx, archive) in archives_to_download.iter().enumerate() {
+        let archive_download_path = launcher_dir.join(&archive.file_data.path);
+        ensure_parent_dir_exists(&archive_download_path)?;
+
+        log::info!(
+            "Downloading archive {}/{}: {} from {}",
+            archive_idx + 1,
+            total_download_count,
+            archive.file_data.path,
+            archive.url
+        );
+
+        if !fs::exists(&archive_download_path)?
+            || !verify_downloaded_file(
+                &archive_download_path,
+                &archive.file_data.blake3,
+                &archive.file_data.path,
+            )?
+        {
+            download_file_to_disk(
+                archive.url.as_str(),
+                &archive_download_path,
+                &archive.file_data,
+                hashes,
+                &file_pb,
+                &total_pb,
+                &mut cumulative_downloaded,
+            )
+            .await?;
+        } else {
+            println_info!("Archive {} already downloaded!", archive.file_data.path);
+        }
+
+        extract_archive(&archive_download_path, install_path, archive)?;
     }
 
     file_pb.finish_and_clear();
@@ -298,13 +398,14 @@ async fn download_files(
 pub async fn update(
     repo_name: &str,
     update_data: &UpdateData,
-    dir: &Path,
+    install_path: &Path,
+    launcher_dir: &Path,
     hashes: &mut std::collections::HashMap<String, String>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     println_info!("Checking for updates from {repo_name}");
     log::info!("Starting update process for {repo_name}",);
 
-    download_files(update_data, dir, hashes).await?;
+    download_files(update_data, install_path, launcher_dir, hashes).await?;
 
     log::info!("Update process finished for {repo_name}",);
     Ok(())

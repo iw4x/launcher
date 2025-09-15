@@ -258,6 +258,7 @@ async fn run_launcher() -> Result<(), Box<dyn std::error::Error>> {
         GH_REPO_CLIENT,
         &client_update_data,
         &install_path,
+        &launcher_dir,
         &mut cache,
     )
     .await?;
@@ -265,6 +266,7 @@ async fn run_launcher() -> Result<(), Box<dyn std::error::Error>> {
         GH_REPO_RAW_FILES,
         &raw_file_update_data,
         &install_path,
+        &launcher_dir,
         &mut cache,
     )
     .await?;

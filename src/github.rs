@@ -2,12 +2,11 @@ use semver::Version;
 
 pub struct GitHubAsset {
     pub name: String,
-    pub digest: String,
     pub url: String,
 }
 
 pub struct GitHubRelease {
-    pub repo_owner: String,
+    pub _repo_owner: String,
     pub repo_name: String,
     pub release_name: String,
     pub assets: Vec<GitHubAsset>,
@@ -16,7 +15,6 @@ pub struct GitHubRelease {
 #[derive(serde::Deserialize)]
 struct GitHubAssetDto {
     name: String,
-    digest: String,
     browser_download_url: String,
 }
 
@@ -30,7 +28,6 @@ impl From<GitHubAssetDto> for GitHubAsset {
     fn from(value: GitHubAssetDto) -> Self {
         GitHubAsset {
             name: value.name,
-            digest: value.digest,
             url: value.browser_download_url,
         }
     }
@@ -39,7 +36,7 @@ impl From<GitHubAssetDto> for GitHubAsset {
 impl GitHubReleaseDto {
     fn into_release(self, repo_owner: String, repo_name: String) -> GitHubRelease {
         GitHubRelease {
-            repo_owner,
+            _repo_owner: repo_owner,
             repo_name,
             release_name: self.name,
             assets: self
