@@ -1,8 +1,10 @@
 ﻿use crate::extend::CutePath;
 use crate::github::GitHubRelease;
 use crate::global::UPDATE_INFO_ASSET_NAME;
+use crate::LAUNCHER_DIR;
 use crate::{github, http};
-use std::path::Path;
+use std::fs;
+use std::path::{Path, PathBuf};
 
 #[derive(Clone, Debug)]
 pub struct UpdateFileData {
@@ -175,9 +177,9 @@ pub fn required_files_exist(dir: &Path) -> bool {
     true
 }
 
-async fn update_definition_from_release(
+async fn fetch_definition_data_from_release(
     release: &GitHubRelease,
-) -> Result<UpdateData, Box<dyn std::error::Error>> {
+) -> Result<String, Box<dyn std::error::Error>> {
     let definition_asset = release
         .assets
         .iter()
@@ -191,17 +193,46 @@ async fn update_definition_from_release(
             error_message
         })?;
 
-    let response = http::get_body_string(&definition_asset.url)
+    http::get_body_string(&definition_asset.url)
         .await
         .map_err(|e| {
             log::error!(
                 "Failed to fetch game data from {}: {e}",
                 definition_asset.url
             );
-            format!("Failed to fetch game data: {e}")
-        })?;
+            Box::from(format!("Failed to fetch game data: {e}"))
+        })
+}
 
-    let update_data: UpdateDataDto = serde_json::from_str(&response).map_err(|e| {
+#[cfg(debug_assertions)]
+async fn fetch_definition_data_from_disk(release: &GitHubRelease) -> Option<String> {
+    let disk_definition_path = PathBuf::from(format!("{LAUNCHER_DIR}/{}.json", release.repo_name));
+    if !disk_definition_path.exists() {
+        return None;
+    }
+
+    fs::read_to_string(&disk_definition_path).ok()
+}
+
+async fn update_definition_from_release(
+    release: &GitHubRelease,
+) -> Result<UpdateData, Box<dyn std::error::Error>> {
+    let raw_data: String;
+
+    #[cfg(debug_assertions)]
+    {
+        raw_data = if let Some(disk_file_data) = fetch_definition_data_from_disk(release).await {
+            disk_file_data
+        } else {
+            fetch_definition_data_from_release(release).await?
+        };
+    }
+    #[cfg(not(debug_assertions))]
+    {
+        raw_data = fetch_definition_data_from_release(release).await?;
+    }
+
+    let update_data: UpdateDataDto = serde_json::from_str(&raw_data).map_err(|e| {
         log::error!("Failed to parse game data JSON: {e}");
         format!("Failed to parse game data: {e}")
     })?;
