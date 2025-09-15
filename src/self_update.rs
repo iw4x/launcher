@@ -29,7 +29,7 @@ pub async fn run(_update_only: bool, _prerelease: Option<bool>) {
         crate::println_info!("A new version of the IW4x launcher is available.");
         crate::println_info!(
             "Download it at {}",
-            github::download_url(GH_OWNER, GH_REPO, None)
+            github::download_url(GH_OWNER, GH_REPO_LAUNCHER, None)
         );
         println!("Launching in 10 seconds..");
         tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
