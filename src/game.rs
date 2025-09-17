@@ -261,9 +261,19 @@ fn extract_archive(
     let mut zip = ZipArchive::new(&mut buf_reader)?;
 
     for archive_file in archive.files.iter() {
+        let extract_file_path = install_path.join(&archive_file.path);
+        if fs::exists(&extract_file_path)?
+            && verify_downloaded_file(&extract_file_path, &archive_file.blake3, &archive_file.path)?
+        {
+            info!(
+                "File {} from archive {} is already up to date!",
+                archive_file.path, archive.file_data.path
+            );
+            continue;
+        }
+
         match zip.by_name(&archive_file.path) {
             Ok(mut zip_file) => {
-                let extract_file_path = install_path.join(&archive_file.path);
                 ensure_parent_dir_exists(&extract_file_path)?;
 
                 let mut file = File::options()
