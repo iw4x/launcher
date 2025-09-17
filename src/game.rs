@@ -387,6 +387,9 @@ async fn download_files(
         }
 
         extract_archive(&archive_download_path, install_path, archive)?;
+
+        fs::remove_file(&archive_download_path)?;
+        println_info!("Removed download artifact {}!", archive.file_data.path);
     }
 
     file_pb.finish_and_clear();
