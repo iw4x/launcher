@@ -1,235 +1,124 @@
-use std::{fs, path::Path, sync::Arc};
-
+use crate::game_files::{UpdateArchive, UpdateData, UpdateFile, UpdateFileData};
+use crate::{extend::*, global::*, http, misc, println_info};
 use indicatif::ProgressBar;
+use log::info;
+use std::fs::File;
+use std::io::BufReader;
+use std::path::PathBuf;
+use std::{fs, path::Path, sync::Arc};
+use zip::ZipArchive;
 
-use crate::{extend::*, global::*, http, misc};
+/// Retrieves the total count of files to verify (Count of all direct files + count of all files in archives).
+fn get_total_verify_count(update_data: &UpdateData) -> usize {
+    let archive_file_count = update_data
+        .archives
+        .iter()
+        .map(|archive| archive.files.len())
+        .sum::<usize>();
 
-#[derive(serde::Deserialize, serde::Serialize, Clone, Debug)]
-pub struct CdnFile {
-    pub blake3: String,
-    pub size: u32,
-    pub path: String,
+    update_data.files.len() + archive_file_count
 }
 
-#[derive(serde::Deserialize, serde::Serialize, Debug)]
-pub struct CdnData {
-    pub base_dir: String,
-    pub references: Vec<String>,
-    pub required: Vec<String>,
-    pub delete: Vec<String>,
-    pub rename: Vec<(String, String)>,
-    pub files: Vec<CdnFile>,
-}
-
-impl CdnData {
-    pub fn required_files_exist(&self, dir: &Path) -> bool {
-        for required_file in &self.required {
-            let file_path = dir.join(required_file);
-            if !file_path.exists() {
-                crate::println_error!("Required file {} does not exist", file_path.cute_path());
-                return false;
-            }
-        }
-        true
-    }
-}
-
-pub async fn fetch_game_data(
-    testing: bool,
-    cdn_url: &str,
-) -> Result<CdnData, Box<dyn std::error::Error>> {
-    let config_file = if testing { TESTING_INFO } else { STABLE_INFO };
-    let url = format!("{}/{}?{}", cdn_url, config_file, misc::random_string(10));
-
-    log::info!("Fetching game data from: {}", url);
-    let response = http::get_body_string(&url).await.map_err(|e| {
-        log::error!("Failed to fetch game data from {}: {}", url, e);
-        format!("Failed to fetch game data: {}", e)
-    })?;
-
-    let cdn_data: CdnData = serde_json::from_str(&response).map_err(|e| {
-        log::error!("Failed to parse game data JSON: {}", e);
-        format!("Failed to parse game data: {}", e)
-    })?;
-
-    log::info!(
-        "Successfully loaded game data with {} files from {}",
-        cdn_data.files.len(),
-        config_file
-    );
-    Ok(cdn_data)
-}
-
-pub async fn update_dxvk(
+/// Verifies whether a file needs to be updated
+fn verify_file_needs_download(
+    file_data: &UpdateFileData,
     dir: &Path,
-    cdn_url: &str,
     hashes: &mut std::collections::HashMap<String, String>,
-) -> Result<(), Box<dyn std::error::Error>> {
-    let url = format!("{}/dxvk.json?{}", cdn_url, misc::random_string(10));
-    let response = http::get_body_string(&url).await.map_err(|e| {
-        log::error!("Failed to fetch DXVK data from {}: {}", url, e);
-        e
-    })?;
-    let dxvk_data: CdnData = serde_json::from_str(&response).map_err(|e| {
-        log::error!("Failed to parse DXVK JSON: {}", e);
-        e
-    })?;
+) -> bool {
+    let file_path = dir.join(&file_data.path);
+    if !file_path.exists() {
+        log::debug!("File {} does not exist, will download", file_data.path);
+        true
+    } else {
+        let hash_remote = file_data.blake3.to_lowercase();
+        let hash_local = hashes
+            .get(&file_data.path)
+            .cloned()
+            .unwrap_or_else(|| file_path.get_blake3().unwrap())
+            .to_lowercase();
 
-    log::info!("Processing {} DXVK files", dxvk_data.files.len());
-
-    for file in &dxvk_data.files {
-        let file_path = dir.join(&file.path);
-
-        let needs_download = if !file_path.exists() {
+        if hash_local != hash_remote {
             true
         } else {
-            let hash_local = hashes
-                .get(&file.path)
-                .cloned()
-                .unwrap_or_else(|| file_path.get_blake3().unwrap_or_default())
-                .to_lowercase();
-            hash_local != file.blake3.to_lowercase()
-        };
-
-        if needs_download {
-            log::info!("Downloading DXVK file: {}", file.path);
-            if let Some(parent) = file_path.parent() {
-                fs::create_dir_all(parent).map_err(|e| {
-                    log::error!("Failed to create directory {}: {}", parent.cute_path(), e);
-                    e
-                })?;
-            }
-
-            let download_url = format!("{}/dxvk/{}", cdn_url, file.blake3);
-            http::download_file(&download_url, &file_path)
-                .await
-                .map_err(|e| {
-                    log::error!(
-                        "Failed to download DXVK file {} from {}: {}",
-                        file.path,
-                        download_url,
-                        e
-                    );
-                    e
-                })?;
-            hashes.insert(file.path.clone(), file.blake3.to_lowercase());
-            log::info!("Successfully downloaded DXVK file: {}", file.path);
-        } else {
-            log::debug!("DXVK file {} is up to date", file.path);
+            log::info!("File {} is up to date", file_data.path);
+            hashes.insert(file_data.path.clone(), file_data.blake3.to_lowercase());
+            false
         }
     }
-
-    log::info!("DXVK update completed successfully");
-    Ok(())
 }
 
-fn process_renames(cdn_data: &CdnData, dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
-    if cdn_data.rename.is_empty() {
-        return Ok(());
-    }
-
-    log::info!("Processing {} file renames", cdn_data.rename.len());
-
-    for (old_path, new_path) in &cdn_data.rename {
-        let old_file = dir.join(old_path);
-        let new_file = dir.join(new_path);
-
-        if old_file.exists() {
-            if let Some(parent) = new_file.parent() {
-                if let Err(e) = fs::create_dir_all(parent) {
-                    log::error!("Failed to create directory {}: {}", parent.cute_path(), e);
-                    continue;
-                }
-            }
-            match fs::rename(&old_file, &new_file) {
-                Ok(_) => {
-                    log::info!("Renamed {} -> {}", old_path, new_path);
-                }
-                Err(e) => {
-                    log::error!("Failed to rename {} -> {}: {}", old_path, new_path, e);
-                }
-            }
-        }
-    }
-
-    Ok(())
-}
-
+/// Verifies all files of the update data.
+/// If any direct file is outdated, it is added to the list of files.
+/// If any file of an archive is outdated, it is added to the list of archives.
 fn verify_files<'a>(
-    cdn_data: &'a CdnData,
+    update_data: &'a UpdateData,
     dir: &Path,
     hashes: &mut std::collections::HashMap<String, String>,
-) -> Result<Vec<&'a CdnFile>, Box<dyn std::error::Error>> {
-    log::info!("Checking {} files for updates", cdn_data.files.len());
+) -> Result<(Vec<&'a UpdateArchive>, Vec<&'a UpdateFile>), Box<dyn std::error::Error>> {
+    log::info!("Checking {} files for updates", update_data.files.len());
 
-    let pb = ProgressBar::new(cdn_data.files.len() as u64);
+    let pb = ProgressBar::new(get_total_verify_count(update_data) as u64);
     let pb_style = indicatif::ProgressStyle::with_template(
         "{spinner:.white} Checking files... {pos:>6} / {len:>6} done ({percent:>3}%)",
     );
     pb.set_style(pb_style.unwrap());
 
     let pb_arc = Arc::new(pb);
-    let mut files_to_download: Vec<&CdnFile> = Vec::new();
+    let mut files_to_download: Vec<&UpdateFile> = Vec::new();
+    let mut archives_to_download: Vec<&UpdateArchive> = Vec::new();
 
-    for file in &cdn_data.files {
-        let file_path = dir.join(&file.path);
-        let needs_download = if !file_path.exists() {
-            log::debug!("File {} does not exist, will download", file.path);
-            true
-        } else {
-            let hash_remote = file.blake3.to_lowercase();
-            let hash_local = hashes
-                .get(&file.path)
-                .cloned()
-                .unwrap_or_else(|| file_path.get_blake3().unwrap())
-                .to_lowercase();
-
-            if hash_local != hash_remote {
-                true
-            } else {
-                log::info!("File {} is up to date", file.path);
-                hashes.insert(file.path.clone(), file.blake3.to_lowercase());
-                false
-            }
-        };
+    for file in &update_data.files {
+        if verify_file_needs_download(&file.file_data, dir, hashes) {
+            files_to_download.push(file);
+        }
 
         pb_arc.inc(1);
+    }
 
-        if needs_download {
-            files_to_download.push(file);
+    for archive in &update_data.archives {
+        let mut verified_file_count = 0u64;
+        let any_file_of_archive_needs_download = archive.files.iter().any(|file_data| {
+            let result = verify_file_needs_download(&file_data, dir, hashes);
+            verified_file_count = verified_file_count + 1;
+            pb_arc.inc(1);
+
+            result
+        });
+
+        // "any" skips remaining elements as soon as one element hits
+        // add the remaining file count to progress bar
+        if verified_file_count < update_data.files.len() as u64 {
+            pb_arc.inc(update_data.files.len() as u64 - verified_file_count);
+        }
+
+        if any_file_of_archive_needs_download {
+            archives_to_download.push(archive);
         }
     }
 
     pb_arc.finish_and_clear();
-    Ok(files_to_download)
+    Ok((archives_to_download, files_to_download))
 }
 
 fn verify_downloaded_file(
-    file_path: &std::path::Path,
+    file_path: &Path,
     expected_hash: &str,
     file_name: &str,
 ) -> Result<bool, Box<dyn std::error::Error>> {
     match file_path.get_blake3() {
         Ok(local_hash) => {
             if local_hash.to_lowercase() == expected_hash.to_lowercase() {
-                log::info!("Successfully downloaded and verified {}", file_name);
+                log::info!("Successfully downloaded and verified {file_name}");
                 Ok(true)
             } else {
                 log::error!(
-                    "Hash verification failed for {}: expected {}, got {}",
-                    file_name,
-                    expected_hash,
-                    local_hash
+                    "Hash verification failed for {file_name}: expected {expected_hash}, got {local_hash}"
                 );
                 Ok(false)
             }
         }
         Err(e) => {
-            log::error!(
-                "Failed to calculate hash for downloaded file {}: {}",
-                file_name,
-                e
-            );
+            log::error!("Failed to calculate hash for downloaded file {file_name}: {e}");
             Err(e.into())
         }
     }
@@ -256,28 +145,194 @@ fn setup_progress_bars(total_size: u64) -> (ProgressBar, ProgressBar) {
     (file_progress, total_progress)
 }
 
+fn ensure_parent_dir_exists(path: &PathBuf) -> Result<(), Box<dyn std::error::Error>> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|e| {
+            let error_msg = format!("Failed to create directory {}: {}", parent.cute_path(), e);
+            log::error!("{error_msg}");
+            error_msg
+        })?;
+    }
+
+    Ok(())
+}
+
+async fn download_file_to_disk(
+    url: &str,
+    target_path: &PathBuf,
+    update_file_data: &UpdateFileData,
+    hashes: &mut std::collections::HashMap<String, String>,
+    file_pb: &ProgressBar,
+    total_pb: &ProgressBar,
+    cumulative_downloaded: &mut u64,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut download_successful = false;
+    let mut attempts = 0;
+
+    while !download_successful && attempts < MAX_DOWNLOAD_ATTEMPTS {
+        attempts += 1;
+        log::debug!(
+            "Download attempt {} for {}",
+            attempts,
+            update_file_data.path
+        );
+
+        let url_with_cache_bust = if attempts > 1 {
+            format!("{}?{}", url, misc::random_string(10))
+        } else {
+            url.to_string()
+        };
+
+        file_pb.set_length(update_file_data.size as u64);
+        file_pb.set_position(0);
+
+        match http::download_file_progress(
+            file_pb,
+            total_pb,
+            &url_with_cache_bust,
+            target_path,
+            update_file_data.size as u64,
+            *cumulative_downloaded,
+            &update_file_data.path,
+        )
+        .await
+        {
+            Ok(_) => {
+                log::debug!(
+                    "Download completed for {}, verifying hash",
+                    update_file_data.path
+                );
+                match verify_downloaded_file(
+                    target_path,
+                    &update_file_data.blake3,
+                    &update_file_data.path,
+                )? {
+                    true => {
+                        hashes.insert(
+                            update_file_data.path.to_string(),
+                            update_file_data.blake3.to_lowercase(),
+                        );
+                        download_successful = true;
+                        *cumulative_downloaded += update_file_data.size as u64;
+                    }
+                    false => {
+                        if attempts < MAX_DOWNLOAD_ATTEMPTS {
+                            log::info!("Waiting {RETRY_DELAY_SECONDS} seconds before retry..");
+                            tokio::time::sleep(tokio::time::Duration::from_secs(
+                                RETRY_DELAY_SECONDS,
+                            ))
+                            .await;
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                log::error!(
+                    "Download attempt {} failed for {}: {}",
+                    attempts,
+                    update_file_data.path,
+                    e
+                );
+            }
+        }
+    }
+
+    if !download_successful {
+        let error_msg = format!(
+            "Failed to download {} after {} attempts",
+            update_file_data.path, MAX_DOWNLOAD_ATTEMPTS
+        );
+        log::error!("{error_msg}");
+        return Err(error_msg.into());
+    }
+
+    Ok(())
+}
+
+fn extract_archive(
+    archive_path: &PathBuf,
+    install_path: &Path,
+    archive: &UpdateArchive,
+) -> Result<(), Box<dyn std::error::Error>> {
+    println_info!("Extracting archive {}", archive.file_data.path);
+
+    let file = File::open(archive_path)?;
+    let mut buf_reader = BufReader::new(file);
+    let mut zip = ZipArchive::new(&mut buf_reader)?;
+
+    for archive_file in archive.files.iter() {
+        let extract_file_path = install_path.join(&archive_file.path);
+        if fs::exists(&extract_file_path)?
+            && verify_downloaded_file(&extract_file_path, &archive_file.blake3, &archive_file.path)?
+        {
+            info!(
+                "File {} from archive {} is already up to date!",
+                archive_file.path, archive.file_data.path
+            );
+            continue;
+        }
+
+        match zip.by_name(&archive_file.path) {
+            Ok(mut zip_file) => {
+                ensure_parent_dir_exists(&extract_file_path)?;
+
+                let mut file = File::options()
+                    .create(true)
+                    .truncate(true)
+                    .write(true)
+                    .open(extract_file_path)?;
+                std::io::copy(&mut zip_file, &mut file)?;
+
+                info!(
+                    "Extracted file {} from archive {}",
+                    archive_file.path, archive.file_data.path
+                )
+            }
+            Err(_) => {
+                let message = format!(
+                    "Could not find file {} in archive {}",
+                    archive_file.path, archive.file_data.path
+                );
+                log::error!("{message}");
+                crate::println_error!("{message}");
+                return Err(Box::from(message));
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Verifies files whether they are outdated and afterward attempts to download any outdated ones.
 async fn download_files(
-    cdn_data: &CdnData,
-    dir: &Path,
-    cdn_url: &str,
+    update_data: &UpdateData,
+    install_path: &Path,
+    launcher_dir: &Path,
     hashes: &mut std::collections::HashMap<String, String>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let files_to_download = verify_files(cdn_data, dir, hashes)?;
-    if files_to_download.is_empty() {
+    let (archives_to_download, files_to_download) =
+        verify_files(update_data, install_path, hashes)?;
+    if archives_to_download.is_empty() && files_to_download.is_empty() {
         log::info!("All files are up to date");
         crate::println_info!("No update required - all files are up to date");
         return Ok(());
     }
 
-    let total_size = files_to_download.iter().map(|f| f.size as u64).sum::<u64>();
+    let total_size = files_to_download
+        .iter()
+        .map(|f| f.file_data.size as u64)
+        .chain(archives_to_download.iter().map(|a| a.file_data.size as u64))
+        .sum::<u64>();
+    let total_download_count = files_to_download.len() + archives_to_download.len();
+
     log::info!(
         "Need to download {} files ({} total)",
-        files_to_download.len(),
+        total_download_count,
         misc::human_readable_bytes(total_size)
     );
     crate::println_info!(
         "Update required - downloading {} files ({})",
-        files_to_download.len(),
+        total_download_count,
         misc::human_readable_bytes(total_size)
     );
 
@@ -285,93 +340,66 @@ async fn download_files(
     let mut cumulative_downloaded = 0u64;
 
     for (file_idx, file) in files_to_download.iter().enumerate() {
-        let file_path = dir.join(&file.path);
+        let file_path = install_path.join(&file.file_data.path);
+        ensure_parent_dir_exists(&file_path)?;
 
-        if let Some(parent) = file_path.parent() {
-            fs::create_dir_all(parent).map_err(|e| {
-                let error_msg = format!("Failed to create directory {}: {}", parent.cute_path(), e);
-                log::error!("{}", error_msg);
-                error_msg
-            })?;
-        }
-
-        let download_url = format!("{}/{}/{}", cdn_url, cdn_data.base_dir, file.blake3);
         log::info!(
             "Downloading file {}/{}: {} from {}",
             file_idx + 1,
-            files_to_download.len(),
-            file.path,
-            download_url
+            total_download_count,
+            file.file_data.path,
+            file.url
         );
 
-        let mut download_successful = false;
-        let mut attempts = 0;
+        download_file_to_disk(
+            file.url.as_str(),
+            &file_path,
+            &file.file_data,
+            hashes,
+            &file_pb,
+            &total_pb,
+            &mut cumulative_downloaded,
+        )
+        .await?;
+    }
 
-        while !download_successful && attempts < MAX_DOWNLOAD_ATTEMPTS {
-            attempts += 1;
-            log::debug!("Download attempt {} for {}", attempts, file.path);
+    for (archive_idx, archive) in archives_to_download.iter().enumerate() {
+        let archive_download_path = launcher_dir.join(&archive.file_data.path);
+        ensure_parent_dir_exists(&archive_download_path)?;
 
-            let url_with_cache_bust = if attempts > 1 {
-                format!("{}?{}", download_url, misc::random_string(10))
-            } else {
-                download_url.clone()
-            };
+        log::info!(
+            "Downloading archive {}/{}: {} from {}",
+            archive_idx + 1,
+            total_download_count,
+            archive.file_data.path,
+            archive.url
+        );
 
-            file_pb.set_length(file.size as u64);
-            file_pb.set_position(0);
-
-            match http::download_file_progress(
+        if !fs::exists(&archive_download_path)?
+            || !verify_downloaded_file(
+                &archive_download_path,
+                &archive.file_data.blake3,
+                &archive.file_data.path,
+            )?
+        {
+            download_file_to_disk(
+                archive.url.as_str(),
+                &archive_download_path,
+                &archive.file_data,
+                hashes,
                 &file_pb,
                 &total_pb,
-                &url_with_cache_bust,
-                &file_path,
-                file.size as u64,
-                cumulative_downloaded,
-                &file.path,
+                &mut cumulative_downloaded,
             )
-            .await
-            {
-                Ok(_) => {
-                    log::debug!("Download completed for {}, verifying hash", file.path);
-                    match verify_downloaded_file(&file_path, &file.blake3, &file.path)? {
-                        true => {
-                            hashes.insert(file.path.clone(), file.blake3.to_lowercase());
-                            download_successful = true;
-                            cumulative_downloaded += file.size as u64;
-                        }
-                        false => {
-                            if attempts < MAX_DOWNLOAD_ATTEMPTS {
-                                log::info!(
-                                    "Waiting {} seconds before retry..",
-                                    RETRY_DELAY_SECONDS
-                                );
-                                tokio::time::sleep(tokio::time::Duration::from_secs(
-                                    RETRY_DELAY_SECONDS,
-                                ))
-                                .await;
-                            }
-                        }
-                    }
-                }
-                Err(e) => {
-                    log::error!(
-                        "Download attempt {} failed for {}: {}",
-                        attempts,
-                        file.path,
-                        e
-                    );
-                }
-            }
+            .await?;
+        } else {
+            println_info!("Archive {} already downloaded!", archive.file_data.path);
         }
 
-        if !download_successful {
-            let error_msg = format!(
-                "Failed to download {} after {} attempts",
-                file.path, MAX_DOWNLOAD_ATTEMPTS
-            );
-            log::error!("{}", error_msg);
-            return Err(error_msg.into());
-        }
+        extract_archive(&archive_download_path, install_path, archive)?;
+
+        fs::remove_file(&archive_download_path)?;
+        println_info!("Removed download artifact {}!", archive.file_data.path);
     }
 
     file_pb.finish_and_clear();
@@ -380,64 +408,19 @@ async fn download_files(
     Ok(())
 }
 
-fn process_deletions(cdn_data: &CdnData, dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
-    if cdn_data.delete.is_empty() {
-        return Ok(());
-    }
-
-    log::info!(
-        "Processing {} file/directory deletions",
-        cdn_data.delete.len()
-    );
-
-    for delete_path in &cdn_data.delete {
-        let target_path = dir.join(delete_path);
-        if target_path.exists() {
-            if target_path.is_file() {
-                fs::remove_file(&target_path).map_err(|e| {
-                    let error_msg = format!("Failed to delete file {}: {}", delete_path, e);
-                    log::error!("{}", error_msg);
-                    error_msg
-                })?;
-                log::info!("Deleted file: {}", delete_path);
-            } else if target_path.is_dir() {
-                fs::remove_dir_all(&target_path).map_err(|e| {
-                    let error_msg = format!("Failed to delete directory {}: {}", delete_path, e);
-                    log::error!("{}", error_msg);
-                    error_msg
-                })?;
-                log::info!("Deleted directory: {}", delete_path);
-            } else {
-                log::warn!(
-                    "Path {} exists but is neither a file nor a directory",
-                    delete_path
-                );
-            }
-        } else {
-            log::debug!(
-                "Path {} already doesn't exist, skipping deletion",
-                delete_path
-            );
-        }
-    }
-
-    Ok(())
-}
-
 pub async fn update(
-    cdn_data: &CdnData,
-    dir: &Path,
-    cdn_url: &str,
+    repo_name: &str,
+    update_data: &UpdateData,
+    install_path: &Path,
+    launcher_dir: &Path,
     hashes: &mut std::collections::HashMap<String, String>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    crate::println_info!("Checking for updates");
-    log::info!("Starting game update process");
+    println_info!("Checking for updates from {repo_name}");
+    log::info!("Starting update process for {repo_name}",);
 
-    process_renames(cdn_data, dir)?;
-    download_files(cdn_data, dir, cdn_url, hashes).await?;
-    process_deletions(cdn_data, dir)?;
+    download_files(update_data, install_path, launcher_dir, hashes).await?;
 
-    log::info!("Game update completed successfully");
+    log::info!("Update process finished for {repo_name}",);
     Ok(())
 }
 
@@ -447,14 +430,11 @@ pub fn launch_game(dir: &Path, args: &str) -> Result<(), Box<dyn std::error::Err
 
     if !exe_path.exists() {
         let error_msg = format!("IW4x executable not found: {}", exe_path.cute_path());
-        log::error!("{}", error_msg);
+        log::error!("{error_msg}");
         return Err(error_msg.into());
     }
 
-    println!(
-        "\n\nJoin the IW4x Discord server:\n{}\n{} \n\n",
-        DISCORD_INVITE_1, DISCORD_INVITE_2
-    );
+    println!("\n\nJoin the IW4x Discord server:\n{DISCORD_INVITE_1}\n{DISCORD_INVITE_2}\n\n");
 
     crate::println_info!("Launching IW4x {}", args);
 
@@ -469,12 +449,12 @@ pub fn launch_game(dir: &Path, args: &str) -> Result<(), Box<dyn std::error::Err
             .current_dir(dir)
             .spawn()
             .map_err(|e| {
-                log::error!("Failed to spawn IW4x process: {}", e);
+                log::error!("Failed to spawn IW4x process: {e}");
                 e
             })?
             .wait()
             .map_err(|e| {
-                log::error!("Failed to wait for IW4x process: {}", e);
+                log::error!("Failed to wait for IW4x process: {e}");
                 e
             })?;
     }
@@ -526,10 +506,10 @@ pub fn launch_game(dir: &Path, args: &str) -> Result<(), Box<dyn std::error::Err
     }
 
     if exit_status.success() {
-        log::info!("IW4x exited successfully with status: {}", exit_status);
+        log::info!("IW4x exited successfully with status: {exit_status}");
     } else {
-        log::error!("IW4x exited with error status: {}", exit_status);
-        crate::println_error!("IW4x exited with {}", exit_status);
+        log::error!("IW4x exited with error status: {exit_status}");
+        crate::println_error!("IW4x exited with {exit_status}");
         misc::enter_exit(exit_status.code().unwrap_or(1));
     }
 

@@ -1,63 +1,97 @@
 use semver::Version;
 
+pub struct GitHubAsset {
+    pub name: String,
+    pub url: String,
+}
+
+pub struct GitHubRelease {
+    pub _repo_owner: String,
+    pub repo_name: String,
+    pub release_name: String,
+    pub assets: Vec<GitHubAsset>,
+}
+
+#[derive(serde::Deserialize)]
+struct GitHubAssetDto {
+    name: String,
+    browser_download_url: String,
+}
+
+#[derive(serde::Deserialize)]
+struct GitHubReleaseDto {
+    name: String,
+    assets: Vec<GitHubAssetDto>,
+}
+
+impl From<GitHubAssetDto> for GitHubAsset {
+    fn from(value: GitHubAssetDto) -> Self {
+        GitHubAsset {
+            name: value.name,
+            url: value.browser_download_url,
+        }
+    }
+}
+
+impl GitHubReleaseDto {
+    fn into_release(self, repo_owner: String, repo_name: String) -> GitHubRelease {
+        GitHubRelease {
+            _repo_owner: repo_owner,
+            repo_name,
+            release_name: self.name,
+            assets: self
+                .assets
+                .into_iter()
+                .map(move |asset_dto: GitHubAssetDto| GitHubAsset::from(asset_dto))
+                .collect(),
+        }
+    }
+}
+
 pub async fn latest_tag(
     owner: &str,
     repo: &str,
     prerelease: Option<bool>,
-) -> Result<String, Box<dyn std::error::Error>> {
+) -> Result<GitHubRelease, Box<dyn std::error::Error>> {
     if prerelease.unwrap_or(false) {
-        latest_tag_prerelease(owner, repo).await
+        latest_release_prerelease(owner, repo).await
     } else {
-        latest_tag_full(owner, repo).await
+        latest_release_full(owner, repo).await
     }
 }
 
-pub async fn latest_tag_full(
+pub async fn latest_release_full(
     owner: &str,
     repo: &str,
-) -> Result<String, Box<dyn std::error::Error>> {
+) -> Result<GitHubRelease, Box<dyn std::error::Error>> {
     let github_body = crate::http::get_body_string(&format!(
-        "https://api.github.com/repos/{}/{}/releases/latest",
-        owner, repo
+        "https://api.github.com/repos/{owner}/{repo}/releases/latest"
     ))
     .await
-    .map_err(|e| format!("Failed to fetch GitHub API: {}", e))?;
+    .map_err(|e| format!("Failed to fetch GitHub API: {e}"))?;
 
-    let github_json: serde_json::Value = serde_json::from_str(&github_body)
-        .map_err(|e| format!("Failed to parse GitHub API response: {}", e))?;
+    let latest_release_dto: GitHubReleaseDto = serde_json::from_str(&github_body)
+        .map_err(|e| format!("Failed to parse GitHub API response: {e}"))?;
 
-    let tag_name = github_json
-        .get("tag_name")
-        .ok_or("Missing tag_name field in GitHub response")?
-        .as_str()
-        .ok_or("tag_name is not a string")?;
-
-    Ok(tag_name.replace('"', ""))
+    Ok(latest_release_dto.into_release(owner.to_string(), repo.to_string()))
 }
 
-pub async fn latest_tag_prerelease(
+pub async fn latest_release_prerelease(
     owner: &str,
     repo: &str,
-) -> Result<String, Box<dyn std::error::Error>> {
+) -> Result<GitHubRelease, Box<dyn std::error::Error>> {
     let github_body = crate::http::get_body_string(&format!(
-        "https://api.github.com/repos/{}/{}/releases",
-        owner, repo
+        "https://api.github.com/repos/{owner}/{repo}/releases"
     ))
     .await
-    .map_err(|e| format!("Failed to fetch GitHub API: {}", e))?;
+    .map_err(|e| format!("Failed to fetch GitHub API: {e}"))?;
 
-    let github_json: serde_json::Value = serde_json::from_str(&github_body)
-        .map_err(|e| format!("Failed to parse GitHub API response: {}", e))?;
+    let github_json: Vec<GitHubReleaseDto> = serde_json::from_str(&github_body)
+        .map_err(|e| format!("Failed to parse GitHub API response: {e}"))?;
 
-    let latest_release = github_json.get(0).ok_or("No releases found")?;
+    let latest_release_dto = github_json.into_iter().next().ok_or("No releases found")?;
 
-    let tag_name = latest_release
-        .get("tag_name")
-        .ok_or("Release missing tag_name")?
-        .as_str()
-        .ok_or("tag_name is not a string")?;
-
-    Ok(tag_name.replace('"', ""))
+    Ok(latest_release_dto.into_release(owner.to_string(), repo.to_string()))
 }
 
 pub async fn latest_version(
@@ -65,10 +99,10 @@ pub async fn latest_version(
     repo: &str,
     prerelease: Option<bool>,
 ) -> Result<Version, Box<dyn std::error::Error>> {
-    let tag = latest_tag(owner, repo, prerelease).await?;
-    let cleaned_tag = tag.replace('v', "");
-    Version::parse(&cleaned_tag)
-        .map_err(|e| format!("Failed to parse version '{}': {}", cleaned_tag, e).into())
+    let release_name = latest_tag(owner, repo, prerelease).await?.release_name;
+    let cleaned_release_name = release_name.replace('v', "");
+    Version::parse(&cleaned_release_name)
+        .map_err(|e| format!("Failed to parse version '{cleaned_release_name}': {e}").into())
 }
 
 pub fn download_url(owner: &str, repo: &str, tag: Option<&str>) -> String {

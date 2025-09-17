@@ -1,9 +1,9 @@
 mod ascii_art;
 mod cache;
-mod cdn;
 mod config;
 mod extend;
 mod game;
+mod game_files;
 mod github;
 mod global;
 mod http;
@@ -21,6 +21,7 @@ use colored::Colorize;
 use crossterm::{cursor, execute, terminal};
 use simple_log::LogConfigBuilder;
 
+use crate::game_files::required_files_exist;
 use crate::{extend::CutePath, global::*};
 
 // ignore_errors = true is used to prevent the launcher from exiting if an unknown argument is used
@@ -59,10 +60,6 @@ struct Args {
     #[arg(long)]
     ignore_required_files: bool,
 
-    /// Disable CDN rating and use default CDN
-    #[arg(long)]
-    skip_connectivity_check: bool,
-
     /// Run in offline mode
     #[arg(long)]
     offline: bool,
@@ -70,14 +67,6 @@ struct Args {
     /// Install from testing branch (IW4x & Launcher)
     #[arg(long)]
     testing: bool,
-
-    /// Rate CDN servers and print results
-    #[arg(long)]
-    rate: bool,
-
-    /// Specify custom CDN url
-    #[arg(long)]
-    cdn_url: Option<String>,
 
     #[arg(long = "art-attack", hide = true)]
     art_attack: bool,
@@ -109,7 +98,7 @@ fn setup_logging(install_path: &Path) -> Result<(), Box<dyn std::error::Error>> 
         .path(log_file_str)
         .time_format(LOG_TIME_FORMAT)
         .level(LOG_LEVEL)
-        .map_err(|e| format!("Failed to configure logger: {}", e))?
+        .map_err(|e| format!("Failed to configure logger: {e}"))?
         .output_file()
         .build();
 
@@ -133,7 +122,7 @@ fn create_desktop_shortcut(launcher_path: &Path) -> Result<(), Box<dyn std::erro
 
                 match sl.create_lnk(&shortcut_path) {
                     Ok(_) => println_info!("Created desktop shortcut: {}", DESKTOP_SHORTCUT_NAME),
-                    Err(e) => log::warn!("Failed to create desktop shortcut: {}", e),
+                    Err(e) => log::warn!("Failed to create desktop shortcut: {e}"),
                 }
             }
         }
@@ -161,11 +150,6 @@ fn cleanup_terminal() {
 async fn run_launcher() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
 
-    if args.rate {
-        cdn::rate_cdns_and_display().await;
-        return Ok(());
-    }
-
     if args.art_attack {
         println!("This is an art attack.");
         println!("THIS is an art attack.");
@@ -187,7 +171,7 @@ async fn run_launcher() -> Result<(), Box<dyn std::error::Error>> {
     setup_logging(&install_path)?;
 
     log::info!("IW4x Launcher v{} starting up", env!("CARGO_PKG_VERSION"));
-    log::info!("Command line arguments: {:?}", args);
+    log::info!("Command line arguments: {args:?}");
     log::info!("Using install path: {}", install_path.cute_path());
     log::info!("Launcher directory: {}", launcher_dir.cute_path());
 
@@ -213,9 +197,6 @@ async fn run_launcher() -> Result<(), Box<dyn std::error::Error>> {
         self_update::run(false, Some(args.testing)).await;
     }
 
-    if let Some(cdn_url) = args.cdn_url {
-        cfg.cdn_url = cdn_url;
-    }
     if args.offline {
         cfg.offline = true;
     }
@@ -242,9 +223,81 @@ async fn run_launcher() -> Result<(), Box<dyn std::error::Error>> {
         ascii_art::print_random(true);
     }
 
-    log::warn!("The launcher is currently not able to update due to infrastructure changes.");
-    log::warn!("We are working on a solution, sorry for the inconvenience!");
-    game::launch_game(&install_path, &cfg.args)
+    if !args.ignore_required_files && !required_files_exist(&install_path) {
+        println!("{}", "\n\nRequired game files are missing, are you sure you placed the launcher in the game folder?".red());
+        println!(
+            "Check the installation guide for help:\n{}\n",
+            INSTALL_GUIDE.blue()
+        );
+        println!(
+            "Or join our Discord server:\n{}\n{}\n\n",
+            DISCORD_INVITE_1.blue(),
+            DISCORD_INVITE_2.blue()
+        );
+        return Err("Required files are missing".into());
+    }
+
+    if cfg.offline {
+        log::info!("Running in offline mode, launching game directly");
+        return game::launch_game(&install_path, &cfg.args);
+    }
+
+    log::info!("Fetching game data from GitHub");
+    let client_update_data =
+        game_files::fetch_release_update_data(GH_OWNER, GH_REPO_CLIENT).await?;
+    let raw_file_update_data =
+        game_files::fetch_release_update_data(GH_OWNER, GH_REPO_RAW_FILES).await?;
+
+    let mut cache = if cfg.force_update {
+        std::collections::HashMap::new()
+    } else {
+        cache::get_cache(&launcher_dir)
+    };
+
+    game::update(
+        GH_REPO_CLIENT,
+        &client_update_data,
+        &install_path,
+        &launcher_dir,
+        &mut cache,
+    )
+    .await?;
+    game::update(
+        GH_REPO_RAW_FILES,
+        &raw_file_update_data,
+        &install_path,
+        &launcher_dir,
+        &mut cache,
+    )
+    .await?;
+
+    cache::save_cache(&launcher_dir, cache);
+
+    #[cfg(windows)]
+    {
+        if _is_first_run {
+            log::info!("First run detected, creating desktop shortcut");
+            if let Ok(current_exe) = env::current_exe() {
+                if let Err(e) = create_desktop_shortcut(&current_exe) {
+                    log::warn!("Failed to create desktop shortcut: {e}");
+                } else {
+                    log::info!("Desktop shortcut created successfully");
+                }
+            }
+        }
+    }
+
+    crate::println_info!("Update completed successfully");
+    log::info!("Update process finished");
+
+    if !cfg.update_only {
+        log::info!("Launching IW4x client");
+        game::launch_game(&install_path, &cfg.args)?;
+    } else {
+        log::info!("Update-only mode, not launching IW4x");
+    }
+
+    Ok(())
 }
 
 #[tokio::main]

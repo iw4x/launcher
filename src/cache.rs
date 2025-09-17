@@ -15,11 +15,11 @@ pub fn save_cache(dir: &Path, cache: HashMap<String, String>) {
     let cache_serialized = match serde_json::to_string_pretty(&cache) {
         Ok(s) => s,
         Err(e) => {
-            log::error!("Failed to serialize cache: {}", e);
+            log::error!("Failed to serialize cache: {e}");
             return;
         }
     };
     fs::write(cache_path, cache_serialized).unwrap_or_else(|e| {
-        log::error!("Failed to save cache: {}", e);
+        log::error!("Failed to save cache: {e}");
     });
 }

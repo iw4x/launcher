@@ -2,23 +2,17 @@ use std::time::Duration;
 
 use once_cell::sync::Lazy;
 
-use crate::cdn::{Region, Server};
-
 pub const GH_OWNER: &str = "iw4x";
-pub const GH_REPO: &str = "launcher";
-
-pub const CDN_HOSTS: [Server; 0] = [];
-
-pub const DEFAULT_CDN_URL: &str = "";
-pub const IP2ASN_URL: &str = "";
+pub const GH_REPO_LAUNCHER: &str = "launcher";
+pub const GH_REPO_RAW_FILES: &str = "iw4x-rawfiles";
+pub const GH_REPO_CLIENT: &str = "iw4x-client";
 
 #[cfg(windows)]
 pub const DESKTOP_SHORTCUT_NAME: &str = "IW4x.lnk";
 pub const GAME_EXECUTABLE: &str = "iw4x.exe";
 pub const LAUNCHER_DIR: &str = "launcher";
 
-pub const TESTING_INFO: &str = "testing.json";
-pub const STABLE_INFO: &str = "stable.json";
+pub const UPDATE_INFO_ASSET_NAME: &str = "update.json";
 
 pub const MAX_DOWNLOAD_ATTEMPTS: usize = 2;
 pub const RETRY_DELAY_SECONDS: u64 = 5;
@@ -38,6 +32,6 @@ pub static USER_AGENT: Lazy<String> = Lazy::new(|| {
         env!("CARGO_PKG_VERSION"),
         std::env::consts::OS,
         GH_OWNER,
-        GH_REPO
+        GH_REPO_LAUNCHER
     )
 });

@@ -13,8 +13,6 @@ pub struct Config {
     #[serde(default = "default_args")]
     pub args: String,
     #[serde(default)]
-    pub cdn_url: String,
-    #[serde(default)]
     pub offline: bool,
     #[serde(default)]
     pub testing: bool,
@@ -35,7 +33,6 @@ impl Default for Config {
             skip_self_update: false,
             force_update: false,
             args: "-stdout".to_string(),
-            cdn_url: String::new(),
             offline: false,
             testing: false,
             disable_art: false,
@@ -49,7 +46,7 @@ pub fn load(config_path: PathBuf) -> Config {
     if config_path.exists() {
         let cfg_str = fs::read_to_string(&config_path).unwrap_or_default();
         let cfg: Config = serde_json::from_str(&cfg_str).unwrap_or_else(|e| {
-            log::warn!("Failed to parse config file: {}", e);
+            log::warn!("Failed to parse config file: {e}");
             log::info!("Creating default config due to parsing error");
             let default_cfg = Config::default();
             save(config_path.clone(), default_cfg.clone());
@@ -63,7 +60,7 @@ pub fn load(config_path: PathBuf) -> Config {
             }
         }
 
-        log::debug!("Loaded config: {:?}", cfg);
+        log::debug!("Loaded config: {cfg:?}");
         cfg
     } else {
         log::info!("No config file found, creating default config");
@@ -77,7 +74,7 @@ pub fn save(config_path: PathBuf, config: Config) {
     let config_json = match serde_json::to_string_pretty(&config) {
         Ok(json) => json,
         Err(e) => {
-            log::error!("Could not serialize config: {}", e);
+            log::error!("Could not serialize config: {e}");
             return;
         }
     };
