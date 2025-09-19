@@ -253,6 +253,7 @@ fn extract_archive(
     archive_path: &PathBuf,
     install_path: &Path,
     archive: &UpdateArchive,
+    hashes: &mut std::collections::HashMap<String, String>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     println_info!("Extracting archive {}", archive.file_data.path);
 
@@ -286,7 +287,12 @@ fn extract_archive(
                 info!(
                     "Extracted file {} from archive {}",
                     archive_file.path, archive.file_data.path
-                )
+                );
+
+                hashes.insert(
+                    archive_file.path.to_string(),
+                    archive_file.blake3.to_lowercase(),
+                );
             }
             Err(_) => {
                 let message = format!(
@@ -396,7 +402,7 @@ async fn download_files(
             println_info!("Archive {} already downloaded!", archive.file_data.path);
         }
 
-        extract_archive(&archive_download_path, install_path, archive)?;
+        extract_archive(&archive_download_path, install_path, archive, hashes)?;
 
         fs::remove_file(&archive_download_path)?;
         println_info!("Removed download artifact {}!", archive.file_data.path);
