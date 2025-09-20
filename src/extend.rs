@@ -4,9 +4,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-pub fn file_blake3(file: &Path) -> io::Result<String> {
-    let file = File::open(file)?;
-    let mut reader = BufReader::new(file);
+pub fn read_blake3(reader: &mut dyn Read) -> io::Result<String> {
     let mut hasher = blake3::Hasher::new();
     let mut buffer = [0; 8192];
 
@@ -19,6 +17,12 @@ pub fn file_blake3(file: &Path) -> io::Result<String> {
     }
 
     Ok(hasher.finalize().to_hex().to_string())
+}
+
+pub fn file_blake3(file: &Path) -> io::Result<String> {
+    let file = File::open(file)?;
+    let mut reader = BufReader::new(file);
+    read_blake3(&mut reader)
 }
 
 pub trait Blake3Path {

@@ -42,3 +42,12 @@ static_vcruntime = "2.0"
 OriginalFilename = "iw4x-launcher.exe"
 FileDescription = "IW4x Launcher"
 ProductName = "github.com/iw4x/launcher"
+
+[[bin]]
+name = "iw4x-launcher"
+path = "src/main.rs"
+
+
+[[bin]]
+name = "release-tool"
+path = "src/release_tool.rs"

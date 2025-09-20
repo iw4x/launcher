@@ -1,6 +1,7 @@
 ﻿use crate::extend::CutePath;
 use crate::github::GitHubRelease;
 use crate::global::UPDATE_INFO_ASSET_NAME;
+use crate::release_definition::{UpdateArchiveDto, UpdateDataDto, UpdateFileDto};
 use crate::LAUNCHER_DIR;
 use crate::{github, http};
 use std::fs;
@@ -30,28 +31,6 @@ pub struct UpdateFile {
 pub struct UpdateData {
     pub archives: Vec<UpdateArchive>,
     pub files: Vec<UpdateFile>,
-}
-
-#[derive(serde::Deserialize, Clone, Debug)]
-struct UpdateFileDto {
-    blake3: String,
-    size: u32,
-    path: String,
-    asset_name: Option<String>,
-    archive: Option<String>,
-}
-
-#[derive(serde::Deserialize, Clone, Debug)]
-struct UpdateArchiveDto {
-    blake3: String,
-    size: u32,
-    name: String,
-}
-
-#[derive(serde::Deserialize, Clone, Debug)]
-struct UpdateDataDto {
-    archives: Vec<UpdateArchiveDto>,
-    files: Vec<UpdateFileDto>,
 }
 
 impl UpdateArchiveDto {

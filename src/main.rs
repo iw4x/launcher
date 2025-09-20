@@ -9,6 +9,7 @@ mod global;
 mod http;
 mod migrations;
 mod misc;
+mod release_definition;
 mod self_update;
 
 use std::{
