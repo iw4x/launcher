@@ -6,7 +6,26 @@ on:
       - v[0-9]+.*
 
 jobs:
+  verify-package-version:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install stable toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: cargo
+
+      - name: Verify version is set
+        run: |
+          cargo install cargo-edit
+          VERSION="${{ github.ref_name }}"
+          cargo set-version ${VERSION#v}
+          git diff-index --quiet HEAD --
+
   create-release:
+    needs:
+      - verify-package-version
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -25,6 +44,8 @@ jobs:
             ## You probably want to download [iw4x-launcher.exe](https://github.com/iw4x/launcher/releases/download/${{ github.ref_name }}/iw4x-launcher.exe)
 
   build-release-linux:
+    needs:
+      - verify-package-version
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -55,6 +76,8 @@ jobs:
             target/${{ matrix.target }}/release/release-tool
 
   build-release-windows:
+    needs:
+      - verify-package-version
     runs-on: windows-latest
     steps:
       - name: Install stable toolchain
@@ -78,6 +101,7 @@ jobs:
 
   release:
     needs:
+      - create-release
       - build-release-linux
       - build-release-windows
     runs-on: ubuntu-latest
