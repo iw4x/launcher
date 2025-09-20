@@ -70,7 +70,7 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: iw4x-launcher-${{ matrix.target }}
+          name: artifacts-${{ matrix.target }}
           path: |
             target/${{ matrix.target }}/release/iw4x-launcher
             target/${{ matrix.target }}/release/release-tool
@@ -94,7 +94,7 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: iw4x-launcher-i686-pc-windows-msvc
+          name: artifacts-i686-pc-windows-msvc
           path: |
             target/i686-pc-windows-msvc/release/iw4x-launcher.exe
             target/i686-pc-windows-msvc/release/release-tool.exe
@@ -112,16 +112,24 @@ jobs:
       - uses: actions/download-artifact@v5
       - name: Create artifacts archives
         run: |
-          7z a iw4x-launcher-x86_64-unknown-linux-gnu.tar ./iw4x-launcher-x86_64-unknown-linux-gnu/iw4x-launcher
+          7z a iw4x-launcher-x86_64-unknown-linux-gnu.tar ./artifacts-x86_64-unknown-linux-gnu/iw4x-launcher
           7z a iw4x-launcher-x86_64-unknown-linux-gnu.tar.gz ./iw4x-launcher-x86_64-unknown-linux-gnu.tar
-          7z a iw4x-launcher-x86_64-unknown-linux-musl.tar ./iw4x-launcher-x86_64-unknown-linux-musl/iw4x-launcher
+          
+          7z a iw4x-launcher-x86_64-unknown-linux-musl.tar ./artifacts-x86_64-unknown-linux-musl/iw4x-launcher
           7z a iw4x-launcher-x86_64-unknown-linux-musl.tar.gz ./iw4x-launcher-x86_64-unknown-linux-musl.tar
-          7z a iw4x-launcher-i686-pc-windows-msvc.zip ./iw4x-launcher-i686-pc-windows-msvc/iw4x-launcher.exe
+          
+          7z a release-tool-x86_64-unknown-linux-gnu.tar ./artifacts-x86_64-unknown-linux-gnu/release-tool
+          7z a release-tool-x86_64-unknown-linux-gnu.tar.gz ./release-tool-x86_64-unknown-linux-gnu.tar
+          
+          7z a release-tool-x86_64-unknown-linux-musl.tar ./artifacts-x86_64-unknown-linux-musl/release-tool
+          7z a release-tool-x86_64-unknown-linux-musl.tar.gz ./release-tool-x86_64-unknown-linux-musl.tar
+          
+          7z a iw4x-launcher-i686-pc-windows-msvc.zip ./artifacts-i686-pc-windows-msvc/iw4x-launcher.exe
       - uses: ncipollo/release-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          artifacts: "*.tar.gz,*.zip,iw4x-launcher-i686-pc-windows-msvc/*.exe"
+          artifacts: "*.tar.gz,*.zip,artifacts-i686-pc-windows-msvc/iw4x-launcher.exe"
           artifactErrorsFailBuild: true
           allowUpdates: true
           draft: true
