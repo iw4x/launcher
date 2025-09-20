@@ -10,29 +10,96 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - uses: taiki-e/create-gh-release-action@v1.9.1
+      - uses: ncipollo/release-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           draft: true
-          token: ${{ secrets.GITHUB_TOKEN }}
+          body: |
+            ## Installation instructions
+            - [docs.iw4x.io/guides/install-windows](https://docs.iw4x.io/guides/install-windows)
+            
+            ## For support please visit the IW4x Discord
+            - ### https://iw4x.io/discord
+            
+            ## You probably want to download [iw4x-launcher.exe](https://github.com/iw4x/launcher/releases/download/${{ github.ref_name }}/iw4x-launcher.exe)
 
-  upload-assets:
+  build-release-linux:
+    runs-on: ubuntu-latest
     strategy:
       matrix:
         include:
           - target: x86_64-unknown-linux-gnu
-            os: ubuntu-22.04
+            image: rust:latest
           - target: x86_64-unknown-linux-musl
-            os: ubuntu-latest
-          - target: i686-pc-windows-msvc
-            os: windows-latest
-    runs-on: ${{ matrix.os }}
+            image: clux/muslrust:stable
+    container: ${{ matrix.image }}
     steps:
-      - uses: actions/checkout@v5
-      - uses: taiki-e/upload-rust-binary-action@v1.27.0
+      - name: Install stable toolchain
+        uses: dtolnay/rust-toolchain@stable
         with:
           target: ${{ matrix.target }}
-          bin: iw4x-launcher
-          tar: unix
-          zip: windows
+
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Run cargo build
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: iw4x-launcher-${{ matrix.target }}
+          path: |
+            target/${{ matrix.target }}/release/iw4x-launcher
+            target/${{ matrix.target }}/release/release-tool
+
+  build-release-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Install stable toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          target: i686-pc-windows-msvc
+
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Run cargo build
+        run: cargo build --release --target i686-pc-windows-msvc
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: iw4x-launcher-i686-pc-windows-msvc
+          path: |
+            target/i686-pc-windows-msvc/release/iw4x-launcher.exe
+            target/i686-pc-windows-msvc/release/release-tool.exe
+
+  release:
+    needs:
+      - build-release-linux
+      - build-release-windows
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v5
+      - name: Create artifacts archives
+        run: |
+          7z a iw4x-launcher-x86_64-unknown-linux-gnu.tar ./iw4x-launcher-x86_64-unknown-linux-gnu/iw4x-launcher
+          7z a iw4x-launcher-x86_64-unknown-linux-gnu.tar.gz ./iw4x-launcher-x86_64-unknown-linux-gnu.tar
+          7z a iw4x-launcher-x86_64-unknown-linux-musl.tar ./iw4x-launcher-x86_64-unknown-linux-musl/iw4x-launcher
+          7z a iw4x-launcher-x86_64-unknown-linux-musl.tar.gz ./iw4x-launcher-x86_64-unknown-linux-musl.tar
+          7z a iw4x-launcher-i686-pc-windows-msvc.zip ./iw4x-launcher-i686-pc-windows-msvc/iw4x-launcher.exe
+      - uses: ncipollo/release-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          artifacts: "*.tar.gz,*.zip,iw4x-launcher-i686-pc-windows-msvc/*.exe"
+          artifactErrorsFailBuild: true
+          allowUpdates: true
+          draft: true
+          omitBodyDuringUpdate: true
+          omitDraftDuringUpdate: true
