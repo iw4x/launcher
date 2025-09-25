@@ -39,7 +39,7 @@ fn rename_update_file(
     let updated_file_name = if keep_extension {
         String::from(file_name)
     } else {
-        file_name.replace(".", "_")
+        format!("{}.bin", file_name.replace(".", "_"))
     };
 
     let renamed_file_name = format!("__launcher_{updated_file_name}");
