@@ -1,31 +1,34 @@
+use crate::{
+    extend::{Blake3Path, CutePath},
+    http, println_info,
+};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::{fmt, fs, io};
-use serde::{Deserialize, Serialize};
-use crate::{extend::{Blake3Path, CutePath}, http, println_info};
 
 #[derive(Debug)]
 pub enum DlcError {
     Network {
         operation: String,
-        source: Box<dyn std::error::Error + Send + Sync>
+        source: Box<dyn std::error::Error + Send + Sync>,
     },
 
     FileSystem {
         path: PathBuf,
         operation: String,
-        source: io::Error
+        source: io::Error,
     },
 
     Integrity {
         file: String,
         expected: String,
-        actual: String
+        actual: String,
     },
 
     Parse {
         context: String,
-        source: serde_json::Error
+        source: serde_json::Error,
     },
 
     DownloadFailed {
@@ -40,17 +43,36 @@ impl fmt::Display for DlcError {
             DlcError::Network { operation, .. } => {
                 write!(f, "Network error during {}", operation)
             }
-            DlcError::FileSystem { path, operation, .. } => {
-                write!(f, "File system error during {} on path '{}'", operation, path.display())
+            DlcError::FileSystem {
+                path, operation, ..
+            } => {
+                write!(
+                    f,
+                    "File system error during {} on path '{}'",
+                    operation,
+                    path.display()
+                )
             }
-            DlcError::Integrity { file, expected, actual } => {
-                write!(f, "Integrity check failed for '{}': expected {}, got {}", file, expected, actual)
+            DlcError::Integrity {
+                file,
+                expected,
+                actual,
+            } => {
+                write!(
+                    f,
+                    "Integrity check failed for '{}': expected {}, got {}",
+                    file, expected, actual
+                )
             }
             DlcError::Parse { context, .. } => {
                 write!(f, "Parse error in {}", context)
             }
             DlcError::DownloadFailed { file, attempts, .. } => {
-                write!(f, "Download failed for '{}' after {} attempts", file, attempts)
+                write!(
+                    f,
+                    "Download failed for '{}' after {} attempts",
+                    file, attempts
+                )
             }
         }
     }
@@ -120,7 +142,10 @@ impl DlcManifest {
         let installation_dir = file_type.get_installation_path(install_path);
         let file_path = installation_dir.join(&file.asset_name);
         if !file_path.exists() {
-            log::debug!("DLC file {} not found, scheduling download", file.asset_name);
+            log::debug!(
+                "DLC file {} not found, scheduling download",
+                file.asset_name
+            );
             return Ok(true);
         }
 
@@ -128,20 +153,20 @@ impl DlcManifest {
         let local_hash = if let Some(cached_hash) = cache.get(&cache_key) {
             cached_hash.clone()
         } else {
-            file_path
-                .get_blake3()
-                .map_err(|e| DlcError::FileSystem {
-                    path: file_path.clone(),
-                    operation: "hash calculation".to_string(),
-                    source: e,
-                })?
+            file_path.get_blake3().map_err(|e| DlcError::FileSystem {
+                path: file_path.clone(),
+                operation: "hash calculation".to_string(),
+                source: e,
+            })?
         };
 
         let hash_matches = local_hash.eq_ignore_ascii_case(&file.blake3);
         if !hash_matches {
             log::debug!(
                 "DLC file {} hash mismatch (local: {}, remote: {}), scheduling download",
-                file.asset_name, local_hash, file.blake3
+                file.asset_name,
+                local_hash,
+                file.blake3
             );
         } else {
             log::debug!("DLC file {} is up to date", file.asset_name);
@@ -158,7 +183,6 @@ pub enum DlcFileType {
     Unknown(String),
 }
 
-
 impl DlcFileType {
     pub fn from_filename(filename: &str) -> Self {
         match filename.split('.').last() {
@@ -174,7 +198,10 @@ impl DlcFileType {
             Self::FF => install_base.join("zone").join("dlc"),
             Self::IWD => install_base.join("iw4x"),
             Self::Unknown(ext) => {
-                log::warn!("Unknown DLC file extension '{}', using default zone/dlc path", ext);
+                log::warn!(
+                    "Unknown DLC file extension '{}', using default zone/dlc path",
+                    ext
+                );
                 install_base.join("zone").join("dlc")
             }
         }
@@ -239,8 +266,10 @@ impl Dlc {
             return Ok(());
         }
 
-        self.prepare_directories(install_path, &outdated_files).await?;
-        self.download_files(install_path, &outdated_files, cache).await?;
+        self.prepare_directories(install_path, &outdated_files)
+            .await?;
+        self.download_files(install_path, &outdated_files, cache)
+            .await?;
 
         Ok(())
     }
@@ -254,8 +283,8 @@ impl Dlc {
                 source: format!("{}", e).into(),
             })?;
 
-        let manifest = serde_json::from_str::<DlcManifest>(&raw_data)
-            .map_err(|e| DlcError::Parse {
+        let manifest =
+            serde_json::from_str::<DlcManifest>(&raw_data).map_err(|e| DlcError::Parse {
                 context: "DLC manifest".to_string(),
                 source: e,
             })?;
@@ -264,11 +293,7 @@ impl Dlc {
         Ok(manifest)
     }
 
-    async fn prepare_directories(
-        &self,
-        install_path: &Path,
-        files: &[&DlcFile],
-    ) -> DlcResult<()> {
+    async fn prepare_directories(&self, install_path: &Path, files: &[&DlcFile]) -> DlcResult<()> {
         let mut directories = std::collections::HashSet::new();
 
         for file in files {
@@ -277,12 +302,11 @@ impl Dlc {
         }
 
         for dir in directories {
-            fs::create_dir_all(&dir)
-                .map_err(|e| DlcError::FileSystem {
-                    path: dir.clone(),
-                    operation: "directory creation".to_string(),
-                    source: e,
-                })?;
+            fs::create_dir_all(&dir).map_err(|e| DlcError::FileSystem {
+                path: dir.clone(),
+                operation: "directory creation".to_string(),
+                source: e,
+            })?;
         }
 
         Ok(())
@@ -308,19 +332,17 @@ impl Dlc {
         let file_pb = indicatif::ProgressBar::new(0);
         let file_style = indicatif::ProgressStyle::with_template(
             "{spinner:.white} {bytes:>10} / {total_bytes:>10} ({percent:>3}%)",
-        ).unwrap();
+        )
+        .unwrap();
         file_pb.set_style(file_style);
 
         let mut downloaded_total = 0u64;
 
         for file in files {
-            match self.download_single_file(
-                file,
-                install_path,
-                &file_pb,
-                &total_pb,
-                downloaded_total,
-            ).await {
+            match self
+                .download_single_file(file, install_path, &file_pb, &total_pb, downloaded_total)
+                .await
+            {
                 Ok(hash) => {
                     cache.insert(file.cache_key(), hash);
                 }
@@ -373,11 +395,12 @@ impl Dlc {
                 file.size,
                 download_offset,
                 &file.asset_name,
-            ).await {
+            )
+            .await
+            {
                 Ok(()) => {
-                    let actual_hash = target_path
-                        .get_blake3()
-                        .map_err(|e| DlcError::FileSystem {
+                    let actual_hash =
+                        target_path.get_blake3().map_err(|e| DlcError::FileSystem {
                             path: target_path.clone(),
                             operation: "hash verification".to_string(),
                             source: e,
@@ -417,10 +440,7 @@ impl Default for Dlc {
     }
 }
 
-pub async fn update_dlc(
-    install_path: &Path,
-    cache: &mut HashMap<String, String>,
-) -> DlcResult<()> {
+pub async fn update_dlc(install_path: &Path, cache: &mut HashMap<String, String>) -> DlcResult<()> {
     let dlc = Dlc::new();
     dlc.update_dlc(install_path, cache).await
 }
@@ -433,7 +453,10 @@ mod tests {
     fn test_file_type_detection() {
         assert_eq!(DlcFileType::from_filename("test.ff"), DlcFileType::FF);
         assert_eq!(DlcFileType::from_filename("test.iwd"), DlcFileType::IWD);
-        assert!(matches!(DlcFileType::from_filename("test.unknown"), DlcFileType::Unknown(_)));
+        assert!(matches!(
+            DlcFileType::from_filename("test.unknown"),
+            DlcFileType::Unknown(_)
+        ));
     }
 
     #[test]
