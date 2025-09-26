@@ -1,6 +1,7 @@
 mod ascii_art;
 mod cache;
 mod config;
+mod dlc;
 mod extend;
 mod game;
 mod game_files;
@@ -56,6 +57,9 @@ struct Args {
     skip_self_update: bool,
     #[arg(long = "skip-launcher-update", hide = true)]
     skip_launcher_update: bool,
+
+    #[arg(long = "skip-dlc-update")]
+    skip_dlc_update: bool,
 
     /// Don't check for required game files
     #[arg(long)]
@@ -216,6 +220,9 @@ async fn run_launcher() -> Result<(), Box<dyn std::error::Error>> {
     if args.dxvk {
         cfg.dxvk = true;
     }
+    if args.skip_dlc_update {
+        cfg.skip_dlc_update = true;
+    }
     if let Some(game_args) = args.args.or(args.pass) {
         cfg.args = game_args;
     }
@@ -271,6 +278,12 @@ async fn run_launcher() -> Result<(), Box<dyn std::error::Error>> {
         &mut cache,
     )
     .await?;
+
+    if !cfg.skip_dlc_update {
+        dlc::update_dlc(&install_path, &mut cache).await?;
+    } else {
+        log::info!("Skipping DLC updates due to configuration");
+    }
 
     cache::save_cache(&launcher_dir, cache);
 
