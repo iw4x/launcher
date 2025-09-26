@@ -20,6 +20,8 @@ pub struct Config {
     pub disable_art: bool,
     #[serde(default)]
     pub dxvk: bool,
+    #[serde(default)]
+    pub skip_dlc_update: bool,
 }
 
 fn default_args() -> String {
@@ -37,6 +39,7 @@ impl Default for Config {
             testing: false,
             disable_art: false,
             dxvk: false,
+            skip_dlc_update: false,
         }
     }
 }
