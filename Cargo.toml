@@ -25,7 +25,7 @@ clap = { version = "4.5", features = ["derive"] }
 semver = "1.0"
 rand = "0.9"
 crossterm = "0.29"
-zip = "5.1.1"
+zip = "6.0.0"
 
 [target.'cfg(unix)'.dependencies]
 openssl = { version = "0.10", default-features = false, features = ["vendored"] }
