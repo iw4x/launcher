@@ -3,7 +3,7 @@
 # IW4x Launcher
 ### Official launcher for the IW4x mod
 
-#### [Installation Guide](https://iw4x.io/install) • [Discord Server](https://iw4x.io/discord) • [Website](https://iw4x.io)
+#### [Installation Guide](https://docs.iw4x.io/get-started/quickstart/) • [Discord Server](https://discord.com/invite/pV2qJscTXf) • [Website](https://iw4x.io)
 
 </div>
 
