@@ -1,33 +1,40 @@
 namespace hello
 {
-  // basic_http_session
-  //
   template <typename T>
   inline void basic_http_session<T>::
   configure_ssl ()
   {
+    // If the certificate file is specified, use that. Otherwise fall back to
+    // the system default verify paths.
+    //
     if (!traits_.ssl_cert_file.empty ())
       ssl_ctx_.load_verify_file (traits_.ssl_cert_file);
     else
       ssl_ctx_.set_default_verify_paths ();
 
+    // Verify the peer unless the user explicitly asked us not to.
+    //
     if (traits_.verify_ssl)
       ssl_ctx_.set_verify_mode (ssl::verify_peer);
     else
       ssl_ctx_.set_verify_mode (ssl::verify_none);
 
-    ssl_ctx_.set_options (
-      ssl::context::default_workarounds |
-      ssl::context::no_sslv2 |
-      ssl::context::no_sslv3 |
-      ssl::context::single_dh_use);
+    // Disable the old, insecure protocols (SSLv2/v3) and enable the
+    // implementation workarounds.
+    //
+    // Also enable single DH use to have a fresh key for each handshake.
+    //
+    ssl_ctx_.set_options (ssl::context::default_workarounds |
+                          ssl::context::no_sslv2 |
+                          ssl::context::no_sslv3 |
+                          ssl::context::single_dh_use);
 
-    SSL_CTX_set_tlsext_servername_callback (
-      ssl_ctx_.native_handle (), nullptr);
+    // Clear the server name callback to make sure it doesn't interfere with the
+    // SNI handling which is done by the stream.
+    //
+    SSL_CTX_set_tlsext_servername_callback (ssl_ctx_.native_handle (), nullptr);
   }
 
-  // basic_http_client
-  //
   template <typename T>
   inline asio::awaitable<typename basic_http_client<T>::response_type>
   basic_http_client<T>::
