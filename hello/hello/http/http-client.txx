@@ -271,7 +271,7 @@ namespace hello
 
     // Shutdown.
     //
-    // We attempt to shut down the SSL layer, but note that explicitly ignore
+    // We attempt to shut down the SSL layer, but note that we explicitly ignore
     // the error code here. The reality is that many servers simply close the
     // TCP connection after sending the response without performing a proper TLS
     // shutdown sequence. Treating that as a failure would cause us to throw
