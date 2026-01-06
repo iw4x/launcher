@@ -1,0 +1,6 @@
+: 1
+summary: hello project repository
+
+:
+role: prerequisite
+location: https://pkg.cppget.org/1/stable

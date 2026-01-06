@@ -1,0 +1,32 @@
+# Compiler/linker output.
+#
+# Note that *.exe.dlls directories can be symlinks thus
+# no trailing /.
+#
+*.d
+*.t
+*.i
+*.i.*
+*.ii
+*.ii.*
+*.o
+*.obj
+*.gcm
+*.pcm
+*.ifc
+*.so
+*.dylib
+*.dll
+*.a
+*.lib
+*.exp
+*.pdb
+*.ilk
+*.exe
+*.exe.dlls
+*.exe.manifest
+*.pc
+
+# Compilation database.
+#
+compile_commands.json

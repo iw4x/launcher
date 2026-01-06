@@ -1,0 +1,19 @@
+include <cstdint>; // std::uint64_t
+
+namespace hello
+{
+  class options
+  {
+    std::uint64_t --build2-metadata; // leave undocumented/hidden
+
+    bool --help
+    {
+      "Print usage information and exit."
+    };
+
+    bool --version
+    {
+      "Print version and exit."
+    };
+  };
+}

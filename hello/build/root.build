@@ -1,0 +1,26 @@
+using in
+
+define cli: file
+
+cli{*}: extension = cli
+
+cxx.internal.scope = current
+
+cxx.std = latest
+
+using cxx
+
+hxx{*}: extension = hxx
+ixx{*}: extension = ixx
+txx{*}: extension = txx
+cxx{*}: extension = cxx
+
+# The test target for cross-testing (running tests under Wine, etc).
+#
+test.target = $cxx.target
+
+# Pre-defined semantics to distinguish between development and consumption
+# builds.
+#
+config [bool] config.hello.develop ?= false
+develop = $config.hello.develop # shorthand
