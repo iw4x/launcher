@@ -1,5 +1,9 @@
 hello
 
+# CLI output directory.
+#
+!pregenerated/hello
+
 # Testscript output directory (can be symlink).
 #
 test-hello

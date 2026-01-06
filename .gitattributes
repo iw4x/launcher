@@ -22,4 +22,3 @@
 # the repository's language statistics and hidden by default in diffs.
 #
 hello/hello/pregenerated/** linguist-generated=true
-hello/doc/pregenerated/** linguist-generated=true
