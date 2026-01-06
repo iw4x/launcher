@@ -30,27 +30,27 @@ namespace hello
     basic_http_response () : status (http_status::ok) {}
 
     basic_http_response (http_status s,
-                        http_version v = http_version (1, 1))
-        : status (s), version (v) {}
+                         http_version v = http_version (1, 1))
+      : status (s), version (v) {}
 
     basic_http_response (http_status s,
-                        string_type r,
-                        http_version v = http_version (1, 1))
-        : status (s), version (v), reason (std::move (r)) {}
+                         string_type r,
+                         http_version v = http_version (1, 1))
+      : status (s), version (v), reason (std::move (r)) {}
 
     basic_http_response (http_status s,
-                        headers_type h,
-                        http_version v = http_version (1, 1))
-        : status (s), version (v), headers (std::move (h)) {}
+                         headers_type h,
+                         http_version v = http_version (1, 1))
+      : status (s), version (v), headers (std::move (h)) {}
 
     basic_http_response (http_status s,
-                        headers_type h,
-                        body_type b,
-                        http_version v = http_version (1, 1))
-        : status (s),
-          version (v),
-          headers (std::move (h)),
-          body (std::move (b)) {}
+                         headers_type h,
+                         body_type b,
+                         http_version v = http_version (1, 1))
+      : status (s),
+        version (v),
+        headers (std::move (h)),
+        body (std::move (b)) {}
 
     // Status code checking helpers.
     //

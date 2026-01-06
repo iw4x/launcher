@@ -30,29 +30,29 @@ namespace hello
     basic_http_request () = default;
 
     basic_http_request (http_method m,
-                       string_type u,
-                       http_version v = http_version (1, 1))
-        : method (m), url (std::move (u)), version (v) {}
+                        string_type u,
+                        http_version v = http_version (1, 1))
+      : method (m), url (std::move (u)), version (v) {}
 
     basic_http_request (http_method m,
-                       string_type u,
-                       headers_type h,
-                       http_version v = http_version (1, 1))
-        : method (m),
-          url (std::move (u)),
-          version (v),
-          headers (std::move (h)) {}
+                        string_type u,
+                        headers_type h,
+                        http_version v = http_version (1, 1))
+      : method (m),
+        url (std::move (u)),
+        version (v),
+        headers (std::move (h)) {}
 
     basic_http_request (http_method m,
-                       string_type u,
-                       headers_type h,
-                       body_type b,
-                       http_version v = http_version (1, 1))
-        : method (m),
-          url (std::move (u)),
-          version (v),
-          headers (std::move (h)),
-          body (std::move (b)) {}
+                        string_type u,
+                        headers_type h,
+                        body_type b,
+                        http_version v = http_version (1, 1))
+      : method (m),
+        url (std::move (u)),
+        version (v),
+        headers (std::move (h)),
+        body (std::move (b)) {}
 
     // Get the request target (path component of URL).
     //

@@ -18,17 +18,17 @@ namespace hello
   public:
     using string_type = S;
 
-    string_type  base_url;
-    string_type  path_pattern;  // Can contain {param} placeholders.
-    http_method  default_method;
+    string_type base_url;
+    string_type path_pattern;  // Can contain {param} placeholders.
+    http_method default_method;
 
     // Constructors.
     //
     basic_http_endpoint () : default_method (http_method::get) {}
 
     basic_http_endpoint (string_type base,
-                        string_type pattern,
-                        http_method method = http_method::get)
+                         string_type pattern,
+                         http_method method = http_method::get)
       : base_url (std::move (base)),
         path_pattern (std::move (pattern)),
         default_method (method) {}
