@@ -1,8 +1,15 @@
 libs =
+
 options = hello-options
 
-exe{hello}: {hxx ixx txx cxx}{** -pregenerated/** -options -version} \
-            {hxx            }{                              version} \
+import libs += libssl%lib{ssl}
+import libs += libcrypto%lib{crypto}
+import libs += libboost-asio%lib{boost_asio}
+import libs += libboost-beast%lib{boost_beast}
+import libs += libboost-json%lib{boost_json}
+
+exe{hello}: {hxx ixx txx cxx}{**  -version -*-options -pregenerated/**} \
+            {hxx            }{     version                            } \
             $libs testscript
 
 # Target metadata, see also --build2-metadata in hello.cxx.
@@ -17,6 +24,8 @@ exe{hello}:
 
 hxx{version}: in{version} $src_root/manifest
 
+# Build options.
+#
 cxx.poptions =+ "-I$out_root" "-I$src_root"
 
 ## Consumption build ($develop == false).
@@ -102,8 +111,9 @@ if $develop
   if diff $dh $h >- && \
      diff $di $i >- && \
      diff $dc $c >-
+  {
     exit
-  end
+  }
 
   cp $h $dh
   cp $i $di
