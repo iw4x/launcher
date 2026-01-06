@@ -1,0 +1,7 @@
+If:
+  PathMatch: .*/hello/github/github-api.(txx)
+
+CompileFlags:
+  Add:
+    - "-include"
+    - "hello/hello/github/github-api.hxx"
