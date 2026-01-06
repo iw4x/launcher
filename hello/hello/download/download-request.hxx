@@ -1,0 +1,102 @@
+#pragma once
+
+#include <string>
+#include <vector>
+#include <cstdint>
+#include <optional>
+#include <filesystem>
+
+#include <hello/download/download-types.hxx>
+
+namespace hello
+{
+  namespace fs = std::filesystem;
+
+  // Download request represents a single download operation.
+  //
+  template <typename S = std::string>
+  struct basic_download_request
+  {
+    using string_type = S;
+
+    // Source URLs (fallback order).
+    //
+    std::vector<string_type> urls;
+
+    // Target file path.
+    //
+    fs::path target;
+
+    // Optional verification.
+    //
+    download_verification verification_method {download_verification::none};
+    string_type verification_value;
+
+    // Optional size hint.
+    //
+    std::optional<std::uint64_t> expected_size;
+
+    // Priority.
+    //
+    download_priority priority {download_priority::normal};
+
+    // Resume support.
+    //
+    bool resume {true};
+
+    // Timeout settings (in seconds).
+    //
+    std::uint32_t connect_timeout {30};
+    std::uint32_t transfer_timeout {300};
+
+    // Request metadata.
+    //
+    string_type name;        // Human-readable name
+    string_type description; // Optional description
+
+    // Constructors.
+    //
+    basic_download_request () = default;
+
+    basic_download_request (string_type url, fs::path tgt)
+        : urls ({std::move (url)}),
+          target (std::move (tgt))
+    {
+    }
+
+    basic_download_request (std::vector<string_type> us, fs::path tgt)
+        : urls (std::move (us)),
+          target (std::move (tgt))
+    {
+    }
+
+    // Validation.
+    //
+    bool
+    valid () const
+    {
+      return !urls.empty () && !target.empty ();
+    }
+  };
+
+  using download_request = basic_download_request<std::string>;
+
+  template <typename S>
+  inline bool
+  operator== (const basic_download_request<S>& x,
+              const basic_download_request<S>& y)
+  {
+    return x.urls == y.urls &&
+           x.target == y.target &&
+           x.verification_method == y.verification_method &&
+           x.verification_value == y.verification_value;
+  }
+
+  template <typename S>
+  inline bool
+  operator!= (const basic_download_request<S>& x,
+              const basic_download_request<S>& y)
+  {
+    return !(x == y);
+  }
+}
