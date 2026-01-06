@@ -15,90 +15,13 @@ namespace hello
     if (method == download_verification::none || checksum.empty ())
       return true;
 
-    if (!fs::exists (file))
-      return false;
-
-    std::ifstream ifs (file, std::ios::binary);
-    if (!ifs)
-      return false;
-
-    std::string computed_hash;
-
-    const EVP_MD* md (nullptr);
-
-    switch (method)
-    {
-    case download_verification::md5:
-      md = EVP_md5 ();
-      break;
-    case download_verification::sha1:
-      md = EVP_sha1 ();
-      break;
-    case download_verification::sha256:
-      md = EVP_sha256 ();
-      break;
-    case download_verification::sha512:
-      md = EVP_sha512 ();
-      break;
-    case download_verification::none:
-      return true;
-    }
-
-    if (!md)
-      return false;
-
-    EVP_MD_CTX* ctx (EVP_MD_CTX_new ());
-    if (!ctx)
-      return false;
-
-    if (EVP_DigestInit_ex (ctx, md, nullptr) != 1)
-    {
-      EVP_MD_CTX_free (ctx);
-      return false;
-    }
-
-    char buffer [8192];
-    while (ifs.read (buffer, sizeof (buffer)) || ifs.gcount () > 0)
-    {
-      if (EVP_DigestUpdate (ctx,
-                            buffer,
-                            static_cast<std::size_t> (ifs.gcount ())) != 1)
-      {
-        EVP_MD_CTX_free (ctx);
-        return false;
-      }
-    }
-
-    unsigned char hash[EVP_MAX_MD_SIZE];
-    unsigned int hash_len (0);
-
-    if (EVP_DigestFinal_ex (ctx, hash, &hash_len) != 1)
-    {
-      EVP_MD_CTX_free (ctx);
-      return false;
-    }
-
-    EVP_MD_CTX_free (ctx);
-
-    std::ostringstream oss;
-    for (unsigned int i (0); i < hash_len; ++i)
-      oss << std::hex << std::setw (2) << std::setfill ('0')
-          << static_cast<int> (hash[i]);
-
-    computed_hash = oss.str ();
-
-    if (computed_hash.size () != checksum.size ())
-      return false;
-
-    for (std::size_t i (0); i < computed_hash.size (); ++i)
-    {
-      char c1 (std::tolower (computed_hash[i]));
-      char c2 (std::tolower (checksum[i]));
-      if (c1 != c2)
-        return false;
-    }
-
-    return true;
+    // Delegate to compute_hash.
+    //
+    // Note that compute_hash returns an empty string if the file does not exist
+    // or if the computation fails (e.g., OpenSSL error).
+    //
+    string_type h (compute_hash (file, method));
+    return !h.empty () && compare_hashes (h, checksum);
   }
 
   template <typename H, typename S>
@@ -121,25 +44,18 @@ namespace hello
 
     switch (method)
     {
-    case download_verification::md5:
-      md = EVP_md5 ();
-      break;
-    case download_verification::sha1:
-      md = EVP_sha1 ();
-      break;
-    case download_verification::sha256:
-      md = EVP_sha256 ();
-      break;
-    case download_verification::sha512:
-      md = EVP_sha512 ();
-      break;
-    case download_verification::none:
-      return string_type ();
+      case download_verification::md5:    md = EVP_md5 ();    break;
+      case download_verification::sha1:   md = EVP_sha1 ();   break;
+      case download_verification::sha256: md = EVP_sha256 (); break;
+      case download_verification::sha512: md = EVP_sha512 (); break;
+      case download_verification::none:   return string_type ();
     }
 
     if (!md)
       return string_type ();
 
+    // Create and initialize the OpenSSL digest context.
+    //
     EVP_MD_CTX* ctx (EVP_MD_CTX_new ());
     if (!ctx)
       return string_type ();
@@ -150,6 +66,8 @@ namespace hello
       return string_type ();
     }
 
+    // Process the file in chunks.
+    //
     char buffer [8192];
     while (ifs.read (buffer, sizeof (buffer)) || ifs.gcount () > 0)
     {
