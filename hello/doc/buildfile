@@ -1,0 +1,117 @@
+define hello: doc
+hello{*}: extension = hello
+
+define css: doc
+css{*}: extension = css
+
+define xhtml: doc
+xhtml{*}: extension = xhtml
+
+./: css{hello}
+css{hello}: in{hello.css.in}
+
+# Note: doc_version is used in the man pages.
+#
+doc_version = [string] "$version.major.$version.minor.$version.patch"
+if $version.pre_release
+  doc_version += "-$version.pre_release_string"
+
+# Man pages.
+#
+
+## Consumption build ($develop == false).
+#
+
+# Use pregenerated versions in the consumption build.
+#
+./: pregenerated/{man1 xhtml}{**}: include = (!$develop)
+
+# Distribute pregenerated versions only in the consumption build.
+#
+pregenerated/{man1 xhtml}{**}: dist = (!$develop)
+
+#
+##
+
+## Development build ($develop == true).
+#
+
+./: {man1 xhtml}{hello}: include = $develop
+
+if $develop
+{
+  doc_year = 2025
+
+  man_options = -v project="Hello"        \
+                -v version="$doc_version" \
+                -v copyright="$copyright" \
+                -I $src_root              \
+                --stdout                  \
+                --suppress-undocumented   \
+                --exclude-base
+
+  import! [metadata] cli = cli%exe{cli}
+}
+
+# In the development build distribute regenerated versions, remapping their
+# locations to the paths of the pregenerated versions (which are only
+# distributed in the consumption build; see above). This way we make sure that
+# the distributed files are always up-to-date.
+#
+{man1 xhtml}{hello}: dist = ($develop ? pregenerated/hello/ : false)
+
+ops = ../hello/cli{hello}
+
+man1{hello}: $ops                   \
+             file{hello-prologue.1  \
+                  hello-epilogue.1} \
+             $cli
+%
+if $develop
+{{
+  o = $path($>)
+
+  # Use the copyright year to approximate the last authoring date.
+  #
+  $cli --generate-man $man_options      \
+       -v date="$doc_year"              \
+       --man-prologue-file $path($<[1]) \
+       --man-epilogue-file $path($<[2]) \
+       $path($<) >$o
+
+  # If the result differs from the pregenerated version, copy it over.
+  #
+  if! diff $src_base/pregenerated/hello/hello.1 $o >-
+    cp $o $src_base/pregenerated/hello/hello.1
+  end
+}}
+
+xhtml{hello}: $ops                  \
+              xhtml{hello-prologue  \
+                    hello-epilogue} \
+              $cli
+%
+if $develop
+{{
+  o = $path($>)
+
+  # Use the copyright year to approximate the last authoring date.
+  #
+  $cli --generate-html $man_options      \
+       -v date="$doc_year"               \
+       --html-prologue-file $path($<[1]) \
+       --html-epilogue-file $path($<[2]) \
+       $path($<) >$o
+
+  # If the result differs from the pregenerated version, copy it over.
+  #
+  if! diff $src_base/pregenerated/hello/hello.xhtml $o >-
+    cp $o $src_base/pregenerated/hello/hello.xhtml
+  end
+}}
+
+#
+##
+
+doc{*}:               install.subdirs = true
+pregenerated/doc{**}: install.subdirs = true

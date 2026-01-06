@@ -1,0 +1,114 @@
+libs =
+options = hello-options
+
+exe{hello}: {hxx ixx txx cxx}{** -pregenerated/** -options -version} \
+            {hxx            }{                              version} \
+            $libs testscript
+
+# Target metadata, see also --build2-metadata in hello.cxx.
+#
+exe{hello}:
+{
+  export.metadata = 1 hello
+  hello.name = [string] hello
+  hello.version  = [string] $version
+  hello.checksum = [string] $version
+}
+
+hxx{version}: in{version} $src_root/manifest
+
+cxx.poptions =+ "-I$out_root" "-I$src_root"
+
+## Consumption build ($develop == false).
+#
+
+# Use pregenerated versions in the consumption build.
+#
+exe{hello}: pregenerated/{hxx ixx cxx}{**}: include = (!$develop)
+
+if! $develop
+  cxx.poptions =+ "-I($src_base/pregenerated)" # Note: must come first.
+
+# Distribute pregenerated versions only in the consumption build.
+#
+pregenerated/{hxx ixx cxx}{*}: dist = (!$develop)
+
+#
+##
+
+## Development build ($develop == true).
+#
+
+exe{hello}: {hxx ixx cxx}{$options}: include = $develop
+
+if $develop
+  import! [metadata] cli = cli%exe{cli}
+
+for f: $options
+{
+  [string] b = $f
+
+  b = $replace($b, "-options", "")
+  d = $directory($f)
+  p = pregenerated/hello
+
+  <{hxx ixx cxx}{$f}>: cli{$b}
+  {
+    dist = ($develop ? $relative([dir_path] "$p/$d", $d) : false)
+  }
+}
+
+<{hxx ixx cxx}{~'/(.*)-options/'}>: cli{~'/\1/'} $cli
+%
+if $develop
+{{
+  t = $path($>[0]).t
+
+  depdb dyndep --byproduct --file $t
+
+  h = $path($>[0])
+  i = $path($>[1])
+  c = $path($>[2])
+
+  d = $directory($h)
+  p = $string($leaf($d, $out_root))
+
+  # Note that we generate *-options.hxx/ixx/cxx from cli<$f> instead of
+  # <$f>.hxx/ixx/cxx to avoid filename conflicts and keep the base name <$f>
+  # reserved for our own implementation headers and sources.
+  #
+  options = -I $src_root                                            \
+            --std c++11                                             \
+            --include-prefix $p                                     \
+            --guard-prefix $regex.replace($ucase($p), '[/\\]', '_') \
+            --generate-specifier                                    \
+            --generate-file-scanner                                 \
+            --suppress-undocumented                                 \
+            --cli-namespace hello::cli                              \
+            --exclude-base                                          \
+            --include-with-brackets                                 \
+            --output-suffix -options
+
+  $cli $options --generate-dep --dep-file $t -o $d $path($<[0])
+
+  # If the result differs from the pregenerated version, copy it over.
+  #
+  d = [dir_path] $src_base/pregenerated/$p
+
+  dh = $d/$leaf($h)
+  di = $d/$leaf($i)
+  dc = $d/$leaf($c)
+
+  if diff $dh $h >- && \
+     diff $di $i >- && \
+     diff $dc $c >-
+    exit
+  end
+
+  cp $h $dh
+  cp $i $di
+  cp $c $dc
+}}
+
+#
+##
