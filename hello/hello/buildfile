@@ -8,6 +8,10 @@ import libs += libboost-asio%lib{boost_asio}
 import libs += libboost-beast%lib{boost_beast}
 import libs += libboost-json%lib{boost_json}
 
+import libs += libftxui%lib{ftxui-component}
+import libs += libftxui%lib{ftxui-dom}
+import libs += libftxui%lib{ftxui-screen}
+
 exe{hello}: {hxx ixx txx cxx}{**  -version -*-options -pregenerated/**} \
             {hxx            }{     version                            } \
             $libs testscript
