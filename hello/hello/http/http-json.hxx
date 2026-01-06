@@ -48,7 +48,7 @@ namespace hello
       : client_ (ioc) {}
 
     basic_json_http_client (boost::asio::io_context& ioc,
-                           const traits_type& traits)
+                            const traits_type& traits)
       : client_ (ioc, traits) {}
 
     basic_json_http_client (const basic_json_http_client&) = delete;

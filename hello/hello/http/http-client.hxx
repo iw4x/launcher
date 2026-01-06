@@ -137,10 +137,10 @@ namespace hello
     //
     explicit
     basic_http_client (asio::io_context& ioc)
-        : session_ (std::make_unique<session_type> (ioc, traits_type ())) {}
+      : session_ (std::make_unique<session_type> (ioc, traits_type ())) {}
 
     basic_http_client (asio::io_context& ioc, const traits_type& traits)
-        : session_ (std::make_unique<session_type> (ioc, traits)) {}
+      : session_ (std::make_unique<session_type> (ioc, traits)) {}
 
     basic_http_client (const basic_http_client&) = delete;
     basic_http_client& operator= (const basic_http_client&) = delete;
