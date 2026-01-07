@@ -21,7 +21,7 @@ namespace hello
     // We assume that a higher integer value for priority corresponds to a
     // more urgent task (e.g., 10 runs before 1).
     //
-    std::sort (r.begin (), r.end (), [] (const auto& a, const auto& b)
+    std::stable_sort (r.begin (), r.end (), [] (const auto& a, const auto& b)
     {
       return a->request.priority > b->request.priority;
     });
