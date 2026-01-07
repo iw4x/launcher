@@ -208,6 +208,15 @@ namespace hello
     //
     progress_metrics overall_metrics_;
 
+    // Overall tracker (for speed calculations).
+    //
+    basic_progress_tracker<progress_tracker_traits<string_type>> overall_tracker_;
+
+    // Cumulative bytes from completed/removed items.
+    //
+    std::atomic<std::uint64_t> cumulative_completed_bytes_ {0};
+    std::atomic<std::uint64_t> cumulative_total_bytes_ {0};
+
     // Log messages (double-buffered, lock-free read).
     //
     std::vector<string_type> log_buffers_[2];
