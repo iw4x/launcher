@@ -8,6 +8,7 @@ cxx.internal.scope = current
 
 cxx.std = latest
 
+using c
 using cxx
 
 hxx{*}: extension = hxx
