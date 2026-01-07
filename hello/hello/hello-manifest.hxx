@@ -1,6 +1,7 @@
 #pragma once
 
 #include <hello/manifest/manifest.hxx>
+#include <hello/manifest/manifest-cache.hxx>
 
 #include <boost/asio.hpp>
 
@@ -71,11 +72,13 @@ namespace hello
     // Get archives that need to be downloaded.
     //
     // Returns archives that are missing or have incorrect size in the
-    // installation directory.
+    // installation directory. Checks the archive cache to avoid redownloading
+    // archives whose content has already been extracted.
     //
     static std::vector<archive_type>
     get_missing_archives (const manifest_type& m,
-                          const fs::path& install_dir);
+                          const fs::path& install_dir,
+                          archive_cache* cache = nullptr);
 
     // Verify file against manifest entry.
     //
@@ -115,14 +118,16 @@ namespace hello
     // Extract files from an archive.
     //
     // Given an archive file, extracts its contents to the installation
-    // directory according to the file entries in the manifest.
+    // directory according to the file entries in the manifest. If a cache
+    // pointer is provided, updates the cache with extracted file metadata.
     //
     // Throws if extraction fails or if archive format is unsupported.
     //
     static asio::awaitable<void>
     extract_archive (const archive_type& archive,
                      const fs::path& archive_path,
-                     const fs::path& install_dir);
+                     const fs::path& install_dir,
+                     archive_cache* cache = nullptr);
 
     // Get total download size.
     //
