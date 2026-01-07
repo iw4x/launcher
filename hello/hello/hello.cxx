@@ -1,4 +1,5 @@
 #include <iostream>
+#include <fstream>
 #include <filesystem>
 #include <unordered_map>
 #include <memory>
@@ -63,10 +64,64 @@ namespace hello
     return a == "y" || a == "Y";
   }
 
-  // Try to detect the default MW2 installation path.
+  // Determine the directory for user preference caching.
   //
-  // We check Steam for the game location. If found, we ask the user for
-  // confirmation before using it.
+  // We try to use the standard platform-specific locations (AppData, Library,
+  // XDG cache) but fall back to a local dot-directory if necessary.
+  //
+  static fs::path
+  get_cache_dir ()
+  {
+    fs::path d;
+
+#ifdef _WIN32
+    if (const char* ad = std::getenv ("APPDATA"))
+      d = fs::path (ad) / "iw4x-hello";
+    else
+      d = fs::current_path () / ".hello-cache";
+#elif defined(__APPLE__)
+    if (const char* h = std::getenv ("HOME"))
+      d = fs::path (h) / "Library" / "Application Support" / "iw4x-hello";
+    else
+      d = fs::current_path () / ".hello-cache";
+#else
+    if (const char* h = std::getenv ("HOME"))
+      d = fs::path (h) / ".cache" / "iw4x";
+    else
+      d = fs::current_path () / ".hello-cache";
+#endif
+
+    // Ensure the directory exists.
+    //
+    error_code ec;
+    fs::create_directories (d, ec);
+
+    if (ec)
+    {
+      d = fs::current_path () / ".hello-cache";
+      fs::create_directories (d, ec);
+    }
+
+    return d;
+  }
+
+  // Calculate a unique, filesystem-safe key for a given path.
+  //
+  // We use std::hash to generate a unique ID for the installation path so that
+  // we can associate metadata with the path without worrying about special
+  // characters or path length limits.
+  //
+  static string
+  path_key (const fs::path& p)
+  {
+    std::hash<string> h;
+    return std::to_string (h (p.string ()));
+  }
+
+  // Attempt to detect a default Modern Warfare 2 installation path.
+  //
+  // We check the Steam library logic. If found, we consult our local cache to
+  // see if the user has previously accepted or rejected this specific path.
   //
   asio::awaitable<optional<fs::path>>
   detect_default_path ()
@@ -80,14 +135,55 @@ namespace hello
 
       if (p && fs::exists (*p))
       {
-        cout << "Found Steam installation of Call of Duty: Modern Warfare 2:\n"
-             << "  " << p->string () << "\n\n";
+        fs::path cd (get_cache_dir ());
+        string key (path_key (*p));
 
-        // Ask the user if they want to use this path.
+        fs::path yes_marker (cd / (key + ".yes"));
+        fs::path no_marker (cd / (key + ".no"));
+
+        bool is_yes (fs::exists (yes_marker));
+        bool is_no (fs::exists (no_marker));
+
+        // If we have both markers, the cache is inconsistent (maybe user
+        // fiddling or a race condition). We wipe both and ask again.
         //
-        if (yn_prompt ("Install IW4x to this directory? [Y/n] (n = use current "
-                       "directory)", 'y'))
-          co_return p;
+        if (is_yes && is_no)
+        {
+          fs::remove (yes_marker);
+          fs::remove (no_marker);
+          is_yes = false;
+          is_no = false;
+        }
+
+        if (is_yes || is_no)
+        {
+          cout << "Found Steam installation of Call of Duty: Modern Warfare 2:\n"
+               << "  " << p->string () << "\n"
+               << "  (Using cached preference: "
+               << (is_yes ? "yes" : "no") << ")\n\n";
+
+          if (is_yes)
+            co_return p;
+        }
+        else
+        {
+          cout << "Found Steam installation of Call of Duty: Modern Warfare 2:\n"
+               << "  " << p->string () << "\n\n";
+
+          // Ask the user if they want to use this path.
+          //
+          bool answer (yn_prompt ("Install IW4x to this directory? [Y/n] "
+                                  "(n = use current directory)", 'y'));
+
+          // Cache the answer by touching a marker file.
+          //
+          {
+            ofstream os (answer ? yes_marker : no_marker);
+          }
+
+          if (answer)
+            co_return p;
+        }
       }
     }
     catch (const exception&)
@@ -127,12 +223,44 @@ namespace hello
 
     try
     {
+      // Check for a marker indicating a valid, complete installation.
+      //
+      // If found, and unless the user forces an update, we can skip the
+      // expensive network operations (fetching manifests, checking hashes) and
+      // let the game launch immediately.
+      //
+      fs::path installed_marker (conf.install_path / ".hello-installed");
+
+      if (!conf.force_update && fs::exists (installed_marker))
+      {
+        if (conf.no_progress)
+          cout << "Installation up to date (cached).\n";
+        co_return 0;
+      }
+
       // Initialize the various coordinators we will need.
       //
       github_coordinator   github (ioc);
       http_coordinator     http (ioc);
       download_coordinator downloads (ioc, conf.max_parallel);
       progress_coordinator progress (ioc);
+
+      // Initialize the archive cache to track extracted content.
+      //
+      fs::path cache_file (conf.install_path / ".hello-archive-cache.json");
+      archive_cache cache (cache_file);
+
+      try
+      {
+        cache.load ();
+      }
+      catch (const exception& e)
+      {
+        // If loading fails, start with an empty cache.
+        //
+        if (conf.no_progress)
+          cerr << "warning: failed to load archive cache: " << e.what () << "\n";
+      }
 
       // If the UI is enabled, we start the progress reporting now so the
       // user knows we are busy.
@@ -237,7 +365,8 @@ namespace hello
       vector<manifest_archive> missing_archives (
         manifest_coordinator::get_missing_archives (
           m,
-          conf.install_path));
+          conf.install_path,
+          &cache));
 
       if (missing_files.empty () && missing_archives.empty ())
       {
@@ -438,7 +567,9 @@ namespace hello
           {
             co_await manifest_coordinator::extract_archive (a,
                                                             archive_path,
-                                                            conf.install_path);
+                                                            conf.install_path,
+                                                            &cache);
+            fs::remove (archive_path);
           }
           catch (const exception& e)
           {
@@ -447,6 +578,24 @@ namespace hello
             co_return 1;
           }
         }
+
+        // Save the updated cache.
+        //
+        try
+        {
+          cache.save ();
+        }
+        catch (const exception& e)
+        {
+          if (conf.no_progress)
+            cerr << "warning: failed to save archive cache: " << e.what () << "\n";
+        }
+      }
+
+      // All done. Mark the installation as complete.
+      //
+      {
+        ofstream os (installed_marker);
       }
 
       co_return 0;
