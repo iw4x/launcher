@@ -64,47 +64,6 @@ namespace hello
     return a == "y" || a == "Y";
   }
 
-  // Determine the directory for user preference caching.
-  //
-  // We try to use the standard platform-specific locations (AppData, Library,
-  // XDG cache) but fall back to a local dot-directory if necessary.
-  //
-  static fs::path
-  get_cache_dir ()
-  {
-    fs::path d;
-
-#ifdef _WIN32
-    if (const char* ad = std::getenv ("APPDATA"))
-      d = fs::path (ad) / "iw4x-hello";
-    else
-      d = fs::current_path () / ".hello-cache";
-#elif defined(__APPLE__)
-    if (const char* h = std::getenv ("HOME"))
-      d = fs::path (h) / "Library" / "Application Support" / "iw4x-hello";
-    else
-      d = fs::current_path () / ".hello-cache";
-#else
-    if (const char* h = std::getenv ("HOME"))
-      d = fs::path (h) / ".cache" / "iw4x";
-    else
-      d = fs::current_path () / ".hello-cache";
-#endif
-
-    // Ensure the directory exists.
-    //
-    error_code ec;
-    fs::create_directories (d, ec);
-
-    if (ec)
-    {
-      d = fs::current_path () / ".hello-cache";
-      fs::create_directories (d, ec);
-    }
-
-    return d;
-  }
-
   // Calculate a unique, filesystem-safe key for a given path.
   //
   // We use std::hash to generate a unique ID for the installation path so that
@@ -116,6 +75,67 @@ namespace hello
   {
     std::hash<string> h;
     return std::to_string (h (p.string ()));
+  }
+
+  // Determine the directory for user preference and state caching.
+  //
+  // We try to use the standard platform-specific locations (AppData, Library,
+  // XDG cache). If an installation path is provided, we return a subdirectory
+  // specific to that installation.
+  //
+  static fs::path
+  get_cache_dir (const fs::path& install_path = {})
+  {
+    fs::path d;
+
+#ifdef _WIN32
+    // On Windows, caches technically belong in LocalAppData, not Roaming.
+    //
+    if (const char* v = std::getenv ("LOCALAPPDATA"))
+      d = fs::path (v) / "iw4x-hello";
+    else if (const char* v = std::getenv ("APPDATA"))
+      d = fs::path (v) / "iw4x-hello";
+    else
+      d = fs::current_path () / ".hello-cache";
+#elif defined(__APPLE__)
+    if (const char* h = std::getenv ("HOME"))
+      d = fs::path (h) / "Library" / "Application Support" / "iw4x-hello";
+    else
+      d = fs::current_path () / ".hello-cache";
+#else
+    // On Linux/Unix, we respect the XDG Base Directory specification.
+    //
+    if (const char* v = std::getenv ("XDG_CACHE_HOME"))
+      d = fs::path (v) / "iw4x";
+    else if (const char* h = std::getenv ("HOME"))
+      d = fs::path (h) / ".cache" / "iw4x";
+    else
+      d = fs::current_path () / ".hello-cache";
+#endif
+
+    // If we are looking for the cache specific to an installation, append
+    // its unique key.
+    //
+    if (!install_path.empty ())
+      d /= path_key (install_path);
+
+    error_code ec;
+    fs::create_directories (d, ec);
+
+    if (ec)
+    {
+      // Fallback: If we can't write to the system location, try a local
+      // directory in the current working directory.
+      //
+      d = fs::current_path () / ".hello-cache";
+
+      if (!install_path.empty ())
+        d /= path_key (install_path);
+
+      fs::create_directories (d, ec);
+    }
+
+    return d;
   }
 
   // Attempt to detect a default Modern Warfare 2 installation path.
@@ -229,7 +249,8 @@ namespace hello
       // expensive network operations (fetching manifests, checking hashes) and
       // let the game launch immediately.
       //
-      fs::path installed_marker (conf.install_path / ".hello-installed");
+      fs::path installed_marker (get_cache_dir (conf.install_path) /
+                                 ".hello-installed");
 
       if (!conf.force_update && fs::exists (installed_marker))
       {
@@ -247,7 +268,8 @@ namespace hello
 
       // Initialize the archive cache to track extracted content.
       //
-      fs::path cache_file (conf.install_path / ".hello-archive-cache.json");
+      fs::path cache_file (get_cache_dir (conf.install_path) /
+                           ".hello-archive.json");
       archive_cache cache (cache_file);
 
       try
