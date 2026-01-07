@@ -429,6 +429,8 @@ namespace hello
 
 #include <cstdint>
 
+#include <string>
+
 namespace hello
 {
   class options
@@ -482,6 +484,33 @@ namespace hello
     const bool&
     version () const;
 
+    const bool&
+    build2_metadata1 () const;
+
+    const std::string&
+    path () const;
+
+    bool
+    path_specified () const;
+
+    const bool&
+    no_ui () const;
+
+    const bool&
+    force_update () const;
+
+    const bool&
+    prerelease () const;
+
+    const bool&
+    disable_checksum () const;
+
+    const std::size_t&
+    jobs () const;
+
+    bool
+    jobs_specified () const;
+
     // Print usage information.
     //
     static ::hello::cli::usage_para
@@ -505,6 +534,15 @@ namespace hello
     bool build2_metadata_specified_;
     bool help_;
     bool version_;
+    bool build2_metadata1_;
+    std::string path_;
+    bool path_specified_;
+    bool no_ui_;
+    bool force_update_;
+    bool prerelease_;
+    bool disable_checksum_;
+    std::size_t jobs_;
+    bool jobs_specified_;
   };
 }
 
