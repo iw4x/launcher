@@ -39,6 +39,9 @@ hxx{version}: in{version} $src_root/manifest
 cxx.poptions =+ "-I$out_root" "-I$src_root"
 c.poptions =+ "-I$out_root" "-I$src_root"
 
+if ($cxx.target.class == 'windows')
+  cxx.libs += Advapi32.lib
+
 ## Consumption build ($develop == false).
 #
 
