@@ -152,11 +152,6 @@ namespace hello
     void
     add_log (string_type message);
 
-    // Set status message.
-    //
-    void
-    set_status (string_type status);
-
     // Get IO context.
     //
     asio::io_context&
@@ -221,11 +216,6 @@ namespace hello
     //
     std::vector<string_type> log_buffers_[2];
     std::atomic<int> log_buffer_ {0};
-
-    // Status message (double-buffered, lock-free read).
-    //
-    string_type status_buffers_[2];
-    std::atomic<int> status_buffer_ {0};
   };
 
   using progress_entry = basic_progress_entry<>;

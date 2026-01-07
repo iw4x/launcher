@@ -71,13 +71,6 @@ namespace hello
                      std::uint64_t current_bytes,
                      std::uint64_t total_bytes);
 
-    // Set overall status message.
-    //
-    // Displayed at the top of the progress output.
-    //
-    void
-    set_status (std::string message);
-
     // Add log message.
     //
     // Appends a message to the log buffer, which is displayed below the

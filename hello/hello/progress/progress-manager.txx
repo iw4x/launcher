@@ -184,18 +184,6 @@ namespace hello
   }
 
   template <typename T>
-  void basic_progress_manager<T>::
-  set_status (string_type s)
-  {
-    int r (status_buffer_.load (std::memory_order_relaxed));
-    int w ((r + 1) % 2);
-
-    status_buffers_ [w] = std::move (s);
-
-    status_buffer_.store (w, std::memory_order_release);
-  }
-
-  template <typename T>
   asio::awaitable<void> basic_progress_manager<T>::
   update_loop ()
   {
@@ -391,11 +379,6 @@ namespace hello
     //
     int lr (log_buffer_.load (std::memory_order_acquire));
     ctx.log_messages = log_buffers_[lr];
-
-    // Status: Read from the active buffer.
-    //
-    int sr (status_buffer_.load (std::memory_order_acquire));
-    ctx.status_message = status_buffers_[sr];
 
     return ctx;
   }

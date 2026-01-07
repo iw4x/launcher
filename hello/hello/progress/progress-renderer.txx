@@ -238,61 +238,68 @@ namespace hello
       // Calculate the vertical space available for the item list.
       //
       // We reserve lines for the summary (1), summary separator (1),
-      // status message (2, if present), and logs (N + 1, if present).
+      // and truncate message (2, if present).
       //
       int h (screen_.dimy ());
       int rh (3);
-
-      if (!c.status_message.empty ())
-        rh += 2;
-
-      if (!c.log_messages.empty ())
-        rh += static_cast<int> (c.log_messages.size ()) + 1;
 
       int ah (std::max (0, h - rh));
 
       Elements es;
 
-      // Render the items.
+      // Render the items or logs.
       //
-      // If the list is too long for the terminal, we truncate it and display
-      // a count of hidden items.
+      // When no items are present yet, we show the log messages in the main
+      // area to provide feedback during initialization. Once items appear,
+      // we hide the logs and show the progress list instead.
       //
-      std::size_t n (0);
-      std::size_t max (std::min (c.items.size (),
-                                 static_cast<std::size_t> (ah)));
-
-      for (std::size_t i (0); i < max; ++i)
+      if (c.items.empty () && !c.log_messages.empty ())
       {
-        const auto& item (c.items[i]);
-        ++n;
-
-        std::ostringstream l;
-        l << "[" << std::setw (2) << n << "/"
-          << std::setw (2) << c.total_count << "] "
-          << std::left << std::setw (45) << item.label;
-
-        es.push_back (traits_type::render_item (
-          l.str (),
-          item.snapshot,
-          traits_type::default_bar_width));
+        // Show logs in the main area.
+        //
+        for (const auto& m : c.log_messages)
+          es.push_back (text (m));
       }
-
-      if (max < c.items.size ())
+      else
       {
-        std::size_t k (c.items.size () - max);
-        std::ostringstream s;
-        s << "... (" << k << " more files not shown)";
-        es.push_back (text (s.str ()) | dim);
+        // Render the items.
+        //
+        // If the list is too long for the terminal, we truncate it and display
+        // a count of hidden items.
+        //
+        std::size_t n (0);
+        std::size_t max (std::min (c.items.size (),
+                                   static_cast<std::size_t> (ah)));
+
+        for (std::size_t i (0); i < max; ++i)
+        {
+          const auto& item (c.items[i]);
+          ++n;
+
+          std::ostringstream l;
+          l << "[" << std::setw (2) << n << "/"
+            << std::setw (2) << c.total_count << "] "
+            << std::left << std::setw (45) << item.label;
+
+          es.push_back (traits_type::render_item (
+            l.str (),
+            item.snapshot,
+            traits_type::default_bar_width));
+        }
+
+        if (max < c.items.size ())
+        {
+          std::size_t k (c.items.size () - max);
+          std::ostringstream s;
+          s << "... (" << k << " more files not shown)";
+          es.push_back (text (s.str ()) | dim);
+        }
       }
-
-      Elements bottom_es;
-
-      if (!c.items.empty ())
-        bottom_es.push_back (separator ());
 
       // Render the summary.
       //
+      Elements bottom_es;
+      bottom_es.push_back (separator ());
       bottom_es.push_back (traits_type::render_summary (
         c.completed_count,
         c.total_count,

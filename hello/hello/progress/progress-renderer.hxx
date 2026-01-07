@@ -83,7 +83,6 @@ namespace hello
     std::vector<item_type> items;
     progress_snapshot overall;
     std::vector<string_type> log_messages;
-    string_type status_message;
     std::size_t completed_count {0};
     std::size_t total_count {0};
 

@@ -69,12 +69,6 @@ namespace hello
   }
 
   void
-  progress_coordinator::set_status (std::string message)
-  {
-    manager_->set_status (std::move (message));
-  }
-
-  void
   progress_coordinator::add_log (std::string message)
   {
     manager_->add_log (std::move (message));
