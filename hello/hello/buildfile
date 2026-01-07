@@ -19,6 +19,7 @@ import libs += libftxui%lib{ftxui-screen}
 
 exe{hello}: {hxx ixx txx cxx}{**  -version -*-options -pregenerated/**} \
             {hxx            }{     version                            } \
+            {h           c  }{**                                      } \
             $libs testscript
 
 # Target metadata, see also --build2-metadata in hello.cxx.
@@ -36,6 +37,7 @@ hxx{version}: in{version} $src_root/manifest
 # Build options.
 #
 cxx.poptions =+ "-I$out_root" "-I$src_root"
+c.poptions =+ "-I$out_root" "-I$src_root"
 
 ## Consumption build ($develop == false).
 #
