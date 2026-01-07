@@ -304,6 +304,60 @@ namespace hello
   {
     return this->version_;
   }
+
+  inline const bool& options::
+  build2_metadata1 () const
+  {
+    return this->build2_metadata1_;
+  }
+
+  inline const std::string& options::
+  path () const
+  {
+    return this->path_;
+  }
+
+  inline bool options::
+  path_specified () const
+  {
+    return this->path_specified_;
+  }
+
+  inline const bool& options::
+  no_ui () const
+  {
+    return this->no_ui_;
+  }
+
+  inline const bool& options::
+  force_update () const
+  {
+    return this->force_update_;
+  }
+
+  inline const bool& options::
+  prerelease () const
+  {
+    return this->prerelease_;
+  }
+
+  inline const bool& options::
+  disable_checksum () const
+  {
+    return this->disable_checksum_;
+  }
+
+  inline const std::size_t& options::
+  jobs () const
+  {
+    return this->jobs_;
+  }
+
+  inline bool options::
+  jobs_specified () const
+  {
+    return this->jobs_specified_;
+  }
 }
 
 // Begin epilogue.

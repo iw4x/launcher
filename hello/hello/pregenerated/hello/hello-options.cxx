@@ -764,7 +764,16 @@ namespace hello
   : build2_metadata_ (),
     build2_metadata_specified_ (false),
     help_ (),
-    version_ ()
+    version_ (),
+    build2_metadata1_ (),
+    path_ (),
+    path_specified_ (false),
+    no_ui_ (),
+    force_update_ (),
+    prerelease_ (),
+    disable_checksum_ (true),
+    jobs_ (4),
+    jobs_specified_ (false)
   {
   }
 
@@ -777,7 +786,16 @@ namespace hello
   : build2_metadata_ (),
     build2_metadata_specified_ (false),
     help_ (),
-    version_ ()
+    version_ (),
+    build2_metadata1_ (),
+    path_ (),
+    path_specified_ (false),
+    no_ui_ (),
+    force_update_ (),
+    prerelease_ (),
+    disable_checksum_ (true),
+    jobs_ (4),
+    jobs_specified_ (false)
   {
     ::hello::cli::argv_scanner s (argc, argv, erase);
     _parse (s, opt, arg);
@@ -793,7 +811,16 @@ namespace hello
   : build2_metadata_ (),
     build2_metadata_specified_ (false),
     help_ (),
-    version_ ()
+    version_ (),
+    build2_metadata1_ (),
+    path_ (),
+    path_specified_ (false),
+    no_ui_ (),
+    force_update_ (),
+    prerelease_ (),
+    disable_checksum_ (true),
+    jobs_ (4),
+    jobs_specified_ (false)
   {
     ::hello::cli::argv_scanner s (start, argc, argv, erase);
     _parse (s, opt, arg);
@@ -809,7 +836,16 @@ namespace hello
   : build2_metadata_ (),
     build2_metadata_specified_ (false),
     help_ (),
-    version_ ()
+    version_ (),
+    build2_metadata1_ (),
+    path_ (),
+    path_specified_ (false),
+    no_ui_ (),
+    force_update_ (),
+    prerelease_ (),
+    disable_checksum_ (true),
+    jobs_ (4),
+    jobs_specified_ (false)
   {
     ::hello::cli::argv_scanner s (argc, argv, erase);
     _parse (s, opt, arg);
@@ -827,7 +863,16 @@ namespace hello
   : build2_metadata_ (),
     build2_metadata_specified_ (false),
     help_ (),
-    version_ ()
+    version_ (),
+    build2_metadata1_ (),
+    path_ (),
+    path_specified_ (false),
+    no_ui_ (),
+    force_update_ (),
+    prerelease_ (),
+    disable_checksum_ (true),
+    jobs_ (4),
+    jobs_specified_ (false)
   {
     ::hello::cli::argv_scanner s (start, argc, argv, erase);
     _parse (s, opt, arg);
@@ -841,7 +886,16 @@ namespace hello
   : build2_metadata_ (),
     build2_metadata_specified_ (false),
     help_ (),
-    version_ ()
+    version_ (),
+    build2_metadata1_ (),
+    path_ (),
+    path_specified_ (false),
+    no_ui_ (),
+    force_update_ (),
+    prerelease_ (),
+    disable_checksum_ (true),
+    jobs_ (4),
+    jobs_specified_ (false)
   {
     _parse (s, opt, arg);
   }
@@ -854,9 +908,24 @@ namespace hello
     if (p == ::hello::cli::usage_para::text)
       os << ::std::endl;
 
-    os << "--help    Print usage information and exit." << ::std::endl;
+    os << "--help             Show this help message and exit." << ::std::endl;
 
-    os << "--version Print version and exit." << ::std::endl;
+    os << "--version          Show version information and exit." << ::std::endl;
+
+    os << "--build2-metadata  Print the build2 metadata and exit." << ::std::endl;
+
+    os << "--path <dir>       The installation directory for the game files." << ::std::endl;
+
+    os << "--no-ui            Disable the text-based progress UI." << ::std::endl;
+
+    os << "--force-update     Force re-verification of all files, even those that appear" << ::std::endl
+       << "                   valid." << ::std::endl;
+
+    os << "--prerelease       Opt-in to pre-release (beta) updates." << ::std::endl;
+
+    os << "--disable-checksum Disable SHA-256 checksum verification for downloaded files." << ::std::endl;
+
+    os << "--jobs|-j <num>    The number of parallel download jobs to run." << ::std::endl;
 
     p = ::hello::cli::usage_para::option;
 
@@ -880,6 +949,25 @@ namespace hello
       &::hello::cli::thunk< options, &options::help_ >;
       _cli_options_map_["--version"] =
       &::hello::cli::thunk< options, &options::version_ >;
+      _cli_options_map_["--build2-metadata"] =
+      &::hello::cli::thunk< options, &options::build2_metadata1_ >;
+      _cli_options_map_["--path"] =
+      &::hello::cli::thunk< options, std::string, &options::path_,
+        &options::path_specified_ >;
+      _cli_options_map_["--no-ui"] =
+      &::hello::cli::thunk< options, &options::no_ui_ >;
+      _cli_options_map_["--force-update"] =
+      &::hello::cli::thunk< options, &options::force_update_ >;
+      _cli_options_map_["--prerelease"] =
+      &::hello::cli::thunk< options, &options::prerelease_ >;
+      _cli_options_map_["--disable-checksum"] =
+      &::hello::cli::thunk< options, &options::disable_checksum_ >;
+      _cli_options_map_["--jobs"] =
+      &::hello::cli::thunk< options, std::size_t, &options::jobs_,
+        &options::jobs_specified_ >;
+      _cli_options_map_["-j"] =
+      &::hello::cli::thunk< options, std::size_t, &options::jobs_,
+        &options::jobs_specified_ >;
     }
   };
 
