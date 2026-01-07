@@ -156,6 +156,14 @@ namespace hello
         request_type next_req (req.method, *loc, req.version);
         next_req.headers = req.headers;
 
+        // Note that we must explicitly update the Host header for the new
+        // location. Failed that, the copied headers retain the old Host (e.g.,
+        // github.com), causing 500 errors when hitting the CDN
+        // (release-assets...).
+        //
+        url_parts new_parts (parse_url (*loc));
+        next_req.set_header ("Host", new_parts.host);
+
         // For '303 See Other', RFC 7231 says we must change the method to GET
         // and drop the body.
         //
@@ -277,9 +285,12 @@ namespace hello
     // shutdown sequence. Treating that as a failure would cause us to throw
     // errors on perfectly valid requests.
     //
-    beast::error_code ec;
-    co_await s.async_shutdown (
-      asio::redirect_error (asio::use_awaitable, ec));
+    // ... Turn out that even attempting an SSL shutdown in this case can
+    // block until timeout, so disable it altogether.
+    //
+    // beast::error_code ec;
+    // co_await s.async_shutdown (
+    //   asio::redirect_error (asio::use_awaitable, ec));
 
     // Convert to our internal response type.
     //
