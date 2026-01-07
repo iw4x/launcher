@@ -134,15 +134,25 @@ namespace hello
 
         entries_buffer_.store (w, std::memory_order_release);
 
-        // If the item wasn't actually completed when we removed it (e.g.,
-        // cancelled or removed early), we still count it as "processed" in
-        // the overall stats to avoid the totals looking weird.
+        // If the item was completed when we removed it, increment the
+        // cumulative completed count and add its bytes to the cumulative total.
         //
-        if (e->metrics ().state.load (std::memory_order_relaxed) !=
+        if (e->metrics ().state.load (std::memory_order_relaxed) ==
             progress_state::completed)
         {
           overall_metrics_.completed_items.fetch_add (
             1,
+            std::memory_order_relaxed);
+
+          // Add the item's total_bytes to cumulative (not current_bytes) so
+          // that accounting matches. That is, when we remove an item from
+          // 'total', we add the same amount to 'cumulative_completed_bytes_'.
+          //
+          std::uint64_t item_total_bytes (
+            e->metrics ().total_bytes.load (std::memory_order_relaxed));
+
+          cumulative_completed_bytes_.fetch_add (
+            item_total_bytes,
             std::memory_order_relaxed);
         }
       }
@@ -202,7 +212,6 @@ namespace hello
 
       std::uint64_t total (0);
       std::uint64_t current (0);
-      std::uint64_t completed (0);
       float speed_sum (0.0f);
 
       // Iterate over the snapshot.
@@ -230,22 +239,66 @@ namespace hello
         total += to;
         current += c;
         speed_sum += s;
-
-        if (m.state.load (std::memory_order_relaxed) ==
-            progress_state::completed)
-          ++completed;
       }
 
-      // Update the overall metrics.
+      // Update global metrics.
       //
-      // These are atomic stores, so the render loop (which might be running
-      // on another thread) will see consistent values.
+      // Note that `total` and `current` calculated above only represent the
+      // *active* entries. To get the true global state, we must combine these
+      // with the cumulative totals of items that have already finished and
+      // been removed.
       //
       auto& om (overall_metrics_);
-      om.total_bytes.store (total, std::memory_order_relaxed);
-      om.current_bytes.store (current, std::memory_order_relaxed);
-      om.speed.store (speed_sum, std::memory_order_relaxed);
-      om.completed_items.store (completed, std::memory_order_relaxed);
+
+      // Track the high-water mark of observed total bytes here. That is, we
+      // must handles cases where the total might fluctuate slightly as
+      // downloads start/stop, so that our progress bar doesn't jump backward.
+      //
+      std::uint64_t max_total (
+        cumulative_total_bytes_.load (std::memory_order_relaxed));
+
+      // Bytes from items that have been removed from the list.
+      //
+      std::uint64_t removed (
+        cumulative_completed_bytes_.load (std::memory_order_relaxed));
+
+      std::uint64_t observed (total + removed);
+
+      // CAS loop to update the high-water mark.
+      //
+      while (observed > max_total)
+      {
+        if (cumulative_total_bytes_.compare_exchange_weak (
+              max_total,
+              observed,
+              std::memory_order_relaxed))
+        {
+          max_total = observed;
+          break;
+        }
+
+        // If CAS failed, `max_total` was updated by another thread. We
+        // re-evaluate `observed` (though `total` and `removed` are
+        // local/snapshot, so effectively we just retry against the new
+        // `max_total`).
+        //
+        observed = total + removed;
+      }
+
+      // The absolute current progress is the sum of what's currently active
+      // and what has already been removed/completed.
+      //
+      std::uint64_t abs_current (removed + current);
+
+      om.total_bytes.store (max_total, std::memory_order_relaxed);
+      om.current_bytes.store (abs_current, std::memory_order_relaxed);
+
+      // Update the master tracker with the absolute byte count. This gives
+      // us a smoother "global" speed than summing individual entry speeds,
+      // which can be jittery.
+      //
+      overall_tracker_.update (abs_current);
+      om.speed.store (overall_tracker_.speed (), std::memory_order_relaxed);
 
       // Sleep until the next tick.
       //
