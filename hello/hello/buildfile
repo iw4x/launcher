@@ -7,6 +7,11 @@ import libs += libcrypto%lib{crypto}
 import libs += libboost-asio%lib{boost_asio}
 import libs += libboost-beast%lib{boost_beast}
 import libs += libboost-json%lib{boost_json}
+import libs += libboost-system%lib{boost_system}
+import libs += libboost-filesystem%lib{boost_filesystem}
+import libs += libboost-process%lib{boost_process}
+
+import libs += libminiz%lib{miniz}
 
 import libs += libftxui%lib{ftxui-component}
 import libs += libftxui%lib{ftxui-dom}

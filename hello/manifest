@@ -11,6 +11,7 @@ email: wroy@proton.me
 depends: * build2 >= 0.18.0-
 depends: * bpkg >= 0.18.0-
 depends: * cli >= 1.2.0 ? ($config.hello.develop)
-depends: { libboost-asio libboost-beast libboost-json } >= 1.87.0
+depends: { libboost-asio libboost-beast libboost-json libboost-filesystem libboost-process } >= 1.87.0
 depends: { libssl libcrypto } >= 3.3.1
 depends: libftxui
+depends: libminiz
