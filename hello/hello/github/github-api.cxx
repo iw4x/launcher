@@ -482,4 +482,8 @@ namespace hello
     if (token_ && headers.find ("Authorization") == headers.end ())
       headers["Authorization"] = "Bearer " + *token_;
   }
+
+  // Explicit template instantiation.
+  //
+  template class github_api<github_api_traits>;
 }
