@@ -286,33 +286,22 @@ namespace hello
         es.push_back (text (s.str ()) | dim);
       }
 
+      Elements bottom_es;
+
       if (!c.items.empty ())
-        es.push_back (separator ());
+        bottom_es.push_back (separator ());
 
       // Render the summary.
       //
-      es.push_back (traits_type::render_summary (
+      bottom_es.push_back (traits_type::render_summary (
         c.completed_count,
         c.total_count,
         c.overall));
 
-      // Render the status message.
-      //
-      if (!c.status_message.empty ())
-      {
-        es.push_back (separator ());
-        es.push_back (traits_type::render_status (c.status_message));
-      }
-
-      // Render the logs.
-      //
-      if (!c.log_messages.empty ())
-      {
-        es.push_back (separatorDouble ());
-        es.push_back (traits_type::render_logs (c.log_messages));
-      }
-
-      return vbox (std::move (es));
+      return vbox ({
+        vbox (std::move (es)) | flex | yframe,
+        vbox (std::move (bottom_es))
+      });
     });
   }
 }
