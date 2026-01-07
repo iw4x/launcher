@@ -14,6 +14,9 @@
 #include <hello/hello-download.hxx>
 #include <hello/hello-manifest.hxx>
 #include <hello/hello-progress.hxx>
+#include <hello/hello-steam.hxx>
+
+#include <miniz.h>
 
 using namespace std;
 namespace fs = filesystem;
@@ -21,7 +24,82 @@ namespace asio = boost::asio;
 
 namespace hello
 {
-  // Launcher configuration options.
+  // Prompt the user for a Yes/No answer.
+  //
+  // Returns true for 'y'/'Y' and false for 'n'/'N'.
+  //
+  static bool
+  yn_prompt (const string& prompt, char def = '\0')
+  {
+    string a;
+    do
+    {
+      cout << prompt << ' ';
+
+      // Note: getline() sets the failbit if it fails to extract anything,
+      // and the eofbit if it hits EOF before the delimiter.
+      //
+      getline (cin, a);
+
+      bool f (cin.fail ());
+      bool e (cin.eof ());
+
+      if (f || e)
+        cout << endl; // Assume no delimiter (newline).
+
+      if (f)
+        throw ios_base::failure ("unable to read y/n answer from stdin");
+
+      if (a.empty () && def != '\0')
+      {
+        // Don't treat EOF as the default answer; we want to see an actual
+        // newline.
+        //
+        if (!e)
+          a = def;
+      }
+    } while (a != "y" && a != "Y" && a != "n" && a != "N");
+
+    return a == "y" || a == "Y";
+  }
+
+  // Try to detect the default MW2 installation path.
+  //
+  // We check Steam for the game location. If found, we ask the user for
+  // confirmation before using it.
+  //
+  asio::awaitable<optional<fs::path>>
+  detect_default_path ()
+  {
+    try
+    {
+      auto executor (co_await asio::this_coro::executor);
+      auto& ioc (static_cast<asio::io_context&> (executor.context ()));
+
+      auto p (co_await get_mw2_default_path (ioc));
+
+      if (p && fs::exists (*p))
+      {
+        cout << "Found Steam installation of Call of Duty: Modern Warfare 2:\n"
+             << "  " << p->string () << "\n\n";
+
+        // Ask the user if they want to use this path.
+        //
+        if (yn_prompt ("Install IW4x to this directory? [Y/n] (n = use current "
+                       "directory)", 'y'))
+          co_return p;
+      }
+    }
+    catch (const exception&)
+    {
+      // Silently fall back to the current directory if detection fails.
+      //
+    }
+
+    co_return nullopt;
+  }
+
+  // Launcher configuration.
   //
   struct launcher_config
   {
@@ -187,7 +265,6 @@ namespace hello
 
       // Time to queue the actual downloads.
       //
-
       // We map tasks to progress entries so we can clean them up from the UI
       // once they are complete.
       //
@@ -231,7 +308,7 @@ namespace hello
         if (!conf.no_progress)
         {
           auto entry (progress.add_entry (task_name));
-          task_entries [task] = entry;
+          task_entries[task] = entry;
 
           // Initialize the expected size so the progress bar scales
           // correctly from the start.
@@ -245,47 +322,47 @@ namespace hello
         }
       }
 
-        // Queue the archive downloads.
-        //
-        for (const auto& a : missing_archives)
+      // Queue the archive downloads.
+      //
+      for (const auto& a : missing_archives)
+      {
+        if (a.url.empty ())
+          continue;
+
+        fs::path target (
+          manifest_coordinator::resolve_path (a, conf.install_path));
+
+        if (target.has_parent_path ())
+          fs::create_directories (target.parent_path ());
+
+        download_request req;
+        req.urls.push_back (a.url);
+        req.target = target;
+        req.name = a.name;
+        req.expected_size = a.size;
+        req.verification_method = conf.disable_checksum
+          ? download_verification::none
+          : download_verification::sha256;
+        req.verification_value = a.hash.value;
+
+        string task_name (req.name);
+        auto task (downloads.queue_download (move (req)));
+
+        if (!conf.no_progress)
         {
-          if (a.url.empty ())
-            continue;
+          auto entry (progress.add_entry (task_name));
+          task_entries[task] = entry;
 
-          fs::path target (
-            manifest_coordinator::resolve_path (a, conf.install_path));
+          entry->metrics ().total_bytes.store (a.size, memory_order_relaxed);
 
-          if (target.has_parent_path ())
-            fs::create_directories (target.parent_path ());
-
-          download_request req;
-          req.urls.push_back (a.url);
-          req.target = target;
-          req.name = a.name;
-          req.expected_size = a.size;
-          req.verification_method = conf.disable_checksum
-            ? download_verification::none
-            : download_verification::sha256;
-          req.verification_value = a.hash.value;
-
-          string task_name (req.name);
-          auto task (downloads.queue_download (move (req)));
-
-          if (!conf.no_progress)
+          task->on_progress = [entry, &progress] (const download_progress& p)
           {
-            auto entry (progress.add_entry (task_name));
-            task_entries [task] = entry;
-
-            entry->metrics ().total_bytes.store (a.size, memory_order_relaxed);
-
-            task->on_progress = [entry, &progress] (const download_progress& p)
-            {
-              progress.update_progress (entry,
-                                        p.downloaded_bytes,
-                                        p.total_bytes);
-            };
-          }
+            progress.update_progress (entry,
+                                      p.downloaded_bytes,
+                                      p.total_bytes);
+          };
         }
+      }
 
       // Start the download engine.
       //
@@ -303,7 +380,7 @@ namespace hello
         //
         if (!conf.no_progress)
         {
-          for (auto it (task_entries.begin ()); it != task_entries.end ();)
+          for (auto it (task_entries.begin ()); it != task_entries.end (); )
           {
             if (it->first->completed () || it->first->failed ())
             {
@@ -337,6 +414,40 @@ namespace hello
 
       if (!conf.no_progress)
         co_await progress.stop ();
+
+      // Post-process: Extract downloaded archives.
+      //
+      // @@: We should consider routing this through the progress log rather
+      // than handling it quietly.
+      //
+      if (!missing_archives.empty ())
+      {
+        for (const auto& a : missing_archives)
+        {
+          fs::path archive_path (
+            manifest_coordinator::resolve_path (a, conf.install_path));
+
+          if (!fs::exists (archive_path))
+          {
+            cerr << "warning: archive not found for extraction: "
+                 << archive_path << "\n";
+            continue;
+          }
+
+          try
+          {
+            co_await manifest_coordinator::extract_archive (a,
+                                                            archive_path,
+                                                            conf.install_path);
+          }
+          catch (const exception& e)
+          {
+            cerr << "error: failed to extract " << a.name << ": "
+                 << e.what () << "\n";
+            co_return 1;
+          }
+        }
+      }
 
       co_return 0;
     }
@@ -401,25 +512,53 @@ main (int argc, char* argv[])
       return 0;
     }
 
-    // Build the launcher configuration from the parsed options.
-    //
     launcher_config conf;
-    conf.install_path = opt.path_specified ()
-      ? fs::path (opt.path ())
-      : fs::current_path ();
 
-    conf.owner = "iw4x";
-    conf.repo = "iw4x-client";
-    conf.prerelease = false;
-    conf.force_update = false;
-    conf.no_progress = opt.no_ui ();
-    conf.disable_checksum = true;
-    conf.max_parallel = 4;
-
-    // Set up the IO context and run the launcher loop.
+    // Set up the IO context first so we can run async operations during the
+    // configuration phase (e.g., detecting Steam path).
     //
     asio::io_context ioc;
     int result (0);
+
+    // Determine the installation path.
+    //
+    if (opt.path_specified ())
+    {
+      conf.install_path = fs::path (opt.path ());
+    }
+    else
+    {
+      // Try to locate MW2 via Steam.
+      //
+      optional<fs::path> detected_path;
+
+      asio::co_spawn (
+        ioc,
+        detect_default_path (),
+        [&detected_path, &ioc] (exception_ptr ex, optional<fs::path> p)
+        {
+          if (!ex)
+            detected_path = p;
+          ioc.stop ();
+        });
+
+      // Run the detection loop. We restart the context afterwards because
+      // stop() makes it return, and we need it fresh for the launcher itself.
+      //
+      ioc.restart ();
+      ioc.run ();
+      ioc.restart ();
+
+      conf.install_path = detected_path.value_or (fs::current_path ());
+    }
+
+    conf.owner = "iw4x";
+    conf.repo = "iw4x-client";
+    conf.prerelease = opt.prerelease ();
+    conf.force_update = opt.force_update ();
+    conf.no_progress = opt.no_ui ();
+    conf.disable_checksum = opt.disable_checksum ();
+    conf.max_parallel = opt.jobs ();
 
     asio::co_spawn (
       ioc,
