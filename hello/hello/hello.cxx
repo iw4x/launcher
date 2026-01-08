@@ -11,8 +11,6 @@
 #include <boost/asio/detached.hpp>
 #include <boost/asio/experimental/awaitable_operators.hpp>
 
-#include <miniz.h>
-
 #include <hello/version.hxx>
 #include <hello/hello-http.hxx>
 #include <hello/hello-steam.hxx>
@@ -21,6 +19,13 @@
 #include <hello/hello-download.hxx>
 #include <hello/hello-manifest.hxx>
 #include <hello/hello-progress.hxx>
+
+// Include miniz last.
+//
+// We do this to picks up any configuration macros (like _FILE_OFFSET_BITS=64)
+// that might be defined in our project headers or by the build system.
+//
+#include <miniz.h>
 
 using namespace std;
 namespace fs = filesystem;
@@ -52,22 +57,25 @@ namespace hello
       bool f (cin.fail ());
       bool e (cin.eof ());
 
+      // If we hit EOF or fail without a newline, force one out so the next
+      // output doesn't get messed up.
+      //
       if (f || e)
-        cout << endl; // Assume no delimiter (newline) was printed.
+        cout << endl;
 
       if (f)
         throw ios_base::failure ("unable to read y/n answer from stdin");
 
       if (a.empty () && def != '\0')
       {
-        // Don't treat EOF as the default answer; we want to see an actual
-        // newline from the user.
+        // We don't want to treat EOF as the default answer; we want to see an
+        // actual newline from the user to confirm they are present and
+        // paying attention.
         //
         if (!e)
           a = def;
       }
-    }
-    while (a != "y" && a != "Y" && a != "n" && a != "N");
+    } while (a != "y" && a != "Y" && a != "n" && a != "N");
 
     return a == "y" || a == "Y";
   }
