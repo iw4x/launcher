@@ -358,6 +358,84 @@ namespace launcher
   {
     return this->jobs_specified_;
   }
+
+  inline const bool& options::
+  launch () const
+  {
+    return this->launch_;
+  }
+
+  inline const std::string& options::
+  game_exe () const
+  {
+    return this->game_exe_;
+  }
+
+  inline bool options::
+  game_exe_specified () const
+  {
+    return this->game_exe_specified_;
+  }
+
+  inline const std::vector<std::string>& options::
+  game_args () const
+  {
+    return this->game_args_;
+  }
+
+  inline bool options::
+  game_args_specified () const
+  {
+    return this->game_args_specified_;
+  }
+
+  inline const std::string& options::
+  steam_path () const
+  {
+    return this->steam_path_;
+  }
+
+  inline bool options::
+  steam_path_specified () const
+  {
+    return this->steam_path_specified_;
+  }
+
+  inline const std::string& options::
+  steam_helper () const
+  {
+    return this->steam_helper_;
+  }
+
+  inline bool options::
+  steam_helper_specified () const
+  {
+    return this->steam_helper_specified_;
+  }
+
+  inline const std::uint32_t& options::
+  proton_app_id () const
+  {
+    return this->proton_app_id_;
+  }
+
+  inline bool options::
+  proton_app_id_specified () const
+  {
+    return this->proton_app_id_specified_;
+  }
+
+  inline const bool& options::
+  proton_verbose () const
+  {
+    return this->proton_verbose_;
+  }
+
+  inline const bool& options::
+  proton_log () const
+  {
+    return this->proton_log_;
+  }
 }
 
 // Begin epilogue.
