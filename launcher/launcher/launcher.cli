@@ -1,0 +1,69 @@
+include <cstdint>; // std::uint64_t
+include <string>;
+
+namespace launcher
+{
+  class options
+  {
+    std::uint64_t --build2-metadata; // leave undocumented/hidden
+
+    bool --help
+    {
+      "Show this help message and exit."
+    };
+
+    bool --version
+    {
+      "Show version information and exit."
+    };
+
+    // build2 metadata export protocol.
+    //
+    bool --build2-metadata
+    {
+      "Print the build2 metadata and exit."
+    };
+
+    // Common options.
+    //
+    // Note that we default to the current directory if --path is not
+    // specified.
+    //
+    std::string --path
+    {
+      "<dir>",
+      "The installation directory for the game files. If not specified, the
+       current working directory is used."
+    };
+
+    bool --no-ui
+    {
+      "Disable the text-based progress UI. This is useful when running in a
+       scripted environment or where terminal capabilities are limited."
+    };
+
+    bool --force-update
+    {
+      "Force re-verification of all files, even those that appear valid. This
+       is slower but ensures complete data integrity."
+    };
+
+    bool --prerelease
+    {
+      "Opt-in to pre-release (beta) updates. Use this to test upcoming
+       features before they are marked as stable."
+    };
+
+    bool --disable-checksum = true
+    {
+      "Disable SHA-256 checksum verification for downloaded files. This speeds
+       up the process but effectively disables integrity checking."
+    };
+
+    std::size_t --jobs | -j = 4
+    {
+      "<num>",
+      "The number of parallel download jobs to run. Defaults to 4."
+    };
+  };
+}

@@ -1,0 +1,64 @@
+using in
+
+define cli: file
+
+cli{*}: extension = cli
+
+cxx.internal.scope = current
+
+cxx.std = latest
+
+using c
+using cxx
+
+hxx{*}: extension = hxx
+ixx{*}: extension = ixx
+txx{*}: extension = txx
+cxx{*}: extension = cxx
+
+# Disable a small set of MSVC warnings that are either noise in this codebase
+# or actively unhelpful for our usage patterns.
+#
+if ($cxx.class == 'msvc')
+  cxx.coptions += /wd4251 /wd4275 /wd4800
+
+# Silent obsolete CRT security warnings.
+#
+if ($cxx.class == 'msvc')
+  cxx.poptions += -D_CRT_SECURE_NO_WARNINGS -D_SCL_SECURE_NO_WARNINGS
+
+# Prevent windows.h from defining min/max macros that clash with c++
+# standard library functions (e.g. std::numeric_limits::max)
+#
+if ($cxx.class == 'msvc')
+  cxx.poptions += -DNOMINMAX
+
+# ASIO conditionally enables parts of its Windows backend based on
+# _WIN32_WINNT. Leaving this macros to compiler defaults can result in
+# different translation units selecting different execution paths, which in
+# turn leads to inconsistent behavior and, in some cases, ABI mismatches.
+#
+# Background discussion: https://stackoverflow.com/a/41068811
+#
+if ($cxx.class == 'msvc')
+  cxx.poptions += -DWINVER=0x0A00 -D_WIN32_WINNT=0x0A00
+
+# Increase object file format limit
+#
+if ($cxx.class == 'msvc')
+  cxx.coptions += /bigobj
+
+# GCC/Clang MinGW: enable big object sections to avoid assembler overflow
+# when many templates are instantiated (e.g., github-api).
+if ($cxx.target.system == 'mingw32')
+  cxx.coptions += -Wa,-mbig-obj
+
+# The test target for cross-testing (running tests under Wine, etc).
+#
+test.target = $cxx.target
+
+# Pre-defined semantics to distinguish between development and consumption
+# builds.
+#
+config [bool] config.launcher.develop ?= false
+develop = $config.launcher.develop # shorthand

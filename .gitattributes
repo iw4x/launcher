@@ -7,18 +7,18 @@
 # Use `eol=crlf` for files that should have the CRLF line ending both in the
 # working tree (even on Unix) and in the repository.
 #
-#*.bat text eol=crlf
+# *.bat text eol=crlf
 
 # Use `eol=lf` for files that should have the LF line ending both in the
 # working tree (even on Windows) and in the repository.
 #
-#*.sh text eol=lf
+# *.sh text eol=lf
 
 # Use `binary` to make sure certain files are never auto-detected as text.
 #
-#*.png binary
+# *.png binary
 
 # Use `linguist-generated` attribute to mark or unmark paths to be ignored for
 # the repository's language statistics and hidden by default in diffs.
 #
-hello/hello/pregenerated/** linguist-generated=true
+launcher/launcher/pregenerated/** linguist-generated=true
