@@ -4,26 +4,28 @@
 #include <string>
 #include <algorithm>
 
+using namespace std;
+
 namespace hello
 {
   steam_coordinator::
   steam_coordinator (asio::io_context& ioc)
-      : ioc_ (ioc),
-        manager_ (std::make_unique<steam_library_manager> (ioc)),
-        initialized_ (false)
+    : ioc_ (ioc),
+      manager_ (make_unique<steam_library_manager> (ioc)),
+      initialized_ (false)
   {
   }
 
   asio::awaitable<bool> steam_coordinator::
   initialize ()
   {
-    // If we are already initialized, there is nothing to do.
+    // If we are already up and running, short-circuit.
     //
     if (initialized_)
       co_return true;
 
-    // Try to detect the Steam installation path. If successful, the manager
-    // is ready to serve requests.
+    // Try to sniff out the Steam installation path. If we find it, the
+    // manager is ready to roll.
     //
     auto p (co_await manager_->detect_steam_path ());
     initialized_ = p.has_value ();
@@ -42,53 +44,53 @@ namespace hello
 
   // App lookups.
   //
-  // Note that Modern Warfare 2 technically has two App IDs: 10190 for the
-  // multiplayer component and 10180 for singleplayer. For IW4x purposes, we
-  // generally care about the multiplayer installation, though they almost
-  // always reside in the same physical directory.
+  // MW2 has split personalities: 10190 (MP) and 10180 (SP). While they
+  // usually live together in the same directory, we care about MP (10190)
+  // because that's what IW4x hooks into.
   //
 
-  asio::awaitable<std::optional<fs::path>> steam_coordinator::
+  asio::awaitable<optional<fs::path>> steam_coordinator::
   find_mw2_multiplayer ()
   {
     co_return co_await find_app (steam_appid::mw2_multiplayer);
   }
 
-  asio::awaitable<std::optional<fs::path>> steam_coordinator::
+  asio::awaitable<optional<fs::path>> steam_coordinator::
   find_mw2_singleplayer ()
   {
     co_return co_await find_app (steam_appid::mw2_singleplayer);
   }
 
-  asio::awaitable<std::optional<fs::path>> steam_coordinator::
+  asio::awaitable<optional<fs::path>> steam_coordinator::
   find_mw2 ()
   {
-    // We prioritize the multiplayer App ID as that is the base for IW4x.
+    // Prioritize MP. If that's missing, we could try SP, but honestly if MP
+    // isn't there, IW4x probably won't be happy anyway.
     //
     auto mp (co_await find_mw2_multiplayer ());
 
     if (mp)
       co_return mp;
 
-    co_return std::nullopt;
+    co_return nullopt;
   }
 
   // App Manifests.
   //
 
-  asio::awaitable<std::optional<steam_coordinator::manifest_type>> steam_coordinator::
+  asio::awaitable<optional<steam_coordinator::manifest_type>> steam_coordinator::
   get_mw2_multiplayer_manifest ()
   {
     co_return co_await get_app_manifest (steam_appid::mw2_multiplayer);
   }
 
-  asio::awaitable<std::optional<steam_coordinator::manifest_type>> steam_coordinator::
+  asio::awaitable<optional<steam_coordinator::manifest_type>> steam_coordinator::
   get_mw2_singleplayer_manifest ()
   {
     co_return co_await get_app_manifest (steam_appid::mw2_singleplayer);
   }
 
-  asio::awaitable<std::vector<steam_coordinator::library_type>> steam_coordinator::
+  asio::awaitable<vector<steam_coordinator::library_type>> steam_coordinator::
   get_libraries ()
   {
     if (!initialized_)
@@ -97,7 +99,7 @@ namespace hello
     co_return co_await manager_->load_libraries ();
   }
 
-  std::optional<fs::path> steam_coordinator::
+  optional<fs::path> steam_coordinator::
   steam_path () const
   {
     return manager_->cached_steam_path ();
@@ -109,23 +111,23 @@ namespace hello
     if (!fs::exists (p) || !fs::is_directory (p))
       return false;
 
-    // Check for common MW2 files/directories.
+    // Check for common MW2 artifacts.
     //
     // Note that we accept the path if *any* of these are found. This is perhaps
     // a bit lenient, but it accounts for partial installs or dedicated server
     // setups.
     //
-    static const std::vector<std::string> expected =
+    static const char* expected[] =
     {
-      "iw4mp.exe",      // Windows multiplayer executable.
-      "iw4sp.exe",      // Windows singleplayer executable.
-      "iw4x.exe",       // IW4x client (if already installed).
-      "main",           // Main game directory.
-      "zone",           // Zone files directory.
-      "players"         // Player profiles directory.
+      "iw4mp.exe",      // Windows MP executable.
+      "iw4sp.exe",      // Windows SP executable.
+      "iw4x.exe",       // IW4x client (if already present).
+      "main",           // Main asset directory.
+      "zone",           // Zone files.
+      "players"         // Profiles.
     };
 
-    for (const auto& f : expected)
+    for (const char* f : expected)
     {
       if (fs::exists (p / f))
         return true;
@@ -134,57 +136,57 @@ namespace hello
     return false;
   }
 
-  asio::awaitable<std::optional<fs::path>> steam_coordinator::
+  asio::awaitable<optional<fs::path>> steam_coordinator::
   get_default_mw2_path ()
   {
-    // First, try to locate the game via Steam integration.
+    // First, ask Steam.
     //
-    auto steam_p (co_await find_mw2 ());
+    auto sp (co_await find_mw2 ());
 
-    if (steam_p)
-      co_return steam_p;
+    if (sp)
+      co_return sp;
 
-    // If we couldn't find it via Steam (e.g., non-Steam install or Steam is
-    // not detected), we could try checking the Windows Registry or common
-    // locations, but for now we return empty.
+    // If Steam came up empty (or we couldn't find Steam itself), we are done.
+    // We could try poking around the Registry or Program Files, but that's a
+    // can of worms for another day.
     //
-    co_return std::nullopt;
+    co_return nullopt;
   }
 
   // Internal helpers.
   //
 
-  asio::awaitable<std::optional<fs::path>> steam_coordinator::
-  find_app (std::uint32_t appid)
+  asio::awaitable<optional<fs::path>> steam_coordinator::
+  find_app (uint32_t id)
   {
     if (!initialized_)
       co_await initialize ();
 
     if (!initialized_)
-      co_return std::nullopt;
+      co_return nullopt;
 
-    co_return co_await manager_->find_app (appid);
+    co_return co_await manager_->find_app (id);
   }
 
-  asio::awaitable<std::optional<steam_coordinator::manifest_type>> steam_coordinator::
-  get_app_manifest (std::uint32_t appid)
+  asio::awaitable<optional<steam_coordinator::manifest_type>> steam_coordinator::
+  get_app_manifest (uint32_t id)
   {
     if (!initialized_)
       co_await initialize ();
 
     if (!initialized_)
-      co_return std::nullopt;
+      co_return nullopt;
 
-    co_return co_await manager_->load_app_manifest (appid);
+    co_return co_await manager_->load_app_manifest (id);
   }
 
   // Standalone wrappers.
   //
-  // These allow one-off lookups without manually managing the coordinator
-  // lifecycle.
+  // These are for one-off lookups where the caller doesn't want to manage the
+  // coordinator lifecycle manually.
   //
 
-  asio::awaitable<std::optional<fs::path>>
+  asio::awaitable<optional<fs::path>>
   locate_mw2 (asio::io_context& ioc)
   {
     steam_coordinator c (ioc);
@@ -192,7 +194,7 @@ namespace hello
     co_return co_await c.find_mw2 ();
   }
 
-  asio::awaitable<std::optional<fs::path>>
+  asio::awaitable<optional<fs::path>>
   get_mw2_default_path (asio::io_context& ioc)
   {
     steam_coordinator c (ioc);

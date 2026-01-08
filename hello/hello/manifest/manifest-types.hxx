@@ -3,9 +3,12 @@
 #include <string>
 #include <vector>
 #include <cstdint>
+#include <filesystem>
 
 namespace hello
 {
+  namespace fs = std::filesystem;
+
   // Manifest format kinds.
   //
   enum class manifest_format
@@ -30,4 +33,18 @@ namespace hello
     tar_gz,
     tar_bz2
   };
+
+  // Compute hash of file.
+  //
+  // Reads the entire file and computes its hash.
+  //
+  std::string
+  compute_file_hash (const fs::path& file,
+                     hash_algorithm algorithm);
+
+  // Compare two hashes (case-insensitive).
+  //
+  bool
+  compare_hashes (const std::string& hash1,
+                  const std::string& hash2);
 }
