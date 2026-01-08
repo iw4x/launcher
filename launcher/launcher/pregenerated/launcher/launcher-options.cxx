@@ -773,7 +773,20 @@ namespace launcher
     prerelease_ (),
     disable_checksum_ (true),
     jobs_ (4),
-    jobs_specified_ (false)
+    jobs_specified_ (false),
+    launch_ (true),
+    game_exe_ ("iw4x.exe"),
+    game_exe_specified_ (false),
+    game_args_ (),
+    game_args_specified_ (false),
+    steam_path_ (),
+    steam_path_specified_ (false),
+    steam_helper_ (),
+    steam_helper_specified_ (false),
+    proton_app_id_ (10190),
+    proton_app_id_specified_ (false),
+    proton_verbose_ (),
+    proton_log_ ()
   {
   }
 
@@ -795,7 +808,20 @@ namespace launcher
     prerelease_ (),
     disable_checksum_ (true),
     jobs_ (4),
-    jobs_specified_ (false)
+    jobs_specified_ (false),
+    launch_ (true),
+    game_exe_ ("iw4x.exe"),
+    game_exe_specified_ (false),
+    game_args_ (),
+    game_args_specified_ (false),
+    steam_path_ (),
+    steam_path_specified_ (false),
+    steam_helper_ (),
+    steam_helper_specified_ (false),
+    proton_app_id_ (10190),
+    proton_app_id_specified_ (false),
+    proton_verbose_ (),
+    proton_log_ ()
   {
     ::launcher::cli::argv_scanner s (argc, argv, erase);
     _parse (s, opt, arg);
@@ -820,7 +846,20 @@ namespace launcher
     prerelease_ (),
     disable_checksum_ (true),
     jobs_ (4),
-    jobs_specified_ (false)
+    jobs_specified_ (false),
+    launch_ (true),
+    game_exe_ ("iw4x.exe"),
+    game_exe_specified_ (false),
+    game_args_ (),
+    game_args_specified_ (false),
+    steam_path_ (),
+    steam_path_specified_ (false),
+    steam_helper_ (),
+    steam_helper_specified_ (false),
+    proton_app_id_ (10190),
+    proton_app_id_specified_ (false),
+    proton_verbose_ (),
+    proton_log_ ()
   {
     ::launcher::cli::argv_scanner s (start, argc, argv, erase);
     _parse (s, opt, arg);
@@ -845,7 +884,20 @@ namespace launcher
     prerelease_ (),
     disable_checksum_ (true),
     jobs_ (4),
-    jobs_specified_ (false)
+    jobs_specified_ (false),
+    launch_ (true),
+    game_exe_ ("iw4x.exe"),
+    game_exe_specified_ (false),
+    game_args_ (),
+    game_args_specified_ (false),
+    steam_path_ (),
+    steam_path_specified_ (false),
+    steam_helper_ (),
+    steam_helper_specified_ (false),
+    proton_app_id_ (10190),
+    proton_app_id_specified_ (false),
+    proton_verbose_ (),
+    proton_log_ ()
   {
     ::launcher::cli::argv_scanner s (argc, argv, erase);
     _parse (s, opt, arg);
@@ -872,7 +924,20 @@ namespace launcher
     prerelease_ (),
     disable_checksum_ (true),
     jobs_ (4),
-    jobs_specified_ (false)
+    jobs_specified_ (false),
+    launch_ (true),
+    game_exe_ ("iw4x.exe"),
+    game_exe_specified_ (false),
+    game_args_ (),
+    game_args_specified_ (false),
+    steam_path_ (),
+    steam_path_specified_ (false),
+    steam_helper_ (),
+    steam_helper_specified_ (false),
+    proton_app_id_ (10190),
+    proton_app_id_specified_ (false),
+    proton_verbose_ (),
+    proton_log_ ()
   {
     ::launcher::cli::argv_scanner s (start, argc, argv, erase);
     _parse (s, opt, arg);
@@ -895,7 +960,20 @@ namespace launcher
     prerelease_ (),
     disable_checksum_ (true),
     jobs_ (4),
-    jobs_specified_ (false)
+    jobs_specified_ (false),
+    launch_ (true),
+    game_exe_ ("iw4x.exe"),
+    game_exe_specified_ (false),
+    game_args_ (),
+    game_args_specified_ (false),
+    steam_path_ (),
+    steam_path_specified_ (false),
+    steam_helper_ (),
+    steam_helper_specified_ (false),
+    proton_app_id_ (10190),
+    proton_app_id_specified_ (false),
+    proton_verbose_ (),
+    proton_log_ ()
   {
     _parse (s, opt, arg);
   }
@@ -908,24 +986,42 @@ namespace launcher
     if (p == ::launcher::cli::usage_para::text)
       os << ::std::endl;
 
-    os << "--help             Show this help message and exit." << ::std::endl;
+    os << "--help                Show this help message and exit." << ::std::endl;
 
-    os << "--version          Show version information and exit." << ::std::endl;
+    os << "--version             Show version information and exit." << ::std::endl;
 
-    os << "--build2-metadata  Print the build2 metadata and exit." << ::std::endl;
+    os << "--build2-metadata     Print the build2 metadata and exit." << ::std::endl;
 
-    os << "--path <dir>       The installation directory for the game files." << ::std::endl;
+    os << "--path <dir>          The installation directory for the game files." << ::std::endl;
 
-    os << "--no-ui            Disable the text-based progress UI." << ::std::endl;
+    os << "--no-ui               Disable the text-based progress UI." << ::std::endl;
 
-    os << "--force-update     Force re-verification of all files, even those that appear" << ::std::endl
-       << "                   valid." << ::std::endl;
+    os << "--force-update        Force re-verification of all files, even those that" << ::std::endl
+       << "                      appear valid." << ::std::endl;
 
-    os << "--prerelease       Opt-in to pre-release (beta) updates." << ::std::endl;
+    os << "--prerelease          Opt-in to pre-release (beta) updates." << ::std::endl;
 
-    os << "--disable-checksum Disable SHA-256 checksum verification for downloaded files." << ::std::endl;
+    os << "--disable-checksum    Disable SHA-256 checksum verification for downloaded" << ::std::endl
+       << "                      files." << ::std::endl;
 
-    os << "--jobs|-j <num>    The number of parallel download jobs to run." << ::std::endl;
+    os << "--jobs|-j <num>       The number of parallel download jobs to run." << ::std::endl;
+
+    os << "--launch              Launch the game after successful update." << ::std::endl;
+
+    os << "--game-exe <file>     The game executable to launch." << ::std::endl;
+
+    os << "--game-args <arg>     Additional arguments to pass to the game executable." << ::std::endl;
+
+    os << "--steam-path <dir>    Path to the Steam installation root directory." << ::std::endl;
+
+    os << "--steam-helper <file> Path to the steam.exe helper tool for checking Steam API" << ::std::endl
+       << "                      status inside the Proton container." << ::std::endl;
+
+    os << "--proton-app-id <id>  Steam AppID for the game's compatibility layer." << ::std::endl;
+
+    os << "--proton-verbose      Enable verbose output for Proton operations." << ::std::endl;
+
+    os << "--proton-log          Enable Proton's internal logging system." << ::std::endl;
 
     p = ::launcher::cli::usage_para::option;
 
@@ -968,6 +1064,27 @@ namespace launcher
       _cli_options_map_["-j"] =
       &::launcher::cli::thunk< options, std::size_t, &options::jobs_,
         &options::jobs_specified_ >;
+      _cli_options_map_["--launch"] =
+      &::launcher::cli::thunk< options, &options::launch_ >;
+      _cli_options_map_["--game-exe"] =
+      &::launcher::cli::thunk< options, std::string, &options::game_exe_,
+        &options::game_exe_specified_ >;
+      _cli_options_map_["--game-args"] =
+      &::launcher::cli::thunk< options, std::vector<std::string>, &options::game_args_,
+        &options::game_args_specified_ >;
+      _cli_options_map_["--steam-path"] =
+      &::launcher::cli::thunk< options, std::string, &options::steam_path_,
+        &options::steam_path_specified_ >;
+      _cli_options_map_["--steam-helper"] =
+      &::launcher::cli::thunk< options, std::string, &options::steam_helper_,
+        &options::steam_helper_specified_ >;
+      _cli_options_map_["--proton-app-id"] =
+      &::launcher::cli::thunk< options, std::uint32_t, &options::proton_app_id_,
+        &options::proton_app_id_specified_ >;
+      _cli_options_map_["--proton-verbose"] =
+      &::launcher::cli::thunk< options, &options::proton_verbose_ >;
+      _cli_options_map_["--proton-log"] =
+      &::launcher::cli::thunk< options, &options::proton_log_ >;
     }
   };
 

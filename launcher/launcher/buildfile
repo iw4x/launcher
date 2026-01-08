@@ -6,10 +6,10 @@ import libs += libssl%lib{ssl}
 import libs += libcrypto%lib{crypto}
 import libs += libboost-asio%lib{boost_asio}
 import libs += libboost-beast%lib{boost_beast}
-import libs += libboost-json%lib{boost_json}
-import libs += libboost-system%lib{boost_system}
 import libs += libboost-filesystem%lib{boost_filesystem}
+import libs += libboost-json%lib{boost_json}
 import libs += libboost-process%lib{boost_process}
+import libs += libboost-system%lib{boost_system}
 
 import libs += libminiz%lib{miniz}
 
@@ -17,10 +17,16 @@ import libs += libftxui%lib{ftxui-component}
 import libs += libftxui%lib{ftxui-dom}
 import libs += libftxui%lib{ftxui-screen}
 
-exe{launcher}: {hxx ixx txx cxx}{**  -version -*-options -pregenerated/**} \
-            {hxx            }{     version                            } \
-            {h           c  }{**                                      } \
-            $libs testscript
+exe{launcher}: {hxx ixx txx cxx}{**  -steam/steam-proton    \
+                                     -launcher-steam-proton \
+                                     -version               \
+                                     -*-options             \
+                                     -pregenerated/**}
+exe{launcher}: {h c}{**}
+exe{launcher}: {hxx}{version}
+exe{launcher}: {hxx cxx}{steam/steam-proton}: include = ($tclass == 'linux')
+exe{launcher}: {hxx cxx}{launcher-steam-proton}: include = ($tclass == 'linux')
+exe{launcher}: $libs testscript
 
 # Target metadata, see also --build2-metadata in launcher.cxx.
 #
@@ -32,23 +38,41 @@ exe{launcher}:
   launcher.checksum = [string] $version
 }
 
+# Version header generation.
+#
 hxx{version}: in{version} $src_root/manifest
 
 # Build options.
 #
-cxx.poptions =+ "-I$out_root" "-I$src_root"
-c.poptions =+ "-I$out_root" "-I$src_root"
+cc.poptions =+ "-I$out_root" "-I$src_root"
 
-if ($cxx.target.class == 'windows')
+# On Windows, we need the advanced API library for registry access (used
+# for Steam path detection).
+#
+if ($tsys == 'win32-msvc')
   cxx.libs += Advapi32.lib
+
+# CLI Options Generation (Development vs. Consumption)
+#
+
+# In the development build ($develop == true), we generate the C++ CLI parsers
+# from the .cli definition files using the CLI compiler. We also copy the
+# results to the 'pregenerated/' directory so they can be distributed.
+#
+# In the consumption build ($develop == false), we skip the generation step
+# (to avoid requiring CLI on the user's machine) and just use the files
+# from 'pregenerated/'.
+#
 
 ## Consumption build ($develop == false).
 #
 
-# Use pregenerated versions in the consumption build.
+# Use pregenerated versions.
 #
 exe{launcher}: pregenerated/{hxx ixx cxx}{**}: include = (!$develop)
 
+# If we are consuming, we need to look in the pregenerated directory first.
+#
 if! $develop
   cxx.poptions =+ "-I($src_base/pregenerated)" # Note: must come first.
 
@@ -56,37 +80,48 @@ if! $develop
 #
 pregenerated/{hxx ixx cxx}{*}: dist = (!$develop)
 
-#
-##
 
 ## Development build ($develop == true).
 #
 
+# Include the generated files in the build.
+#
 exe{launcher}: {hxx ixx cxx}{$options}: include = $develop
 
 if $develop
   import! [metadata] cli = cli%exe{cli}
 
+# Rule to generate C++ parser from .cli file.
+#
 for f: $options
 {
   [string] b = $f
 
+  # Strip the '-options' suffix to get the base name.
+  #
   b = $replace($b, "-options", "")
   d = $directory($f)
   p = pregenerated/launcher
 
   <{hxx ixx cxx}{$f}>: cli{$b}
   {
+    # In development, we want to distribute the result of this generation,
+    # but we map it to the 'pregenerated/' directory in the distribution.
+    #
     dist = ($develop ? $relative([dir_path] "$p/$d", $d) : false)
   }
 }
 
+# The ad-hoc rule for running the CLI compiler.
+#
 <{hxx ixx cxx}{~'/(.*)-options/'}>: cli{~'/\1/'} $cli
 %
 if $develop
 {{
   t = $path($>[0]).t
 
+  # Dynamic dependency tracking.
+  #
   depdb dyndep --byproduct --file $t
 
   h = $path($>[0])
@@ -133,6 +168,3 @@ if $develop
   cp $i $di
   cp $c $dc
 }}
-
-#
-##

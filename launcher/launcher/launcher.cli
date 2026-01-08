@@ -1,5 +1,6 @@
 include <cstdint>; // std::uint64_t
 include <string>;
+include <vector>;
 
 namespace launcher
 {
@@ -64,6 +65,55 @@ namespace launcher
     {
       "<num>",
       "The number of parallel download jobs to run. Defaults to 4."
+    };
+
+    bool --launch = true
+    {
+      "Launch the game after successful update."
+    };
+
+    std::string --game-exe = "iw4x.exe"
+    {
+      "<file>",
+      "The game executable to launch. Defaults to iw4x.exe."
+    };
+
+    std::vector<std::string> --game-args
+    {
+      "<arg>",
+      "Additional arguments to pass to the game executable. Can be specified
+       multiple times."
+    };
+
+    std::string --steam-path
+    {
+      "<dir>",
+      "Path to the Steam installation root directory. If not specified, will
+       attempt to auto-detect from the HOME environment variable."
+    };
+
+    std::string --steam-helper
+    {
+      "<file>",
+      "Path to the steam.exe helper tool for checking Steam API status inside
+       the Proton container."
+    };
+
+    std::uint32_t --proton-app-id = 10190
+    {
+      "<id>",
+      "Steam AppID for the game's compatibility layer. Defaults to 10190
+       (Call of Duty: Modern Warfare 2)."
+    };
+
+    bool --proton-verbose
+    {
+      "Enable verbose output for Proton operations."
+    };
+
+    bool --proton-log
+    {
+      "Enable Proton's internal logging system."
     };
   };
 }

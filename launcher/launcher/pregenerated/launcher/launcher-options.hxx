@@ -431,6 +431,8 @@ namespace launcher
 
 #include <string>
 
+#include <vector>
+
 namespace launcher
 {
   class options
@@ -511,6 +513,45 @@ namespace launcher
     bool
     jobs_specified () const;
 
+    const bool&
+    launch () const;
+
+    const std::string&
+    game_exe () const;
+
+    bool
+    game_exe_specified () const;
+
+    const std::vector<std::string>&
+    game_args () const;
+
+    bool
+    game_args_specified () const;
+
+    const std::string&
+    steam_path () const;
+
+    bool
+    steam_path_specified () const;
+
+    const std::string&
+    steam_helper () const;
+
+    bool
+    steam_helper_specified () const;
+
+    const std::uint32_t&
+    proton_app_id () const;
+
+    bool
+    proton_app_id_specified () const;
+
+    const bool&
+    proton_verbose () const;
+
+    const bool&
+    proton_log () const;
+
     // Print usage information.
     //
     static ::launcher::cli::usage_para
@@ -543,6 +584,19 @@ namespace launcher
     bool disable_checksum_;
     std::size_t jobs_;
     bool jobs_specified_;
+    bool launch_;
+    std::string game_exe_;
+    bool game_exe_specified_;
+    std::vector<std::string> game_args_;
+    bool game_args_specified_;
+    std::string steam_path_;
+    bool steam_path_specified_;
+    std::string steam_helper_;
+    bool steam_helper_specified_;
+    std::uint32_t proton_app_id_;
+    bool proton_app_id_specified_;
+    bool proton_verbose_;
+    bool proton_log_;
   };
 }
 
