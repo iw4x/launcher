@@ -1,0 +1,9 @@
+launcher
+
+# CLI output directory.
+#
+!pregenerated/launcher
+
+# Testscript output directory (can be symlink).
+#
+test-launcher

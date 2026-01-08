@@ -1,7 +1,7 @@
 : 1
-summary: hello project repository
+summary: launcher project repository
 
-# Hello consumes packages from the testing repository. In practice, testing
+# We consumes packages from the testing repository. In practice, testing
 # functions as the de facto source of up-to-date packages while maintaining a
 # reasonable level of stability.
 #
