@@ -1,8 +1,4 @@
 #include <hello/hello-github.hxx>
-#include <hello/hello-http.hxx>
-
-#include <hello/github/github-api.hxx>
-#include <hello/manifest/manifest.hxx>
 
 #include <boost/json.hpp>
 
@@ -10,195 +6,197 @@
 #include <fstream>
 #include <sstream>
 #include <stdexcept>
+#include <regex>
+
+#include <hello/github/github-api.hxx>
+#include <hello/hello-http.hxx>
+#include <hello/manifest/manifest.hxx>
+
+using namespace std;
 
 namespace hello
 {
-  namespace fs = std::filesystem;
-  namespace json = boost::json;
-
   github_coordinator::
   github_coordinator (asio::io_context& ioc)
     : ioc_ (ioc),
-      api_ (std::make_unique<api_type> (ioc))
+      api_ (make_unique<api_type> (ioc))
   {
   }
 
   github_coordinator::
-  github_coordinator (asio::io_context& ioc, std::string token)
+  github_coordinator (asio::io_context& ioc, string token)
     : ioc_ (ioc),
-      api_ (std::make_unique<api_type> (ioc, std::move (token)))
+      api_ (make_unique<api_type> (ioc, move (token)))
   {
   }
 
   void github_coordinator::
-  set_token (std::string token)
+  set_token (string t)
   {
-    api_->set_token (std::move (token));
+    api_->set_token (move (t));
   }
 
   asio::awaitable<github_coordinator::release_type> github_coordinator::
-  fetch_latest_release (const std::string& owner,
-                        const std::string& repo,
+  fetch_latest_release (const string& owner,
+                        const string& repo,
                         bool include_prerelease)
   {
+    // If the caller wants pre-releases, we can't use the simple "latest"
+    // endpoint because GitHub's API defines "latest" strictly as the most
+    // recent stable release. So we have to fetch the list and pick the top
+    // one.
+    //
     if (include_prerelease)
     {
-      // Get all releases and return the first one.
+      // Fetch a small batch; the first one should be the newest.
       //
-      // The GitHub API returns releases in reverse chronological order, so
-      // the first release is the most recent (including prereleases).
-      //
-      std::vector<release_type> releases (
-          co_await api_->get_releases (owner, repo, 10));
+      vector<release_type> rs (
+        co_await api_->get_releases (owner, repo, 10));
 
-      if (releases.empty ())
-      {
-        throw std::runtime_error (
-            "no releases found for " + owner + "/" + repo);
-      }
+      if (rs.empty ())
+        throw runtime_error ("no releases found for " + owner + "/" + repo);
 
-      co_return releases[0];
+      co_return rs[0];
     }
     else
     {
-      // Use the dedicated "latest release" endpoint.
-      //
-      release_type release (
-          co_await api_->get_latest_release (owner, repo));
-
-      co_return release;
+      co_return co_await api_->get_latest_release (owner, repo);
     }
   }
 
   asio::awaitable<github_coordinator::release_type> github_coordinator::
-  fetch_release_by_tag (const std::string& owner,
-                        const std::string& repo,
-                        const std::string& tag)
+  fetch_release_by_tag (const string& owner,
+                        const string& repo,
+                        const string& tag)
   {
-    release_type release (
-        co_await api_->get_release_by_tag (owner, repo, tag));
-
-    co_return release;
+    co_return co_await api_->get_release_by_tag (owner, repo, tag);
   }
 
+  // Manifest handling.
+  //
+
   asio::awaitable<manifest> github_coordinator::
-  fetch_manifest (const release_type& release,
-                  manifest_format kind)
+  fetch_manifest (const release_type& r, manifest_format k)
   {
-    const std::string manifest_name ("update.json");
+    // Usually, the manifest is just named 'update.json'.
+    //
+    const string n ("update.json");
 
-    std::optional<asset_type> asset (find_asset (release, manifest_name));
+    optional<asset_type> a (find_asset (r, n));
 
-    if (!asset)
-      throw std::runtime_error ("manifest asset '" + manifest_name +
-                                "' not found in release " + release.tag_name);
+    if (!a)
+      throw runtime_error ("manifest asset '" + n + "' not found in " +
+                           r.tag_name);
 
+    // Download and parse.
+    //
     manifest m (
-      co_await download_and_parse_manifest (asset->browser_download_url, kind));
+      co_await download_and_parse_manifest (a->browser_download_url, k));
 
+    // Post-process: link the files structure and resolve the actual download
+    // URLs from the release assets.
+    //
     m.link_files ();
-
-    resolve_manifest_urls (m, release);
+    resolve_manifest_urls (m, r);
 
     co_return m;
   }
 
   asio::awaitable<manifest> github_coordinator::
-  fetch_manifest_by_pattern (const release_type& release,
-                             const std::string& pattern,
-                             manifest_format kind)
+  fetch_manifest_by_pattern (const release_type& r,
+                             const string& pat,
+                             manifest_format k)
   {
-    std::optional<asset_type> asset (find_asset_regex (release, pattern));
+    // Sometimes the manifest name varies (e.g., version numbers in the
+    // filename), so we hunt for it via regex.
+    //
+    optional<asset_type> a (find_asset_regex (r, pat));
 
-    if (!asset)
-      throw std::runtime_error ("no manifest asset matching pattern '" +
-                                pattern + "' found in release " +
-                                release.tag_name);
+    if (!a)
+      throw runtime_error ("no manifest asset matching '" + pat +
+                           "' found in " + r.tag_name);
 
     manifest m (
-      co_await download_and_parse_manifest (asset->browser_download_url, kind));
+      co_await download_and_parse_manifest (a->browser_download_url, k));
 
     m.link_files ();
-    resolve_manifest_urls (m, release);
+    resolve_manifest_urls (m, r);
 
     co_return m;
   }
 
-  std::optional<github_coordinator::asset_type> github_coordinator::
-  find_asset (const release_type& release,
-              const std::string& name) const
+  // Asset lookup.
+  //
+
+  optional<github_coordinator::asset_type> github_coordinator::
+  find_asset (const release_type& r, const string& n) const
   {
-    for (const auto& asset : release.assets)
+    for (const auto& a : r.assets)
     {
-      if (asset.name == name)
-        return asset;
+      if (a.name == n)
+        return a;
     }
 
-    return std::nullopt;
+    return nullopt;
   }
 
-  std::optional<github_coordinator::asset_type> github_coordinator::
-  find_asset_regex (const release_type& release,
-                    const std::string& pattern) const
+  optional<github_coordinator::asset_type> github_coordinator::
+  find_asset_regex (const release_type& r, const string& pat) const
   {
-    std::regex re (pattern);
+    regex re (pat);
 
-    for (const auto& asset : release.assets)
+    for (const auto& a : r.assets)
     {
-      if (std::regex_search (asset.name, re))
-        return asset;
+      if (regex_search (a.name, re))
+        return a;
     }
 
-    return std::nullopt;
+    return nullopt;
   }
 
   void github_coordinator::
-  resolve_manifest_urls (manifest& m,
-                         const release_type& release) const
+  resolve_manifest_urls (manifest& m, const release_type& r) const
   {
-    // Resolve archive URLs.
+    // The manifest knows the logical file names (e.g., 'release.zip'), but the
+    // release object holds the actual download URLs (which might be signed AWS
+    // links). We need to bridge this gap.
     //
-    // For each archive in the manifest, find the corresponding release asset
-    // and populate the URL field.
+
+    // Firt, resolve Archive URLs.
     //
-    for (auto& archive : m.archives)
+    for (auto& ar : m.archives)
     {
-      if (!archive.url.empty ())
-        continue; // already has url
+      // If the manifest already has a URL (e.g. external mirror), skip it.
+      //
+      if (!ar.url.empty ())
+        continue;
 
-      std::optional<asset_type> asset (find_asset (release, archive.name));
+      // Try exact match first, then regex.
+      //
+      optional<asset_type> a (find_asset (r, ar.name));
 
-      if (!asset)
-        asset = find_asset_regex (release, archive.name);
+      if (!a)
+        a = find_asset_regex (r, ar.name);
 
-      if (!asset)
-        throw std::runtime_error ("asset not found for archive: " +
-                                  archive.name);
+      if (!a)
+        throw runtime_error ("asset not found for archive: " + ar.name);
 
-      archive.url = asset->browser_download_url;
+      ar.url = a->browser_download_url;
     }
 
-    // Resolve standalone file URLs.
+    // Next, resolve standalone files.
     //
-    // For files that are not in archives (i.e., they have asset_name but no
-    // archive_name), find the asset and populate the URL if needed.
+    // Note: Individual files in the manifest don't store URLs directly in this
+    // format version. The launcher is expected to match the 'asset_name'
+    // against the release assets at runtime if it needs to download them
+    // individually.
     //
-    // Note: The manifest structure doesn't directly store URLs for individual
-    // files. The launcher must use the asset_name to find the download URL
-    // from the release.
-    //
-    // This is a design constraint: manifests describe files and their hashes,
-    // but the launcher must resolve asset names to URLs using the release
-    // metadata.
   }
 
   asio::awaitable<github_coordinator::repository_type> github_coordinator::
-  fetch_repository (const std::string& owner,
-                    const std::string& repo)
+  fetch_repository (const string& owner, const string& repo)
   {
-    repository_type repository (co_await api_->get_repository (owner, repo));
-
-    co_return repository;
+    co_return co_await api_->get_repository (owner, repo);
   }
 
   github_coordinator::api_type& github_coordinator::
@@ -214,42 +212,39 @@ namespace hello
   }
 
   asio::awaitable<manifest> github_coordinator::
-  download_and_parse_manifest (const std::string& url,
-                               manifest_format kind)
+  download_and_parse_manifest (const string& url, manifest_format k)
   {
     http_coordinator http (ioc_);
-    std::string json_content (co_await http.get (url));
+    string json (co_await http.get (url));
 
-    if (json_content.empty ())
-      throw std::runtime_error ("manifest JSON is empty");
+    if (json.empty ())
+      throw runtime_error ("manifest JSON is empty");
 
-    manifest m (json_content, kind);
-
+    manifest m (json, k);
     co_return m;
   }
 
-  // Helper.
+  // Standalone helpers.
   //
 
-  std::vector<github_asset>
-  find_assets_regex (const github_release& release,
-                     const std::string& pattern)
+  vector<github_asset>
+  find_assets_regex (const github_release& r, const string& pat)
   {
-    std::regex re (pattern);
-    std::vector<github_asset> result;
+    regex re (pat);
+    vector<github_asset> res;
 
-    for (const auto& asset : release.assets)
+    for (const auto& a : r.assets)
     {
-      if (std::regex_search (asset.name, re))
-        result.push_back (asset);
+      if (regex_search (a.name, re))
+        res.push_back (a);
     }
 
-    return result;
+    return res;
   }
 
-  std::string
-  get_asset_download_url (const github_asset& asset)
+  string
+  get_asset_download_url (const github_asset& a)
   {
-    return asset.browser_download_url;
+    return a.browser_download_url;
   }
 }

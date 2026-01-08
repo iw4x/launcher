@@ -1,12 +1,14 @@
 #include <hello/hello-http.hxx>
 
+#include <boost/json.hpp>
+
+#include <sstream>
+#include <stdexcept>
+
 #include <hello/http/http-client.hxx>
 #include <hello/http/http-json.hxx>
 
-#include <boost/json.hpp>
-
-#include <stdexcept>
-#include <sstream>
+using namespace std;
 
 namespace hello
 {
@@ -15,118 +17,126 @@ namespace hello
   http_coordinator::
   http_coordinator (asio::io_context& ioc)
     : ioc_ (ioc),
-      client_ (std::make_unique<client_type> (ioc))
+      client_ (make_unique<client_type> (ioc))
   {
   }
 
   http_coordinator::
   http_coordinator (asio::io_context& ioc,
                     const http_client_traits<>& traits)
-      : ioc_ (ioc),
-        client_ (std::make_unique<client_type> (ioc, traits))
+    : ioc_ (ioc),
+      client_ (make_unique<client_type> (ioc, traits))
   {
   }
 
-  asio::awaitable<std::string> http_coordinator::
-  get (const std::string& url)
+  asio::awaitable<string> http_coordinator::
+  get (const string& url)
   {
-    // Perform GET request and return body.
-    //
-    response_type response (co_await client_->get (url));
+    response_type r (co_await client_->get (url));
 
-    // Check for HTTP errors.
-    //
-    if (response.is_error ())
-      throw std::runtime_error (format_http_error (response));
+    if (r.is_error ())
+      throw runtime_error (format_http_error (r));
 
-    // Extract body.
+    // Handle empty bodies gracefully.
     //
-    if (!response.body)
-      co_return std::string ();
+    if (!r.body)
+      co_return string ();
 
-    co_return *response.body;
+    co_return *r.body;
   }
 
   asio::awaitable<http_coordinator::response_type> http_coordinator::
-  get_response (const std::string& url)
+  get_response (const string& url)
   {
-    response_type response (co_await client_->get (url));
+    // Pass the raw response back to the caller; sometimes they need headers
+    // or status codes specifically.
+    //
+    response_type r (co_await client_->get (url));
 
-    if (response.is_error ())
-      throw std::runtime_error (format_http_error (response));
+    if (r.is_error ())
+      throw runtime_error (format_http_error (r));
 
-    co_return response;
+    co_return r;
   }
 
-  asio::awaitable<std::string> http_coordinator::
-  post_json (const std::string& url, const std::string& json_body)
+  asio::awaitable<string> http_coordinator::
+  post_json (const string& url, const string& json)
   {
-    response_type response (
-      co_await client_->post (url, json_body, "application/json"));
+    response_type r (co_await client_->post (url,
+                                             json,
+                                             "application/json"));
 
-    if (response.is_error ())
-      throw std::runtime_error (format_http_error (response));
+    if (r.is_error ())
+      throw runtime_error (format_http_error (r));
 
-    if (!response.body)
-      co_return std::string ();
+    if (!r.body)
+      co_return string ();
 
-    co_return *response.body;
+    co_return *r.body;
   }
 
-  asio::awaitable<std::uint64_t> http_coordinator::
-  download_file (const std::string& url,
+  asio::awaitable<uint64_t> http_coordinator::
+  download_file (const string& url,
                  const fs::path& target,
-                 progress_callback progress,
-                 std::optional<std::uint64_t> resume_from)
+                 progress_callback cb,
+                 optional<uint64_t> resume)
   {
+    // Note that the destination directory *must* exists. That is, the
+    // lower-level client might fail or (worse) do nothing if the parent dir is
+    // missing.
+    //
     if (target.has_parent_path ())
     {
-      std::error_code ec;
+      error_code ec;
       fs::create_directories (target.parent_path (), ec);
 
       if (ec)
-        throw std::runtime_error ("failed to create target directory: " +
-                                  ec.message ());
+        throw runtime_error ("failed to create target directory: " +
+                             ec.message ());
     }
 
-    http_client::progress_callback adapted_progress;
+    // Adapt the coordinator callback to the client callback if necessary.
+    //
+    http_client::progress_callback adapted;
 
-    if (progress)
+    if (cb)
     {
-      adapted_progress =
-        [progress] (std::uint64_t transferred, std::uint64_t total)
+      adapted = [cb] (uint64_t d, uint64_t t)
       {
-        progress (transferred, total);
+        cb (d, t);
       };
     }
 
-    std::uint64_t bytes_downloaded (
-      co_await client_->download (url,
-                                  target.string (),
-                                  adapted_progress,
-                                  resume_from));
-
-    co_return bytes_downloaded;
+    uint64_t n (co_await client_->download (url,
+                                            target.string (),
+                                            adapted,
+                                            resume));
+    co_return n;
   }
 
-  asio::awaitable<std::optional<std::uint64_t>> http_coordinator::
-  get_content_length (const std::string& url)
+  asio::awaitable<optional<uint64_t>> http_coordinator::
+  get_content_length (const string& url)
   {
-    response_type response (co_await client_->head (url));
+    // Just a HEAD request. We don't want the body.
+    //
+    response_type r (co_await client_->head (url));
 
-    if (response.is_error ())
-      throw std::runtime_error (format_http_error (response));
+    if (r.is_error ())
+      throw runtime_error (format_http_error (r));
 
-    co_return response.content_length ();
+    co_return r.content_length ();
   }
 
   asio::awaitable<bool> http_coordinator::
-  check_url (const std::string& url)
+  check_url (const string& url)
   {
+    // A quick reachability test. We swallow exceptions here because a failure
+    // just means "not available" in this context.
+    //
     try
     {
-      response_type response (co_await client_->head (url));
-      co_return response.is_success ();
+      response_type r (co_await client_->head (url));
+      co_return r.is_success ();
     }
     catch (...)
     {
@@ -146,40 +156,39 @@ namespace hello
     return *client_;
   }
 
+  // Helpers
+  //
+
   json::value
-  parse_json (const std::string& body)
+  parse_json (const string& b)
   {
-    // Parse JSON from string.
-    //
-    std::error_code ec;
-    json::value jv (json::parse (body, ec));
+    error_code ec;
+    json::value jv (json::parse (b, ec));
 
     if (ec)
-      throw std::runtime_error ("failed to parse JSON: " + ec.message ());
+      throw runtime_error ("failed to parse JSON: " + ec.message ());
 
     return jv;
   }
 
-  // Error formatting.
-  //
-
-  std::string
-  format_http_error (const http_response& response)
+  string
+  format_http_error (const http_response& r)
   {
-    // Build a descriptive error message from the HTTP response.
+    ostringstream oss;
+    oss << "HTTP " << r.status_code () << " " << r.reason;
+
+    // If the server sent a body (e.g., a detailed error message), include it,
+    // but don't spam the logs if it sent back an entire HTML 404 page.
     //
-    std::ostringstream oss;
-    oss << "HTTP " << response.status_code () << " " << response.reason;
-
-    if (response.body && !response.body->empty ())
+    if (r.body && !r.body->empty ())
     {
-      const std::string& body (*response.body);
-      const std::size_t max_body_len (200);
+      const string& b (*r.body);
+      const size_t max (200);
 
-      if (body.size () <= max_body_len)
-        oss << ": " << body;
+      if (b.size () <= max)
+        oss << ": " << b;
       else
-        oss << ": " << body.substr (0, max_body_len) << "...";
+        oss << ": " << b.substr (0, max) << "...";
     }
 
     return oss.str ();

@@ -1,25 +1,22 @@
 #include <hello/hello-manifest.hxx>
 
-#include <fstream>
-#include <sstream>
 #include <algorithm>
 #include <cctype>
 #include <cstring>
-#include <vector>
-#include <stdexcept>
+#include <fstream>
 #include <iomanip>
+#include <sstream>
+#include <stdexcept>
+#include <vector>
 
 #include <boost/json.hpp>
-#include <miniz.h>
-
 #include <hello/blake3.h>
+#include <miniz.h>
 
 using namespace std;
 
 namespace hello
 {
-  namespace json = boost::json;
-
   manifest_coordinator::manifest_type manifest_coordinator::
   parse (const string& s, manifest_format k)
   {
@@ -84,16 +81,17 @@ namespace hello
     return m.validate ();
   }
 
-  // Identify files that are missing or corrupt locally.
+  // Verification & Diffing.
   //
-  // We skip files that are part of an archive (e.g., inside a .zip) as
-  // those are handled by the archive verification step.
-  //
+
   vector<manifest_coordinator::file_type> manifest_coordinator::
   get_missing_files (const manifest_type& m,
                      const fs::path& dir,
                      bool verify_hashes)
   {
+    // We skip files that are part of an archive (e.g., inside a .zip) as
+    // those are handled by the archive verification step.
+    //
     vector<file_type> r;
 
     for (const auto& f : m.files)
@@ -136,7 +134,8 @@ namespace hello
       // to verifying the archive file itself.
       //
       // Note that we generally don't verify the hash strictly during this
-      // initial check to save time, unless the caller forces it later.
+      // initial check to save time (hashing big zips is slow), unless the
+      // caller forces it later.
       //
       if (!verify_archive (a, dir, false))
         r.push_back (a);
@@ -151,15 +150,15 @@ namespace hello
     fs::path p (resolve_path (f, dir));
     error_code ec;
 
+    // Check existence and size first.
+    //
     if (!fs::exists (p, ec) || ec)
       return false;
 
-    // Fast check: verify file size.
-    //
     if (fs::file_size (p, ec) != f.size || ec)
       return false;
 
-    // Slow check: verify content hash.
+    // Only hash if explicitly requested.
     //
     if (verify_hash && !f.hash.empty ())
     {
@@ -195,25 +194,22 @@ namespace hello
     return true;
   }
 
-  // Path resolution logic.
+  // Path resolution.
   //
-  // This is where things get a bit specific to IW4x. We have to map legacy
-  // paths (like "codo/") to the actual zone directory, and determine where
-  // loose files like .iwd or .ff should live if their path isn't explicit.
-  //
+
   fs::path manifest_coordinator::
   resolve_path (const file_type& f, const fs::path& dir)
   {
+    // This is where things get specific to IW4x. We have to map legacy
+    // paths (like "codo/") to the actual zone directory and determine where
+    // loose files like .iwd or .ff should live if their path isn't explicit.
+    //
     fs::path p (f.path);
     string ext (p.extension ().string ());
-
-    // Normalize extension to lowercase.
-    //
     transform (ext.begin (), ext.end (), ext.begin (),
                [] (unsigned char c) { return tolower (c); });
 
-    // Handle the "codo/" prefix remapping. This is a legacy artifact from
-    // older iterations of the project.
+    // Handle "codo/" remapping. This is a legacy artifact.
     //
     if (f.path.find ("codo/") == 0 || f.path.find ("codo\\") == 0)
     {
@@ -222,7 +218,7 @@ namespace hello
       return dir / s;
     }
 
-    // If the path already has a known prefix, trust it.
+    // If the path has a known prefix, trust it.
     //
     if (f.path.find ("zone/") == 0 || f.path.find ("zone\\") == 0 ||
         f.path.find ("iw4x/") == 0 || f.path.find ("iw4x\\") == 0)
@@ -232,11 +228,8 @@ namespace hello
 
     // Heuristics for loose files.
     //
-    if (ext == ".iwd")
-      return dir / "iw4x" / p.filename ();
-
-    if (ext == ".ff")
-      return dir / "zone" / "dlc" / p.filename ();
+    if (ext == ".iwd") return dir / "iw4x" / p.filename ();
+    if (ext == ".ff")  return dir / "zone" / "dlc" / p.filename ();
 
     return dir / f.path;
   }
@@ -260,26 +253,19 @@ namespace hello
 
     // Heuristics.
     //
-    if (ext == ".iwd")
-      return dir / "iw4x" / p.filename ();
+    if (ext == ".iwd") return dir / "iw4x" / p.filename ();
+    if (ext == ".ff")  return dir / "zone" / "dlc" / p.filename ();
 
-    if (ext == ".ff")
-      return dir / "zone" / "dlc" / p.filename ();
-
-    // ZIP archives are usually extracted in-place at the root.
+    // ZIP archives usually extract in-place at the root.
     //
-    if (ext == ".zip")
-      return dir / p.filename ();
+    if (ext == ".zip") return dir / p.filename ();
 
     return dir / a.name;
   }
 
-  // Archive extraction with optional caching.
+  // Extraction.
   //
-  // We use miniz here for a lightweight dependency. Since it's a C library,
-  // we have to be careful with resource management (closing the reader) if
-  // exceptions are thrown.
-  //
+
   asio::awaitable<void> manifest_coordinator::
   extract_archive (const archive_type& a,
                    const fs::path& archive_path,
@@ -296,22 +282,22 @@ namespace hello
     if (!mz_zip_reader_init_file (&zip, archive_path.string ().c_str (), 0))
       throw runtime_error ("failed to open archive: " + archive_path.string ());
 
-    // Prepare the cache entry. We will populate it as we extract files so
-    // that next time we can verify the extraction without doing the work again.
+    // Prepare the cache entry. We will populate it as we extract files so that
+    // next time we can verify the extraction without doing the work again.
     //
-    archive_cache_entry cache_entry;
+    archive_cache_entry ce;
 
     if (cache != nullptr)
     {
-      cache_entry.archive_name = a.name;
-      cache_entry.archive_hash = a.hash;
-      cache_entry.archive_size = a.size;
+      ce.archive_name = a.name;
+      ce.archive_hash = a.hash;
+      ce.archive_size = a.size;
     }
 
     try
     {
       // If the archive metadata lists specific files, we only extract those.
-      // Otherwise, we default to extracting everything in the archive.
+      // Otherwise, we default to extracting everything.
       //
       if (!a.files.empty ())
       {
@@ -344,15 +330,13 @@ namespace hello
             throw runtime_error ("failed to extract file: " + f.path);
           }
 
-          // Record the extraction in the cache.
-          //
           if (cache != nullptr)
           {
             basic_manifest_cache_entry<>::extracted_file ef;
             ef.path = fs::relative (out, dir).string ();
             ef.hash = f.hash;
             ef.size = f.size;
-            cache_entry.files.push_back (std::move (ef));
+            ce.files.push_back (move (ef));
           }
         }
       }
@@ -393,36 +377,33 @@ namespace hello
                                  string (stat.m_filename));
           }
 
-          // Record the extraction in the cache.
-          //
           if (cache != nullptr)
           {
             archive_cache_entry::extracted_file ef;
             ef.path = fs::relative (out, dir).string ();
             ef.size = stat.m_uncomp_size;
 
-            // Since we don't have a manifest hash for this file (it was
-            // implicit in the archive), we compute it now so we can verify
-            // it later without re-hashing the whole archive.
+            // We don't have a manifest hash for this file since it was
+            // implicit, so compute it now to verify later.
             //
             ef.hash = hash (
               compute_file_hash (out, hash_algorithm::blake3));
 
-            cache_entry.files.push_back (std::move (ef));
+            ce.files.push_back (move (ef));
           }
         }
       }
 
       mz_zip_reader_end (&zip);
 
-      // Commit the entry to the cache now that we know everything succeeded.
+      // Commit the entry to the cache.
       //
-      if (cache != nullptr && !cache_entry.files.empty ())
-        cache->add (std::move (cache_entry));
+      if (cache != nullptr && !ce.files.empty ())
+        cache->add (move (ce));
     }
     catch (...)
     {
-      // Clean up the C resource before propagating the exception.
+      // Clean up C resource before throwing.
       //
       mz_zip_reader_end (&zip);
       throw;
@@ -431,8 +412,9 @@ namespace hello
     co_return;
   }
 
-  // Metrics and helpers.
+  // Metrics.
   //
+
   uint64_t manifest_coordinator::
   calculate_download_size (const manifest_type& m, const fs::path& dir)
   {
@@ -468,11 +450,9 @@ namespace hello
     return m.empty ();
   }
 
-  // Hash computation.
+  // Hashing.
   //
-  // Currently we only support BLAKE3. If we ever need to support other
-  // algorithms, this is where the dispatch logic would go.
-  //
+
   string
   compute_hash (const void* data, size_t size, hash_algorithm a)
   {
@@ -486,76 +466,10 @@ namespace hello
     uint8_t output[BLAKE3_OUT_LEN];
     blake3_hasher_finalize (&hasher, output, BLAKE3_OUT_LEN);
 
-    // Convert the raw bytes to a hex string.
-    //
     ostringstream oss;
     for (size_t i (0); i < BLAKE3_OUT_LEN; ++i)
-    {
-      oss << hex << setw (2) << setfill ('0')
-          << static_cast<int> (output[i]);
-    }
+      oss << hex << setw (2) << setfill ('0') << static_cast<int> (output[i]);
 
     return oss.str ();
-  }
-
-  string
-  compute_file_hash (const fs::path& file_path, hash_algorithm a)
-  {
-    if (a != hash_algorithm::blake3)
-      throw runtime_error ("unsupported hash algorithm");
-
-    ifstream ifs (file_path, ios::binary);
-    if (!ifs)
-      throw runtime_error ("failed to open file for hashing: " +
-                           file_path.string ());
-
-    blake3_hasher hasher;
-    blake3_hasher_init (&hasher);
-
-    // Read and hash the file in sensible chunks.
-    //
-    char buffer[8192];
-    while (ifs.read (buffer, sizeof (buffer)) || ifs.gcount () > 0)
-    {
-      blake3_hasher_update (&hasher,
-                            buffer,
-                            static_cast<size_t> (ifs.gcount ()));
-    }
-
-    if (ifs.bad ())
-      throw runtime_error ("error reading file for hashing: " +
-                           file_path.string ());
-
-    uint8_t output[BLAKE3_OUT_LEN];
-    blake3_hasher_finalize (&hasher, output, BLAKE3_OUT_LEN);
-
-    // Convert to hex.
-    //
-    ostringstream oss;
-    for (size_t i (0); i < BLAKE3_OUT_LEN; ++i)
-    {
-      oss << hex << setw (2) << setfill ('0')
-          << static_cast<int> (output[i]);
-    }
-
-    return oss.str ();
-  }
-
-  bool
-  compare_hashes (const string& h1, const string& h2)
-  {
-    if (h1.size () != h2.size ())
-      return false;
-
-    // Case-insensitive comparison because hex strings can vary.
-    //
-    return equal (h1.begin (),
-                  h1.end (),
-                  h2.begin (),
-                  [] (char a, char b)
-    {
-      return tolower (static_cast<unsigned char> (a)) ==
-             tolower (static_cast<unsigned char> (b));
-    });
   }
 }

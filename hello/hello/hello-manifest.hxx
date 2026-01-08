@@ -160,18 +160,4 @@ namespace hello
   compute_hash (const void* data,
                 std::size_t size,
                 hash_algorithm algorithm);
-
-  // Compute hash of file.
-  //
-  // Reads the entire file and computes its hash.
-  //
-  std::string
-  compute_file_hash (const fs::path& file,
-                     hash_algorithm algorithm);
-
-  // Compare two hashes (case-insensitive).
-  //
-  bool
-  compare_hashes (const std::string& hash1,
-                  const std::string& hash2);
 }

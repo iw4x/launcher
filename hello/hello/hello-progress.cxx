@@ -1,115 +1,131 @@
 #include <hello/hello-progress.hxx>
 
-#include <hello/progress/progress-manager.hxx>
-#include <hello/progress/progress-tracker.hxx>
-
 #include <cmath>
 #include <iomanip>
 #include <sstream>
 
+#include <hello/progress/progress-manager.hxx>
+#include <hello/progress/progress-tracker.hxx>
+
+using namespace std;
+
 namespace hello
 {
-  progress_coordinator::progress_coordinator (asio::io_context& ioc)
+  progress_coordinator::
+  progress_coordinator (asio::io_context& ioc)
     : ioc_ (ioc),
-      manager_ (std::make_unique<manager_type> (ioc))
+      manager_ (make_unique<manager_type> (ioc))
   {
   }
 
-  void
-  progress_coordinator::start ()
+  void progress_coordinator::
+  start ()
   {
     manager_->start ();
   }
 
-  asio::awaitable<void>
-  progress_coordinator::stop ()
+  asio::awaitable<void> progress_coordinator::
+  stop ()
   {
     co_await manager_->stop ();
   }
 
-  bool
-  progress_coordinator::running () const noexcept
+  bool progress_coordinator::
+  running () const noexcept
   {
     return manager_->running ();
   }
 
-  std::shared_ptr<progress_coordinator::entry_type>
-  progress_coordinator::add_entry (std::string label)
+  shared_ptr<progress_coordinator::entry_type> progress_coordinator::
+  add_entry (string label)
   {
-    return manager_->add_entry (std::move (label));
+    return manager_->add_entry (move (label));
   }
 
-  void
-  progress_coordinator::remove_entry (std::shared_ptr<entry_type> entry)
+  void progress_coordinator::
+  remove_entry (shared_ptr<entry_type> e)
   {
-    manager_->remove_entry (std::move (entry));
+    manager_->remove_entry (move (e));
   }
 
-  void
-  progress_coordinator::update_progress (std::shared_ptr<entry_type> entry,
-                                         std::uint64_t current_bytes,
-                                         std::uint64_t total_bytes)
+  void progress_coordinator::
+  update_progress (shared_ptr<entry_type> e,
+                   uint64_t current,
+                   uint64_t total)
   {
-    entry->metrics ().current_bytes.store (current_bytes,
-                                           std::memory_order_relaxed);
+    // Note that we're using relaxed memory order because these values are only
+    // used for feedback. If the user sees a value that is a few CPU cycles
+    // stale, it's not the end of the world. We prefer performance here.
+    //
+    auto& m (e->metrics ());
+    m.current_bytes.store (current, memory_order_relaxed);
+    m.total_bytes.store (total, memory_order_relaxed);
 
-    entry->metrics ().total_bytes.store (total_bytes,
-                                         std::memory_order_relaxed);
+    // Determine the state.
+    //
+    progress_state s ((total > 0 && current >= total)
+                        ? progress_state::completed
+                        : progress_state::active);
 
-    progress_state state = (total_bytes > 0 && current_bytes >= total_bytes)
-      ? progress_state::completed
-      : progress_state::active;
+    m.state.store (s, memory_order_relaxed);
 
-    entry->metrics ().state.store (state, std::memory_order_relaxed);
+    // Update the tracker speed calculation.
+    //
+    auto& t (e->tracker ());
+    t.update (current);
 
-    entry->tracker ().update (current_bytes);
-
-    entry->metrics ().speed.store (entry->tracker ().speed (),
-                                   std::memory_order_relaxed);
+    m.speed.store (t.speed (), memory_order_relaxed);
   }
 
-  void
-  progress_coordinator::add_log (std::string message)
+  void progress_coordinator::
+  add_log (string m)
   {
-    manager_->add_log (std::move (message));
+    manager_->add_log (move (m));
   }
 
-  progress_coordinator::manager_type&
-  progress_coordinator::manager () noexcept
+  progress_coordinator::manager_type& progress_coordinator::
+  manager () noexcept
   {
     return *manager_;
   }
 
-  const progress_coordinator::manager_type&
-  progress_coordinator::manager () const noexcept
+  const progress_coordinator::manager_type& progress_coordinator::
+  manager () const noexcept
   {
     return *manager_;
   }
 
-  std::string
-  format_progress (const progress_metrics& metrics)
+  // Formatting
+  //
+
+  string
+  format_progress (const progress_metrics& m)
   {
-    std::ostringstream oss;
+    // Load everything upfront so that we have a consistent snapshot (or as
+    // close as we can get with relaxed ordering).
+    //
+    uint64_t cur (m.current_bytes.load (memory_order_relaxed));
+    uint64_t tot (m.total_bytes.load (memory_order_relaxed));
+    float spd (m.speed.load (memory_order_relaxed));
 
-    std::uint64_t current (
-      metrics.current_bytes.load (std::memory_order_relaxed));
-    std::uint64_t total (metrics.total_bytes.load (std::memory_order_relaxed));
-    float speed (metrics.speed.load (std::memory_order_relaxed));
+    ostringstream oss;
+    oss << format_bytes (cur) << " / " << format_bytes (tot);
 
-    oss << format_bytes (current) << " / " << format_bytes (total);
-
-    if (total > 0)
+    // If we have a total, we can calculate the percentage.
+    //
+    if (tot > 0)
     {
-      float ratio (static_cast<float> (current) / static_cast<float> (total));
-      oss << " (" << std::fixed << std::setprecision (1) << (ratio * 100.0f)
-          << "%)";
+      float r (static_cast<float> (cur) / static_cast<float> (tot));
+      oss << " (" << fixed << setprecision (1) << (r * 100.0f) << "%)";
     }
 
-    if (speed > 0.0f)
+    // Append speed and ETA if available.
+    //
+    if (spd > 0.0f)
     {
-      oss << " @ " << format_speed (speed);
+      oss << " @ " << format_speed (spd);
 
-      int eta (metrics.eta_seconds ());
+      int eta (m.eta_seconds ());
       if (eta > 0)
         oss << ", ETA " << format_duration (eta);
     }
@@ -117,98 +133,94 @@ namespace hello
     return oss.str ();
   }
 
-  std::string
-  format_bytes (std::uint64_t bytes)
+  string
+  format_bytes (uint64_t b)
   {
-    const char* units [] = {"B", "KiB", "MiB", "GiB", "TiB"};
-    const std::size_t num_units (sizeof (units) / sizeof (units [0]));
+    // Keep it simple: standard SI prefixes.
+    //
+    static const char* units[] = {"B", "KiB", "MiB", "GiB", "TiB"};
+    static const size_t n_units (sizeof (units) / sizeof (*units));
 
-    double value (static_cast<double> (bytes));
-    std::size_t unit_index (0);
+    double v (static_cast<double> (b));
+    size_t i (0);
 
-    while (value >= 1024.0 && unit_index < num_units - 1)
+    while (v >= 1024.0 && i < n_units - 1)
     {
-      value /= 1024.0;
-      ++unit_index;
+      v /= 1024.0;
+      ++i;
     }
 
-    std::ostringstream oss;
-    oss << std::fixed << std::setprecision (1) << value << " "
-        << units [unit_index];
+    ostringstream oss;
+    oss << fixed << setprecision (1) << v << ' ' << units[i];
+    return oss.str ();
+  }
+
+  string
+  format_speed (float bps)
+  {
+    return format_bytes (static_cast<uint64_t> (bps)) + "/s";
+  }
+
+  string
+  format_duration (int s)
+  {
+    ostringstream oss;
+
+    if (s < 60)
+    {
+      oss << s << "s";
+    }
+    else if (s < 3600)
+    {
+      int m (s / 60);
+      int r (s % 60);
+
+      oss << m << "m";
+      if (r > 0) oss << ' ' << r << "s";
+    }
+    else
+    {
+      // Good enough for long durations: hours and minutes.
+      //
+      int h (s / 3600);
+      int m ((s % 3600) / 60);
+
+      oss << h << "h";
+      if (m > 0) oss << ' ' << m << "m";
+    }
 
     return oss.str ();
   }
 
-  std::string
-  format_speed (float bytes_per_sec)
+  string
+  format_progress_bar (float ratio, int width, bool indeterminate)
   {
-    return format_bytes (static_cast<std::uint64_t> (bytes_per_sec)) + "/s";
-  }
-
-  std::string
-  format_duration (int seconds)
-  {
-    if (seconds < 60)
-    {
-      return std::to_string (seconds) + "s";
-    }
-    else if (seconds < 3600)
-    {
-      int minutes (seconds / 60);
-      int secs (seconds % 60);
-
-      std::ostringstream oss;
-      oss << minutes << "m";
-
-      if (secs > 0)
-        oss << " " << secs << "s";
-
-      return oss.str ();
-    }
-    else
-    {
-      int hours (seconds / 3600);
-      int minutes ((seconds % 3600) / 60);
-
-      std::ostringstream oss;
-      oss << hours << "h";
-
-      if (minutes > 0)
-        oss << " " << minutes << "m";
-
-      return oss.str ();
-    }
-  }
-
-  std::string
-  format_progress_bar (float progress_ratio, int width, bool indeterminate)
-  {
-    std::ostringstream oss;
-    oss << "[";
+    ostringstream oss;
+    oss << '[';
 
     if (indeterminate)
     {
+      // If we don't know the progress, just throb in the middle.
+      //
       for (int i (0); i < width; ++i)
         oss << (i == width / 2 ? '>' : ' ');
     }
     else
     {
-      int filled (static_cast<int> (std::round (progress_ratio * width)));
-      filled = std::min (filled, width);
+      int filled (static_cast<int> (round (ratio * width)));
+      filled = min (filled, width);
 
+      // Draw the bar: '===>   '
+      //
       for (int i (0); i < width; ++i)
       {
-        if (i < filled - 1)
-          oss << '=';
-        else if (i == filled - 1)
-          oss << '>';
-        else
-          oss << ' ';
+        if      (i <  filled - 1) oss << '=';
+        else if (i == filled - 1) oss << '>';
+        else                      oss << ' ';
       }
     }
 
-    oss << "]";
-
+    oss << ']';
     return oss.str ();
   }
 }
