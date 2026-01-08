@@ -3,31 +3,38 @@
 #include <filesystem>
 #include <unordered_map>
 #include <memory>
+#include <algorithm>
+#include <cctype>
 
 #include <boost/asio.hpp>
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
+#include <boost/asio/experimental/awaitable_operators.hpp>
 
-#include <hello/hello-options.hxx>
+#include <miniz.h>
+
 #include <hello/version.hxx>
-#include <hello/hello-github.hxx>
 #include <hello/hello-http.hxx>
+#include <hello/hello-steam.hxx>
+#include <hello/hello-github.hxx>
+#include <hello/hello-options.hxx>
 #include <hello/hello-download.hxx>
 #include <hello/hello-manifest.hxx>
 #include <hello/hello-progress.hxx>
-#include <hello/hello-steam.hxx>
-
-#include <miniz.h>
 
 using namespace std;
 namespace fs = filesystem;
 namespace asio = boost::asio;
 
+using namespace boost::asio::experimental::awaitable_operators;
+
 namespace hello
 {
   // Prompt the user for a Yes/No answer.
   //
-  // Returns true for 'y'/'Y' and false for 'n'/'N'.
+  // We strictly require a 'y' or 'n' (case-insensitive) to proceed. While
+  // defaulting on EOF might seem convenient, it's safer to bail out if the
+  // input stream is broken or closed unexpectedly.
   //
   static bool
   yn_prompt (const string& prompt, char def = '\0')
@@ -46,7 +53,7 @@ namespace hello
       bool e (cin.eof ());
 
       if (f || e)
-        cout << endl; // Assume no delimiter (newline).
+        cout << endl; // Assume no delimiter (newline) was printed.
 
       if (f)
         throw ios_base::failure ("unable to read y/n answer from stdin");
@@ -54,21 +61,23 @@ namespace hello
       if (a.empty () && def != '\0')
       {
         // Don't treat EOF as the default answer; we want to see an actual
-        // newline.
+        // newline from the user.
         //
         if (!e)
           a = def;
       }
-    } while (a != "y" && a != "Y" && a != "n" && a != "N");
+    }
+    while (a != "y" && a != "Y" && a != "n" && a != "N");
 
     return a == "y" || a == "Y";
   }
 
   // Calculate a unique, filesystem-safe key for a given path.
   //
-  // We use std::hash to generate a unique ID for the installation path so that
-  // we can associate metadata with the path without worrying about special
-  // characters or path length limits.
+  // We need to associate metadata (like the "accepted" state) with specific
+  // installation paths. Since paths can contain characters that are invalid
+  // for filenames (separators, etc.), hashing the string gives us a stable,
+  // safe identifier.
   //
   static string
   path_key (const fs::path& p)
@@ -79,9 +88,10 @@ namespace hello
 
   // Determine the directory for user preference and state caching.
   //
-  // We try to use the standard platform-specific locations (AppData, Library,
-  // XDG cache). If an installation path is provided, we return a subdirectory
-  // specific to that installation.
+  // We try to be good citizens by respecting platform conventions (XDG on
+  // Linux, AppData on Windows). However, if we can't create directories
+  // there, we fall back to a local ".hello-cache" in the current working
+  // directory to avoid crashing.
   //
   static fs::path
   get_cache_dir (const fs::path& install_path = {})
@@ -89,25 +99,25 @@ namespace hello
     fs::path d;
 
 #ifdef _WIN32
-    // On Windows, caches technically belong in LocalAppData, not Roaming.
+    // On Windows, caches technically belong in LocalAppData.
     //
-    if (const char* v = std::getenv ("LOCALAPPDATA"))
+    if (const char* v = getenv ("LOCALAPPDATA"))
       d = fs::path (v) / "iw4x-hello";
-    else if (const char* v = std::getenv ("APPDATA"))
+    else if (const char* v = getenv ("APPDATA"))
       d = fs::path (v) / "iw4x-hello";
     else
       d = fs::current_path () / ".hello-cache";
 #elif defined(__APPLE__)
-    if (const char* h = std::getenv ("HOME"))
+    if (const char* h = getenv ("HOME"))
       d = fs::path (h) / "Library" / "Application Support" / "iw4x-hello";
     else
       d = fs::current_path () / ".hello-cache";
 #else
     // On Linux/Unix, we respect the XDG Base Directory specification.
     //
-    if (const char* v = std::getenv ("XDG_CACHE_HOME"))
+    if (const char* v = getenv ("XDG_CACHE_HOME"))
       d = fs::path (v) / "iw4x";
-    else if (const char* h = std::getenv ("HOME"))
+    else if (const char* h = getenv ("HOME"))
       d = fs::path (h) / ".cache" / "iw4x";
     else
       d = fs::current_path () / ".hello-cache";
@@ -125,7 +135,7 @@ namespace hello
     if (ec)
     {
       // Fallback: If we can't write to the system location, try a local
-      // directory in the current working directory.
+      // directory.
       //
       d = fs::current_path () / ".hello-cache";
 
@@ -140,8 +150,9 @@ namespace hello
 
   // Attempt to detect a default Modern Warfare 2 installation path.
   //
-  // We check the Steam library logic. If found, we consult our local cache to
-  // see if the user has previously accepted or rejected this specific path.
+  // We rely on the Steam library logic to find the game. If found, we check
+  // our local cache to see if the user has previously made a decision about
+  // this path to avoid pestering them on every run.
   //
   asio::awaitable<optional<fs::path>>
   detect_default_path ()
@@ -165,7 +176,7 @@ namespace hello
         bool is_no (fs::exists (no_marker));
 
         // If we have both markers, the cache is inconsistent (maybe user
-        // fiddling or a race condition). We wipe both and ask again.
+        // fiddling or a race condition). Better to wipe both and ask again.
         //
         if (is_yes && is_no)
         {
@@ -243,54 +254,23 @@ namespace hello
 
     try
     {
-      // Check for a marker indicating a valid, complete installation.
+      // Prepare the cache structure.
       //
-      // If found, and unless the user forces an update, we can skip the
-      // expensive network operations (fetching manifests, checking hashes) and
-      // let the game launch immediately.
-      //
-      fs::path installed_marker (get_cache_dir (conf.install_path) /
-                                 ".hello-installed");
+      fs::path cache_dir (get_cache_dir (conf.install_path));
+      fs::path installed_marker (cache_dir / ".hello-installed");
+      fs::path version_client_marker (cache_dir / ".hello-version-client");
+      fs::path version_raw_marker (cache_dir / ".hello-version-raw");
+      fs::path archive_cache_file (cache_dir / ".hello-archive.json");
 
-      if (!conf.force_update && fs::exists (installed_marker))
-      {
-        if (conf.no_progress)
-          cout << "Installation up to date (cached).\n";
-        co_return 0;
-      }
-
-      // Initialize the various coordinators we will need.
-      //
       github_coordinator   github (ioc);
       http_coordinator     http (ioc);
       download_coordinator downloads (ioc, conf.max_parallel);
       progress_coordinator progress (ioc);
 
-      // Initialize the archive cache to track extracted content.
-      //
-      fs::path cache_file (get_cache_dir (conf.install_path) /
-                           ".hello-archive.json");
-      archive_cache cache (cache_file);
-
-      try
-      {
-        cache.load ();
-      }
-      catch (const exception& e)
-      {
-        // If loading fails, start with an empty cache.
-        //
-        if (conf.no_progress)
-          cerr << "warning: failed to load archive cache: " << e.what () << "\n";
-      }
-
-      // If the UI is enabled, we start the progress reporting now so the
-      // user knows we are busy.
-      //
       if (!conf.no_progress)
         progress.start ();
 
-      // Helper to log messages to either cout or the progress UI.
+      // Helper to log either to stdout or the TUI.
       //
       auto log = [&] (const string& msg)
       {
@@ -300,40 +280,74 @@ namespace hello
           progress.add_log (msg);
       };
 
-      // First, we need to fetch the latest release metadata from GitHub to
-      // see what version we should be running.
+      log ("Checking for updates (" + conf.owner + "/" + conf.repo + ")...");
+
+      // We fetch both the client and the rawfiles releases in parallel.
       //
-      log ("Fetching release from " + conf.owner + "/" + conf.repo + "...");
+      auto [client_rel, raw_rel] = co_await (
+        github.fetch_latest_release (conf.owner,
+                                     conf.repo,
+                                     conf.prerelease) &&
+        github.fetch_latest_release ("iw4x",
+                                     "iw4x-rawfiles",
+                                     conf.prerelease)
+      );
 
-      github_release release (
-        co_await github.fetch_latest_release (conf.owner,
-                                              conf.repo,
-                                              conf.prerelease));
-
-      log ("Found release: " + release.tag_name);
-
-      // Now we download and parse the manifest asset associated with this
-      // release.
+      // Check if we are already up to date by comparing tags.
       //
+      bool cache_valid (fs::exists (installed_marker) &&
+                        fs::exists (version_client_marker) &&
+                        fs::exists (version_raw_marker));
+
+      if (cache_valid && !conf.force_update)
+      {
+        ifstream ifs_c (version_client_marker);
+        string local_client_tag;
+        getline (ifs_c, local_client_tag);
+
+        ifstream ifs_r (version_raw_marker);
+        string local_raw_tag;
+        getline (ifs_r, local_raw_tag);
+
+        if (local_client_tag == client_rel.tag_name &&
+            local_raw_tag == raw_rel.tag_name)
+        {
+          if (conf.no_progress)
+            cout << "Client is up to date (" << local_client_tag << ")." << "\n";
+          else
+            co_await progress.stop ();
+
+          co_return 0;
+        }
+      }
+
+      log ("Update available or verifying installation...");
+      log ("Client: " + client_rel.tag_name);
+      log ("Rawfiles: " + raw_rel.tag_name);
+
+      archive_cache cache (archive_cache_file);
+      try
+      {
+        cache.load ();
+      }
+      catch (const exception& e)
+      {
+        // Not fatal, we'll just re-verify archives if the cache is corrupt.
+        //
+        if (conf.no_progress)
+          cerr << "warning: failed to load archive cache: " << e.what () << "\n";
+      }
+
       log ("Downloading manifest...");
 
-      manifest m (co_await github.fetch_manifest (release));
+      manifest m (co_await github.fetch_manifest (client_rel));
 
       log ("Manifest loaded: " +
            std::to_string (manifest_coordinator::get_file_count (m)) + " files");
 
-      // Next, we handle the rawfiles. These are published as separate release
-      // assets in the iw4x-rawfiles repository. We treat them as archives
-      // that we will download and extract implicitly.
+      // Inject the rawfiles assets into the manifest as archives.
       //
-      log ("Fetching rawfiles release...");
-
-      github_release rawfiles (
-        co_await github.fetch_latest_release ("iw4x",
-                                              "iw4x-rawfiles",
-                                              conf.prerelease));
-
-      for (const auto& a : rawfiles.assets)
+      for (const auto& a : raw_rel.assets)
       {
         manifest_archive ma;
         ma.name = a.name;
@@ -342,7 +356,7 @@ namespace hello
         m.archives.push_back (move (ma));
       }
 
-      log ("Added " + std::to_string (rawfiles.assets.size ()) + " rawfiles");
+      log ("Added " + std::to_string (raw_rel.assets.size ()) + " rawfiles");
 
       // We also need to fetch the DLC manifest from the CDN.
       //
@@ -392,10 +406,15 @@ namespace hello
 
       if (missing_files.empty () && missing_archives.empty ())
       {
-        if (conf.no_progress)
-          cout << "All files up to date.\n";
+        // Everything looks good, just update the markers.
+        //
+        { ofstream os (version_client_marker); os << client_rel.tag_name; }
+        { ofstream os (version_raw_marker);    os << raw_rel.tag_name; }
+        { ofstream os (installed_marker); }
 
-        if (!conf.no_progress)
+        if (conf.no_progress)
+          cout << "All files up to date." << "\n";
+        else
           co_await progress.stop ();
 
         co_return 0;
@@ -422,14 +441,53 @@ namespace hello
       unordered_map<shared_ptr<download_coordinator::task_type>,
                     shared_ptr<progress_entry>> task_entries;
 
-      // Queue the regular file downloads first.
+      // Helper lambda.
       //
+      auto queue_item = [&] (const string& url,
+                             const fs::path& target,
+                             const string& name,
+                             uint64_t size,
+                             const auto& hash)
+      {
+        download_request req;
+        req.urls.push_back (url);
+        req.target = target;
+        req.name = name;
+        req.expected_size = size;
+
+        if (!hash.empty ())
+        {
+          req.verification_method = conf.disable_checksum
+            ? download_verification::none
+            : download_verification::sha256;
+          req.verification_value = hash.string ();
+        }
+        else
+        {
+          req.verification_method = download_verification::none;
+        }
+
+        auto task (downloads.queue_download (move (req)));
+
+        if (!conf.no_progress)
+        {
+          auto entry (progress.add_entry (name));
+          task_entries[task] = entry;
+          entry->metrics ().total_bytes.store (size, memory_order_relaxed);
+
+          task->on_progress = [entry, &progress] (const download_progress& p)
+          {
+            progress.update_progress (entry, p.downloaded_bytes, p.total_bytes);
+          };
+        }
+      };
+
       for (const auto& f : missing_files)
       {
         if (!f.asset_name)
           continue;
 
-        optional<github_asset> a (github.find_asset (release, *f.asset_name));
+        auto a (github.find_asset (client_rel, *f.asset_name));
 
         if (!a)
         {
@@ -443,38 +501,13 @@ namespace hello
         if (target.has_parent_path ())
           fs::create_directories (target.parent_path ());
 
-        download_request req;
-        req.urls.push_back (a->browser_download_url);
-        req.target = target;
-        req.name = target.filename ().string ();
-        req.expected_size = f.size;
-        req.verification_method = conf.disable_checksum
-          ? download_verification::none
-          : download_verification::sha256;
-        req.verification_value = f.hash.value;
-
-        string task_name (req.name);
-        auto task (downloads.queue_download (move (req)));
-
-        if (!conf.no_progress)
-        {
-          auto entry (progress.add_entry (task_name));
-          task_entries[task] = entry;
-
-          // Initialize the expected size so the progress bar scales
-          // correctly from the start.
-          //
-          entry->metrics ().total_bytes.store (f.size, memory_order_relaxed);
-
-          task->on_progress = [entry, &progress] (const download_progress& p)
-          {
-            progress.update_progress (entry, p.downloaded_bytes, p.total_bytes);
-          };
-        }
+        queue_item (a->browser_download_url,
+                    target,
+                    target.filename ().string (),
+                    f.size,
+                    f.hash);
       }
 
-      // Queue the archive downloads.
-      //
       for (const auto& a : missing_archives)
       {
         if (a.url.empty ())
@@ -486,37 +519,9 @@ namespace hello
         if (target.has_parent_path ())
           fs::create_directories (target.parent_path ());
 
-        download_request req;
-        req.urls.push_back (a.url);
-        req.target = target;
-        req.name = a.name;
-        req.expected_size = a.size;
-        req.verification_method = conf.disable_checksum
-          ? download_verification::none
-          : download_verification::sha256;
-        req.verification_value = a.hash.value;
-
-        string task_name (req.name);
-        auto task (downloads.queue_download (move (req)));
-
-        if (!conf.no_progress)
-        {
-          auto entry (progress.add_entry (task_name));
-          task_entries[task] = entry;
-
-          entry->metrics ().total_bytes.store (a.size, memory_order_relaxed);
-
-          task->on_progress = [entry, &progress] (const download_progress& p)
-          {
-            progress.update_progress (entry,
-                                      p.downloaded_bytes,
-                                      p.total_bytes);
-          };
-        }
+        queue_item (a.url, target, a.name, a.size, a.hash);
       }
 
-      // Start the download engine.
-      //
       if (conf.no_progress)
         cout << "Starting downloads...\n";
 
@@ -568,23 +573,26 @@ namespace hello
 
       // Post-process: Extract downloaded archives.
       //
-      // @@: We should consider routing this through the progress log rather
-      // than handling it quietly.
+      // Only .zip files need extraction; .iwd and .ff files are already in
+      // their final form.
       //
-      if (!missing_archives.empty ())
+      for (const auto& a : missing_archives)
       {
-        for (const auto& a : missing_archives)
+        // Skip non-zip archives (.iwd, .ff files don't need extraction).
+        //
+        fs::path p (a.name);
+        string ext (p.extension ().string ());
+        transform (ext.begin (), ext.end (), ext.begin (),
+                   [] (unsigned char c) { return tolower (c); });
+
+        if (ext != ".zip")
+          continue;
+
+        fs::path archive_path (
+          manifest_coordinator::resolve_path (a, conf.install_path));
+
+        if (fs::exists (archive_path))
         {
-          fs::path archive_path (
-            manifest_coordinator::resolve_path (a, conf.install_path));
-
-          if (!fs::exists (archive_path))
-          {
-            cerr << "warning: archive not found for extraction: "
-                 << archive_path << "\n";
-            continue;
-          }
-
           try
           {
             co_await manifest_coordinator::extract_archive (a,
@@ -600,25 +608,21 @@ namespace hello
             co_return 1;
           }
         }
-
-        // Save the updated cache.
-        //
-        try
-        {
-          cache.save ();
-        }
-        catch (const exception& e)
-        {
-          if (conf.no_progress)
-            cerr << "warning: failed to save archive cache: " << e.what () << "\n";
-        }
       }
 
-      // All done. Mark the installation as complete.
-      //
+      try
       {
-        ofstream os (installed_marker);
+        cache.save ();
       }
+      catch (const exception& e)
+      {
+        if (conf.no_progress)
+          cerr << "warning: failed to cache archive: " << e.what () << "\n";
+      }
+
+      { ofstream os (installed_marker); }
+      { ofstream os (version_client_marker); os << client_rel.tag_name; }
+      { ofstream os (version_raw_marker);    os << raw_rel.tag_name; }
 
       co_return 0;
     }
