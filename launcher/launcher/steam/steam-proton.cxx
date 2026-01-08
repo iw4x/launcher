@@ -295,18 +295,25 @@ namespace launcher
         penv[k] = v;
 
       bp::ipstream out;
+      bp::ipstream err;
       bp::child ghost (
         env.proton_bin.string (),
         bp::args ({string ("run"), helper.string (), string ("check")}),
         penv,
         bp::std_out > out,
-        bp::std_err > bp::null
+        bp::std_err > err
       );
 
       ghost.wait ();
 
       string res;
       getline (out, res);
+
+      // Capture any error output for debugging.
+      //
+      string err_line;
+      while (getline (err, err_line))
+        cerr << "ghost process: " << err_line << "\n";
 
       if (ghost.exit_code () == 0 && res == "running")
         co_return ghost_result::steam_running;
