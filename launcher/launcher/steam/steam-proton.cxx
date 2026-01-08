@@ -269,6 +269,23 @@ namespace launcher
       co_return ghost_result::error;
     }
 
+    // Create compatdata directory. Proton gets grumpy if it can't
+    // find the prefix root when bootstrapping the Wine environment.
+    //
+    if (!fs::exists (env.compatdata_path))
+    {
+      error_code ec;
+      fs::create_directories (env.compatdata_path, ec);
+
+      if (ec)
+      {
+        cerr << "error: failed to create compatdata directory "
+             << env.compatdata_path << ": " << ec.message () << endl;
+
+        co_return ghost_result::error;
+      }
+    }
+
     try
     {
       bp::environment penv (boost::this_process::environment ());
