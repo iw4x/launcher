@@ -79,6 +79,19 @@ namespace launcher
     void
     add_log (std::string message);
 
+    // Show dialog (modal overlay).
+    //
+    // Dims the main progress view and displays a centered dialog box.
+    // Use this for important notifications that require user attention.
+    //
+    void
+    show_dialog (std::string title, std::string message);
+
+    // Hide dialog.
+    //
+    void
+    hide_dialog ();
+
     // Access underlying manager.
     //
     manager_type&

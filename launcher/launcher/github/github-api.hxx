@@ -21,6 +21,50 @@ namespace launcher
   namespace ssl = asio::ssl;
   namespace json = boost::json;
 
+  // GitHub API rate limit information.
+  //
+  struct github_rate_limit
+  {
+    std::uint32_t limit;       // Maximum number of requests per hour
+    std::uint32_t remaining;   // Number of requests remaining
+    std::uint64_t reset;       // Unix timestamp when the rate limit resets
+    std::uint32_t used;        // Number of requests used
+
+    github_rate_limit ()
+      : limit (0), remaining (0), reset (0), used (0) {}
+
+    bool
+    is_exceeded () const {return remaining == 0;}
+
+    // Calculate seconds until reset.
+    //
+    std::uint64_t
+    seconds_until_reset () const
+    {
+      // First, let's grab the current time. We are using system_clock here
+      // because the reset member is a wall-clock timestamp.
+      //
+      auto now (std::chrono::system_clock::now ());
+
+      // Now convert this to seconds since the epoch.
+      //
+      auto now_sec (
+        std::chrono::duration_cast<std::chrono::seconds> (
+          now.time_since_epoch ()).count ());
+
+      // The count comes back as a signed type, so we need to cast it to
+      // uint64_t to match our reset variable.
+      //
+      auto n (static_cast<std::uint64_t> (now_sec));
+
+      // Finally, check if we've passed the mark. If the reset time is still
+      // in the future, return the difference. Otherwise, we are already
+      // there, so return 0.
+      //
+      return reset > n ? reset - n : 0;
+    }
+  };
+
   // GitHub API response.
   //
   struct github_response
@@ -29,12 +73,16 @@ namespace launcher
     std::string body;
     std::map<std::string, std::string> headers;
     std::optional<std::string> error_message;
+    std::optional<github_rate_limit> rate_limit;
 
     bool
     success () const {return status_code >= 200 && status_code < 300;}
 
     bool
     empty () const {return body.empty ();}
+
+    bool
+    is_rate_limited () const {return status_code == 403 || status_code == 429;}
   };
 
   // GitHub API traits for customization.
@@ -162,6 +210,21 @@ namespace launcher
     void
     set_token (std::string token) {token_ = std::move (token);}
 
+    // Set progress callback for rate limit notifications.
+    //
+    // The callback will be invoked when rate limiting occurs, with parameters:
+    // - message: Description of what's happening
+    // - seconds_remaining: Time until rate limit reset (updated each second)
+    //
+    using progress_callback_type =
+      std::function<void (const std::string& message, std::uint64_t seconds_remaining)>;
+
+    void
+    set_progress_callback (progress_callback_type callback)
+    {
+      progress_callback_ = std::move (callback);
+    }
+
     // Execute generic request.
     //
     asio::awaitable<response_type>
@@ -246,6 +309,8 @@ namespace launcher
     asio::io_context& ioc_;
     ssl::context ssl_ctx_;
     std::optional<std::string> token_;
+    std::optional<github_rate_limit> last_rate_limit_;
+    progress_callback_type progress_callback_;
 
     // Internal HTTP operations.
     //
@@ -258,6 +323,16 @@ namespace launcher
 
     void
     add_default_headers (std::map<std::string, std::string>& headers) const;
+
+    // Extract rate limit information from response headers.
+    //
+    static std::optional<github_rate_limit>
+    extract_rate_limit (const std::map<std::string, std::string>& headers);
+
+    // Check and handle rate limiting.
+    //
+    asio::awaitable<void>
+    handle_rate_limit (const github_rate_limit&);
   };
 }
 

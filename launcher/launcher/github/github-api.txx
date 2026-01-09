@@ -6,6 +6,11 @@ namespace launcher
   asio::awaitable<typename github_api<T>::response_type> github_api<T>::
   execute (request_type request)
   {
+    // Check if we have a cached rate limit and need to wait before proceeding.
+    //
+    if (last_rate_limit_ && last_rate_limit_->is_exceeded ())
+      co_await handle_rate_limit (*last_rate_limit_);
+
     std::string url (request.url ());
     std::string host (endpoint_type::api_host);
     std::string target (url);
@@ -25,14 +30,24 @@ namespace launcher
     http::verb verb (http::verb::get);
     switch (request.method)
     {
-      case request_type::method_type::get:     verb = http::verb::get;    break;
-      case request_type::method_type::post:    verb = http::verb::post;   break;
-      case request_type::method_type::put:     verb = http::verb::put;    break;
-      case request_type::method_type::patch:   verb = http::verb::patch;  break;
+      case request_type::method_type::get:     verb = http::verb::get;     break;
+      case request_type::method_type::post:    verb = http::verb::post;    break;
+      case request_type::method_type::put:     verb = http::verb::put;     break;
+      case request_type::method_type::patch:   verb = http::verb::patch;   break;
       case request_type::method_type::delete_: verb = http::verb::delete_; break;
     }
 
-    co_return co_await perform_request (host, target, verb, headers, request.body);
+    response_type resp (co_await perform_request (host, target, verb, headers, request.body));
+
+    // If the response indicates rate limiting, wait and retry once.
+    //
+    if (resp.is_rate_limited () && resp.rate_limit && resp.rate_limit->is_exceeded ())
+    {
+      co_await handle_rate_limit (*resp.rate_limit);
+      resp = co_await perform_request (host, target, verb, headers, request.body);
+    }
+
+    co_return resp;
   }
 
   template <typename T>
@@ -94,6 +109,12 @@ namespace launcher
 
       for (const auto& field : res)
         resp.headers[std::string (field.name_string ())] = std::string (field.value ());
+
+      // Extract rate limit information from response headers.
+      //
+      resp.rate_limit = extract_rate_limit (resp.headers);
+      if (resp.rate_limit)
+        last_rate_limit_ = *resp.rate_limit;
 
       if (!resp.success ())
       {
@@ -398,5 +419,94 @@ namespace launcher
 
     json::value jv (json::parse (resp.body));
     co_return traits_type::parse_user (jv);
+  }
+
+  template <typename T>
+  std::optional<github_rate_limit> github_api<T>::
+  extract_rate_limit (const std::map<std::string, std::string>& headers)
+  {
+    // Try to extract the standard GitHub rate limit headers. Note that some
+    // responses might not have them (e.g., if we hit some other error or a
+    // cached response), but if we see at least one, we'll try to build a valid
+    // limit object.
+    //
+    // https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api
+    //
+    github_rate_limit l;
+    bool found (false);
+
+    auto extract = [&headers] (const char* name, auto& field)
+    {
+      auto it (headers.find (name));
+      if (it != headers.end ())
+      {
+        try
+        {
+          // stoul/stoull are usually fine here since the headers are
+          // numeric. If they are garbage, we just ignore them.
+          //
+          if constexpr (std::is_same_v<decltype (field), std::uint64_t>)
+            field = std::stoull (it->second);
+          else
+            field = std::stoul (it->second);
+
+          return true;
+        }
+        catch (...) {}
+      }
+      return false;
+    };
+
+    if (extract ("x-ratelimit-limit", l.limit))         found = true;
+    if (extract ("x-ratelimit-remaining", l.remaining)) found = true;
+    if (extract ("x-ratelimit-reset", l.reset))         found = true;
+    if (extract ("x-ratelimit-used", l.used))           found = true;
+
+    return found ? std::optional<github_rate_limit> (l) : std::nullopt;
+  }
+
+  template <typename T>
+  asio::awaitable<void> github_api<T>::
+  handle_rate_limit (const github_rate_limit& limit)
+  {
+    if (limit.is_exceeded ())
+    {
+      // We have hit the ceiling. Calculate how long we need to wait and add
+      // a small buffer (1 second) just to be on the safe side and ensure
+      // the server has definitely rolled over.
+      //
+      auto wait (limit.seconds_until_reset () + 1);
+
+      asio::steady_timer timer (ioc_);
+
+      // If the caller provided a progress callback, we can be nice and show a
+      // countdown so the user knows we haven't hung.
+      //
+      if (progress_callback_)
+      {
+        progress_callback_ (
+          "GitHub API rate limit exceeded. Waiting for reset...",
+          wait);
+
+        // Spin the loop every second to update the status.
+        //
+        for (auto rem (wait); rem > 0; --rem)
+        {
+          timer.expires_after (std::chrono::seconds (1));
+          co_await timer.async_wait (asio::use_awaitable);
+
+          progress_callback_ (
+            "GitHub API rate limit exceeded. Waiting for reset...",
+            rem - 1);
+        }
+      }
+      // Otherwise just sleep efficiently for the whole duration.
+      //
+      else
+      {
+        timer.expires_after (std::chrono::seconds (wait));
+        co_await timer.async_wait (asio::use_awaitable);
+      }
+    }
   }
 }

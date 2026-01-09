@@ -10,7 +10,8 @@ namespace launcher
       : ioc_ (ioc),
         update_timer_ (ioc),
         render_timer_ (ioc),
-        strand_ (asio::make_strand (ioc))
+        strand_ (asio::make_strand (ioc)),
+        dialog_strand_ (asio::make_strand (ioc))
   {
   }
 
@@ -181,6 +182,38 @@ namespace launcher
       log_buffers_ [w].erase (log_buffers_ [w].begin ());
 
     log_buffer_.store (w, std::memory_order_release);
+  }
+
+  template <typename T>
+  void basic_progress_manager<T>::
+  show_dialog (string_type title, string_type message)
+  {
+    // We need to update the dialog state. Since the UI rendering loop might be
+    // accessing these members concurrently, we serialize the update via the
+    // strand.
+    //
+    // Note that we capture the strings by value (moving them) so that they
+    // survive until the handler is actually executed, which might be after
+    // this function returns.
+    //
+    asio::post (dialog_strand_,
+                [this, t = std::move (title), m = std::move (message)] ()
+    {
+      dialog_title_ = std::move (t);
+      dialog_message_ = std::move (m);
+      dialog_visible_.store (true, std::memory_order_release);
+    });
+  }
+
+  template <typename T>
+  void basic_progress_manager<T>::
+  hide_dialog ()
+  {
+    // Just flip the visibility flag. We use release semantics here to make
+    // sure that if we were modifying any other shared state relevant to the
+    // hiding process, it would be visible to the consumer.
+    //
+    dialog_visible_.store (false, std::memory_order_release);
   }
 
   template <typename T>
@@ -379,6 +412,12 @@ namespace launcher
     //
     int lr (log_buffer_.load (std::memory_order_acquire));
     ctx.log_messages = log_buffers_[lr];
+
+    // Dialog state.
+    //
+    ctx.dialog_visible = dialog_visible_.load (std::memory_order_acquire);
+    if (ctx.dialog_visible)
+      ctx.dialog_title = dialog_title_, ctx.dialog_message = dialog_message_;
 
     return ctx;
   }

@@ -305,10 +305,36 @@ namespace launcher
         c.total_count,
         c.overall));
 
-      return vbox ({
+      Element main_view = vbox ({
         vbox (std::move (es)) | flex | yframe,
         vbox (std::move (bottom_es))
       });
+
+      // If the dialog is currently visible, we want to dim the main view in
+      // the background and overlay the dialog box on top of it.
+      //
+      if (c.dialog_visible)
+      {
+        // Construct the dialog content. We force a minimum width and height
+        // to ensure it doesn't look too cramped.
+        //
+        Element content (
+          vbox ({
+            text (c.dialog_title) | bold | center,
+            separator (),
+            text (c.dialog_message) | center
+          }) | border | size (WIDTH, GREATER_THAN, 50) | size (HEIGHT, GREATER_THAN, 7));
+
+        // Use a dbox (z-stack) to layer the dialog over the dimmed main
+        // view.
+        //
+        return dbox ({
+          main_view | dim,
+          content | center
+        });
+      }
+
+      return main_view;
     });
   }
 }
