@@ -848,7 +848,7 @@ namespace launcher
         bp::child game (
           binary_path.string (),
           bp::args (ctx_.proton_arguments),
-          bp::start_dir (ctx_.install_location)
+          bp::start_dir (ctx_.install_location.string ())
         );
 
         game.detach ();
