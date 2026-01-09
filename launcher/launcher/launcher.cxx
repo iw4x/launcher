@@ -12,6 +12,7 @@
 #include <boost/asio/detached.hpp>
 #include <boost/asio/experimental/awaitable_operators.hpp>
 #include <boost/asio/experimental/parallel_group.hpp>
+#include <boost/process.hpp>
 
 #include <launcher/launcher-download.hxx>
 #include <launcher/launcher-github.hxx>
@@ -720,6 +721,8 @@ namespace launcher
 #ifdef __linux__
       if (ctx_.use_proton)
         co_return co_await execute_proton ();
+#else
+      co_return co_await execute_native ();
 #endif
 
       if (ctx_.headless)
@@ -734,14 +737,14 @@ namespace launcher
     {
       if (ctx_.proton_binary.empty ())
       {
-        cerr << "error: proton binary unspecified\n";
+        cerr << "error: game binary unspecified\n";
         co_return 1;
       }
 
       fs::path binary_path (ctx_.install_location / ctx_.proton_binary);
       if (!fs::exists (binary_path))
       {
-        cerr << "error: proton binary not found: " << binary_path << "\n";
+        cerr << "error: game binary not found: " << binary_path << "\n";
         co_return 1;
       }
 
@@ -793,6 +796,61 @@ namespace launcher
       if (!success)
       {
         cerr << "error: execution failed\n";
+        co_return 1;
+      }
+
+      if (ctx_.headless)
+        cout << "Game launched.\n";
+
+      co_return 0;
+    }
+#endif
+
+#ifndef __linux__
+    // Unlike the Linux/Proton path, there is no strict ABI or namespace
+    // boundary that we must bridge prior to launch.
+    //
+    // While we could technically introduce a pre-launch Steam check here to
+    // unify behavior across platforms, it is not structurally required on
+    // Windows. The game's own startup logic is capable of handling the "Steam
+    // not found" scenario (or lazy-loading the interface) without our help.
+    //
+    // So for now, we favor correctness-by-minimalism: we treat the launcher as
+    // a thin process-spawning layer that mirrors native OS expectations,
+    // leaving the heavy lifting to the game itself.
+    //
+    asio::awaitable<int>
+    execute_native ()
+    {
+      if (ctx_.proton_binary.empty ())
+      {
+        cerr << "error: game binary unspecified\n";
+        co_return 1;
+      }
+
+      fs::path binary_path (ctx_.install_location / ctx_.proton_binary);
+      if (!fs::exists (binary_path))
+      {
+        cerr << "error: game binary not found: " << binary_path << "\n";
+        co_return 1;
+      }
+
+      log ("Starting game...");
+
+      try
+      {
+        namespace bp = boost::process;
+        bp::child game (
+          binary_path.string (),
+          bp::args (ctx_.proton_arguments),
+          bp::start_dir (ctx_.install_location)
+        );
+
+        game.detach ();
+      }
+      catch (const exception& e)
+      {
+        cerr << "error: failed to launch game: " << e.what () << "\n";
         co_return 1;
       }
 
