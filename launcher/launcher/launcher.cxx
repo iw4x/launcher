@@ -302,6 +302,11 @@ namespace launcher
           downloads_ (ioc_, ctx_.concurrency_limit),
           progress_ (ioc_)
     {
+      github_.set_progress_callback (
+        [this] (const string& message, uint64_t seconds_remaining)
+      {
+        this->handle_rate_limit_progress (message, seconds_remaining);
+      });
     }
 
     asio::awaitable<int>
@@ -860,6 +865,34 @@ namespace launcher
       co_return 0;
     }
 #endif
+
+  private:
+    // Report the rate limit backoff status to the user.
+    //
+    void
+    handle_rate_limit_progress (const string& msg, uint64_t rem)
+    {
+      // If we are running with the UI, pop up a dialog with the countdown so
+      // the user knows exactly why we are stalled.
+      //
+      if (!ctx_.headless)
+      {
+        string s (
+          msg + "\n\nTime remaining: " + std::to_string (rem) + " seconds");
+
+        progress_.show_dialog ("Rate Limit", s);
+
+        // If the countdown has finished, we can dismiss the dialog and
+        // carry on.
+        //
+        if (rem == 0)
+          progress_.hide_dialog ();
+      }
+      // Otherwise, if we are headless, just dump it to the console.
+      //
+      else
+        cout << msg << " (" << rem << " seconds remaining)\n";
+    }
 
     asio::io_context& ioc_;
     runtime_context ctx_;

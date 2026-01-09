@@ -83,6 +83,18 @@ namespace launcher
     manager_->add_log (move (m));
   }
 
+  void progress_coordinator::
+  show_dialog (string title, string message)
+  {
+    manager_->show_dialog (move (title), move (message));
+  }
+
+  void progress_coordinator::
+  hide_dialog ()
+  {
+    manager_->hide_dialog ();
+  }
+
   progress_coordinator::manager_type& progress_coordinator::
   manager () noexcept
   {

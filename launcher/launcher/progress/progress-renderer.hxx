@@ -86,6 +86,12 @@ namespace launcher
     std::size_t completed_count {0};
     std::size_t total_count {0};
 
+    // Dialog state (optional modal overlay).
+    //
+    bool dialog_visible {false};
+    string_type dialog_title;
+    string_type dialog_message;
+
     basic_progress_render_context () = default;
   };
 

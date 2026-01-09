@@ -36,6 +36,12 @@ namespace launcher
     api_->set_token (move (t));
   }
 
+  void github_coordinator::
+  set_progress_callback (progress_callback_type callback)
+  {
+    api_->set_progress_callback (move (callback));
+  }
+
   asio::awaitable<github_coordinator::release_type> github_coordinator::
   fetch_latest_release (const string& owner,
                         const string& repo,

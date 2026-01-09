@@ -152,6 +152,18 @@ namespace launcher
     void
     add_log (string_type message);
 
+    // Show dialog (modal overlay).
+    //
+    // Dims the main progress view and displays a centered dialog box.
+    //
+    void
+    show_dialog (string_type title, string_type message);
+
+    // Hide dialog.
+    //
+    void
+    hide_dialog ();
+
     // Get IO context.
     //
     asio::io_context&
@@ -216,6 +228,13 @@ namespace launcher
     //
     std::vector<string_type> log_buffers_[2];
     std::atomic<int> log_buffer_ {0};
+
+    // Dialog state (lock-free).
+    //
+    std::atomic<bool> dialog_visible_ {false};
+    string_type dialog_title_;
+    string_type dialog_message_;
+    asio::strand<executor_type> dialog_strand_;
   };
 
   using progress_entry = basic_progress_entry<>;

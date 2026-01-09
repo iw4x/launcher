@@ -40,6 +40,14 @@ namespace launcher
     void
     set_token (std::string token);
 
+    // Set progress callback for rate limit notifications.
+    //
+    using progress_callback_type =
+      std::function<void (const std::string& message, std::uint64_t seconds_remaining)>;
+
+    void
+    set_progress_callback (progress_callback_type callback);
+
     // Fetch latest release.
     //
     // If include_prerelease is true, returns the most recent release
