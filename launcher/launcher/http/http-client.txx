@@ -558,6 +558,11 @@ namespace launcher
 
       while (!p.is_done ())
       {
+        // Reset timeout for each chunk to keep connection alive as long
+        // as data is actively flowing.
+        //
+        layer.expires_after (std::chrono::milliseconds (tr.request_timeout));
+
         std::size_t n (
           co_await http::async_read_some (s, b, p, asio::use_awaitable));
 
@@ -644,6 +649,11 @@ namespace launcher
 
       while (!p.is_done ())
       {
+        // Reset timeout for each chunk to keep connection alive as long
+        // as data is actively flowing.
+        //
+        s.expires_after (std::chrono::milliseconds (tr.request_timeout));
+
         std::size_t n (
           co_await http::async_read_some (s, b, p, asio::use_awaitable));
 
