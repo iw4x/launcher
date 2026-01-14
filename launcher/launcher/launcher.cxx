@@ -589,6 +589,9 @@ namespace launcher
         req.name = name;
         req.expected_size = size;
 
+        if (url.find ("cdn.iw4x.io") != string::npos)
+          req.rate_limit_bytes_per_second = 2097152; // 2 MB/s
+
         if (!hash.empty ())
         {
           req.verification_method = ctx_.disable_integrity_check

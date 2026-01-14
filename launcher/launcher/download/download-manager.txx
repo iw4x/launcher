@@ -200,7 +200,8 @@ namespace launcher
           co_await client.download (url,
                                     task->request.target.string (),
                                     progress_callback,
-                                    resume_from));
+                                    resume_from,
+                                    task->request.rate_limit_bytes_per_second));
 
         task->update_progress (bytes_downloaded, bytes_downloaded);
         task->response.http_status_code = 200; // Successful download

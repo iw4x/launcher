@@ -4,6 +4,7 @@
 #include <memory>
 #include <queue>
 #include <functional>
+#include <cstddef>
 
 #include <boost/asio.hpp>
 
@@ -60,7 +61,7 @@ namespace launcher
     //
     explicit
     basic_download_manager (boost::asio::io_context& ioc,
-                            std::size_t max_parallel = 4)
+                            std::size_t max_parallel = 1)
       : ioc_ (ioc),
         max_parallel_ (max_parallel)
     {

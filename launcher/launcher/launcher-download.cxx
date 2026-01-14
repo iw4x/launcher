@@ -18,7 +18,7 @@ namespace launcher
   download_coordinator::
   download_coordinator (asio::io_context& ioc)
     : ioc_ (ioc),
-      manager_ (make_unique<manager_type> (ioc, 4)),
+      manager_ (make_unique<manager_type> (ioc, 1)),
       http_ (make_unique<http_client> (ioc))
   {
   }
