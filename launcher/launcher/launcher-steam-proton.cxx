@@ -125,7 +125,7 @@ namespace launcher
     // Now we run the helper inside the container to see if Steam is actually
     // reachable from that environment.
     //
-    fs::path helper (launcher_dir / "steam.exe");
+    fs::path helper (game_dir / "steam.exe");
 
     if (!fs::exists (helper))
     {
