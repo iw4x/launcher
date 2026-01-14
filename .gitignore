@@ -1,5 +1,9 @@
 .bdep/
 
+# Steam artefact.
+#
+steam_appid.txt
+
 # Local default options files.
 #
 .build2/local/
