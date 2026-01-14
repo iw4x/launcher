@@ -516,7 +516,7 @@ namespace launcher
 
 #ifdef __linux__
       inject_assets (remote.helper.assets, "steam.exe");
-      inject_assets (remote.helper.assets, "steam_api64.dll ");
+      inject_assets (remote.helper.assets, "steam_api64.dll");
       log ("Added steam helper");
 #endif
 
