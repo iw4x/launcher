@@ -49,6 +49,10 @@ namespace launcher
     std::uint32_t connect_timeout {30};
     std::uint32_t transfer_timeout {300};
 
+    // Rate limiting (bytes per second, 0 = no limit).
+    //
+    std::uint64_t rate_limit_bytes_per_second {0};
+
     // Request metadata.
     //
     string_type name;        // Human-readable name

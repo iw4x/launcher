@@ -187,7 +187,8 @@ namespace launcher
     download (const string_type& url,
               const string_type& target_path,
               progress_callback progress = nullptr,
-              std::optional<std::uint64_t> resume_from = std::nullopt);
+              std::optional<std::uint64_t> resume_from = std::nullopt,
+              std::uint64_t rate_limit_bytes_per_second = 0);
 
     // Get the session.
     //
@@ -216,6 +217,7 @@ namespace launcher
                    const string_type& target_path,
                    progress_callback progress,
                    std::optional<std::uint64_t> resume_from,
+                   std::uint64_t rate_limit_bytes_per_second,
                    std::uint8_t redirect_count);
 
     // Perform request over SSL.

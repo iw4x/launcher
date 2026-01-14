@@ -399,9 +399,10 @@ namespace launcher
   download (const string_type& url,
             const string_type& file,
             progress_callback progress,
-            std::optional<std::uint64_t> resume)
+            std::optional<std::uint64_t> resume,
+            std::uint64_t rate_limit_bytes_per_second)
   {
-    co_return co_await download_impl (url, file, progress, resume, 0);
+    co_return co_await download_impl (url, file, progress, resume, rate_limit_bytes_per_second, 0);
   }
 
   // Internal download implementation.
@@ -417,27 +418,30 @@ namespace launcher
                  const string_type& file,
                  progress_callback progress,
                  std::optional<std::uint64_t> resume,
+                 std::uint64_t rate_limit_bytes_per_second,
                  std::uint8_t redirect_count)
   {
-    using beast_req = http::request<http::empty_body>;
+    using namespace std::chrono;
+    using parser_type = http::response_parser<http::buffer_body>;
 
     const auto& tr (session_->traits ());
 
     if (redirect_count >= tr.max_redirects)
       throw std::runtime_error ("maximum redirects exceeded");
 
+    // Prepare the request.
+    //
+    // If we are resuming a download, we need to instruct the server to skip
+    // the bytes we already have. Note that the Range header is inclusive,
+    // so we request from the current size onwards.
+    //
     request_type req (http_method::get, url);
 
-    // If we are resuming, ask the server for the rest of the file.
-    //
     if (resume)
-    {
-      req.set_header (
-        string_type ("Range"),
-        string_type ("bytes=") +
-        std::to_string (*resume) +
-        string_type ("-"));
-    }
+      req.set_header (string_type ("Range"),
+                      string_type ("bytes=") +
+                      std::to_string (*resume) +
+                      string_type ("-"));
 
     req.normalize ();
 
@@ -448,8 +452,9 @@ namespace launcher
     //
     auto& ctx (session_->io_context ());
     tcp::resolver rslv (ctx);
-    auto addrs (co_await rslv.async_resolve (
-      parts.host, parts.port, asio::use_awaitable));
+    auto addrs (co_await rslv.async_resolve (parts.host,
+                                             parts.port,
+                                             asio::use_awaitable));
 
     // Open the output file.
     //
@@ -457,51 +462,27 @@ namespace launcher
     // leave garbage at the end if the file already existed.
     //
     std::ios_base::openmode mode (std::ios::binary | std::ios::out);
-    if (resume)
-      mode |= std::ios::app;
-    else
-      mode |= std::ios::trunc;
+    mode |= (resume ? std::ios::app : std::ios::trunc);
 
     std::ofstream ofs (file, mode);
     if (!ofs)
       throw std::runtime_error ("failed to open file for writing");
 
-    std::uint64_t transferred (resume ? *resume : 0);
-    std::uint64_t total (0);
+    std::uint64_t off (resume ? *resume : 0);
+    std::uint64_t tot (0);
 
-    // Implementation Note:
+    // Common transfer logic for both SSL and TCP streams.
     //
-    // Ideally, we would template the stream logic below to avoid duplicating
-    // the SSL vs TCP code. However, Beast streams and SSL streams have
-    // slightly different APIs and lifetime requirements that make a common
-    // template clumsy to write and maintain.
-    //
-    // So for now, we accept the duplication for the sake of clarity. If this
-    // logic grows any more complex, we should revisit this.
-    //
-    if (ssl)
+    auto transfer = [&] (auto& s) -> asio::awaitable<std::uint64_t>
     {
-      using stream_type = beast::ssl_stream<beast::tcp_stream>;
-      stream_type s (ctx, session_->ssl_context ());
-
-      if (!SSL_set_tlsext_host_name (s.native_handle (), parts.host.c_str ()))
-      {
-        int v (static_cast<int> (::ERR_get_error ()));
-        beast::error_code ec (v, asio::error::get_ssl_category ());
-        throw beast::system_error (ec, "Failed to set SNI hostname");
-      }
-
+      // Note that need to access the lowest layer (the TCP socket) to set
+      // timeouts, regardless of whether there is an SSL layer on top.
+      //
       auto& layer (beast::get_lowest_layer (s));
-      layer.expires_after (std::chrono::milliseconds (tr.connect_timeout));
-
-      co_await layer.async_connect (addrs, asio::use_awaitable);
-
-      co_await s.async_handshake (
-        ssl::stream_base::client, asio::use_awaitable);
 
       // Send Request.
       //
-      beast_req br;
+      http::request<http::empty_body> br;
       br.method (http::verb::get);
       br.target (parts.target);
       br.version (11);
@@ -510,20 +491,22 @@ namespace launcher
       for (const auto& h : req.headers)
         br.set (h.name, h.value);
 
-      layer.expires_after (std::chrono::milliseconds (tr.request_timeout));
-
+      layer.expires_after (milliseconds (tr.request_timeout));
       co_await http::async_write (s, br, asio::use_awaitable);
 
-      // Use a buffer_body parser to read the response body in small chunks into
-      // our local buffer and write them to the file immediately.
+      // Read response body in chunks.
       //
       beast::flat_buffer b;
-      http::response_parser<http::buffer_body> p;
+      parser_type p;
       p.body_limit (std::numeric_limits<std::uint64_t>::max ());
 
       co_await http::async_read_header (s, b, p, asio::use_awaitable);
 
-      // Inspect for redirects before reading the body.
+      // Handle Redirects.
+      //
+      // That is, if the server asks us to go elsewhere, we must close the
+      // current file handle (to flush buffers) and recursively call ourselves
+      // with the new URL.
       //
       auto status (p.get ().result_int ());
 
@@ -534,34 +517,46 @@ namespace launcher
         {
           ofs.close ();
 
-          beast::error_code ec;
-          ec = s.shutdown (ec);
-
+          // Note that we don't need to explicitly shutdown the socket here
+          // because we are about to detach from this stack frame. The
+          // destructor of the stream `s` will handle the cleanup.
+          //
           co_return co_await download_impl (string_type (loc),
                                             file,
                                             progress,
                                             resume,
+                                            rate_limit_bytes_per_second,
                                             redirect_count + 1);
         }
       }
 
+      // Check for errors. Note that 206 Partial Content is valid if we
+      // requested a Range.
+      //
       if (status != 200 && status != 206)
         throw std::runtime_error ("download failed with status: " +
                                   std::to_string (status));
 
       if (p.content_length ())
-        total = *p.content_length () + transferred;
+        tot = *p.content_length () + off;
 
       char dbuf[8192];
       p.get ().body ().data = dbuf;
       p.get ().body ().size = sizeof (dbuf);
 
+      auto start (steady_clock::now ());
+      std::uint64_t trans (0); // bytes transferred in current window.
+      auto lim (rate_limit_bytes_per_second);
+
       while (!p.is_done ())
       {
-        // Reset timeout for each chunk to keep connection alive as long
-        // as data is actively flowing.
+        // Reset timeout to keep connection alive while data flows.
         //
-        layer.expires_after (std::chrono::milliseconds (tr.request_timeout));
+        // This fixes a bug where large downloads could still hit the request
+        // timeout for some users, causing the transfer to be aborted
+        // mid-download.
+        //
+        layer.expires_after (milliseconds (tr.request_timeout));
 
         std::size_t n (
           co_await http::async_read_some (s, b, p, asio::use_awaitable));
@@ -569,118 +564,97 @@ namespace launcher
         if (n > 0)
         {
           ofs.write (dbuf, n);
-          transferred += n;
+          off += n;
+          trans += n;
 
           if (progress)
-            progress (transferred, total);
+            progress (off, tot);
 
-          // Reset the buffer for the next chunk.
+          // Throttle the transfer since we are saturating the VPS uplink.
           //
+          // Note that this is not an arbitrary limit but a hard cap on the
+          // host side. And since upgrading the plan is too expensive for a
+          // non-commercial project, we have to make do with what we have.
+          //
+          if (lim > 0)
+          {
+            auto now (steady_clock::now ());
+            auto el (duration_cast<milliseconds> (now - start).count ());
+            auto exp ((trans * 1000) / lim);
+
+            if (el < exp)
+            {
+              // We are running ahead of schedule so throttle.
+              //
+              asio::steady_timer t (session_->io_context (),
+                                    milliseconds (exp - el));
+              co_await t.async_wait (asio::use_awaitable);
+            }
+
+            // Reset the accounting window every second to prevent drift.
+            //
+            if (el >= 1000)
+              start = now, trans = 0;
+          }
+
           p.get ().body ().data = dbuf;
           p.get ().body ().size = sizeof (dbuf);
         }
       }
 
       ofs.flush ();
+      co_return off;
+    };
+
+    // Connection setup.
+    //
+    // Depending on the scheme, we either instantiate a plain TCP stream or
+    // an SSL stream. Note that for SSL, we must perform the handshake
+    // *before* we can start talking HTTP.
+    //
+    if (ssl)
+    {
+      using stream = beast::ssl_stream<beast::tcp_stream>;
+      stream s (ctx, session_->ssl_context ());
+
+      // We must set the SNI hostname, otherwise many modern servers (like
+      // Cloudflare) will reject the handshake.
+      //
+      if (!SSL_set_tlsext_host_name (s.native_handle (), parts.host.c_str ()))
+      {
+        beast::error_code ec (static_cast<int> (::ERR_get_error ()),
+                              asio::error::get_ssl_category ());
+        throw beast::system_error (ec, "Failed to set SNI hostname");
+      }
+
+      auto& layer (beast::get_lowest_layer (s));
+      layer.expires_after (milliseconds (tr.connect_timeout));
+
+      co_await layer.async_connect (addrs, asio::use_awaitable);
+      co_await s.async_handshake (ssl::stream_base::client,
+                                  asio::use_awaitable);
+
+      auto r (co_await transfer (s));
+
+      // Close the SSL stream. We don't wait for async_shutdown to complete
+      // because many servers don't send close_notify properly, instead, we just
+      // close the underlying socket.
+      //
+      beast::error_code ec;
+      beast::get_lowest_layer (s).socket ().shutdown (tcp::socket::shutdown_both, ec);
+      co_return r;
     }
     else
     {
-      // TCP/Plaintext Path.
-      //
-      // This duplicates the logic above but operates on a plain tcp_stream.
-      //
       beast::tcp_stream s (ctx);
-
-      s.expires_after (std::chrono::milliseconds (tr.connect_timeout));
-
+      s.expires_after (milliseconds (tr.connect_timeout));
       co_await s.async_connect (addrs, asio::use_awaitable);
 
-      beast_req br;
-      br.method (http::verb::get);
-      br.target (parts.target);
-      br.version (11);
-      br.set (http::field::host, parts.host);
-
-      for (const auto& h : req.headers)
-        br.set (h.name, h.value);
-
-      s.expires_after (std::chrono::milliseconds (tr.request_timeout));
-
-      co_await http::async_write (s, br, asio::use_awaitable);
-
-      beast::flat_buffer b;
-      http::response_parser<http::buffer_body> p;
-      p.body_limit (std::numeric_limits<std::uint64_t>::max ());
-
-      co_await http::async_read_header (s, b, p, asio::use_awaitable);
-
-      auto status (p.get ().result_int ());
-
-      // Handle redirects.
-      //
-      if (tr.follow_redirects && status >= 300 && status < 400)
-      {
-        auto loc (p.get () [http::field::location]);
-        if (!loc.empty ())
-        {
-          beast::error_code ec;
-          ec = s.socket ().shutdown (tcp::socket::shutdown_both, ec);
-
-          ofs.close ();
-
-          co_return co_await download_impl (string_type (loc),
-                                            file,
-                                            progress,
-                                            resume,
-                                            redirect_count + 1);
-        }
-      }
-
-      if (status != 200 && status != 206)
-        throw std::runtime_error ("download failed with status: " +
-                                  std::to_string (status));
-
-      if (p.content_length ())
-        total = *p.content_length () + transferred;
-
-      char dbuf[8192];
-      p.get ().body ().data = dbuf;
-      p.get ().body ().size = sizeof (dbuf);
-
-      while (!p.is_done ())
-      {
-        // Reset timeout for each chunk to keep connection alive as long
-        // as data is actively flowing.
-        //
-        s.expires_after (std::chrono::milliseconds (tr.request_timeout));
-
-        std::size_t n (
-          co_await http::async_read_some (s, b, p, asio::use_awaitable));
-
-        if (n > 0)
-        {
-          ofs.write (dbuf, n);
-          transferred += n;
-
-          if (progress)
-            progress (transferred, total);
-
-          p.get ().body ().data = dbuf;
-          p.get ().body ().size = sizeof (dbuf);
-        }
-      }
-
-      ofs.flush ();
+      auto r (co_await transfer (s));
 
       beast::error_code ec;
-      ec = s.socket ().shutdown (tcp::socket::shutdown_both, ec);
+      s.socket ().shutdown (tcp::socket::shutdown_both, ec);
+      co_return r;
     }
-
-    ofs.close ();
-
-    if (!ofs)
-      throw std::runtime_error ("failed to write file");
-
-    co_return transferred;
   }
 }

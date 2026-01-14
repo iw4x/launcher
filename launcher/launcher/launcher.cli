@@ -61,10 +61,10 @@ namespace launcher
        up the process but effectively disables integrity checking."
     };
 
-    std::size_t --jobs | -j = 4
+    std::size_t --jobs | -j = 1
     {
       "<num>",
-      "The number of parallel download jobs to run. Defaults to 4."
+      "The number of parallel download jobs to run. Defaults to 1."
     };
 
     bool --launch = true
