@@ -45,6 +45,35 @@ namespace launcher
     return "unknown";
   }
 
+  bool
+  is_steam_deck ()
+  {
+    ifstream f ("/etc/os-release");
+
+    if (!f.is_open ())
+      return (false);
+
+    for (string l; getline (f, l); )
+    {
+      // Look for OS ID. SteamOS identifies itself clearly here.
+      //
+      if (l.find ("ID=") == 0)
+        return (l.find ("steamos") != string::npos);
+    }
+
+    return false;
+  }
+
+  static bool
+  _pgrep_is_steam_running ()
+  {
+    bp::ipstream is;
+    bp::child c ("pgrep -x steam", bp::std_out > is);
+
+    c.wait ();
+    return c.exit_code () == 0;
+  }
+
   // proton_environment
   //
 
@@ -53,17 +82,25 @@ namespace launcher
   {
     map<string, string> env;
 
+    // Tell generated logs to use a predictable filename (steam-10190.log).
+    //
+    env["SteamAppId"] = "10190";
+    env["SteamGameId"] = "10190";
+
     // These are the magic environment variables Proton needs to know where
     // to put its fake Windows C: drive and where to look for Steam libraries.
     //
     env["STEAM_COMPAT_DATA_PATH"] = compatdata_path.string ();
     env["STEAM_COMPAT_CLIENT_INSTALL_PATH"] = client_install_path.string ();
 
+    // If we are on Deck, we need need LAA or the 32-bit address space may gets
+    // exhausted.
+    //
+    if (is_steam_deck ())
+      env["PROTON_FORCE_LARGE_ADDRESS_AWARE"] = "1";
+
     if (enable_logging)
     {
-      // Enabling Proton logging is a lifesaver for debugging DXVK or Wine
-      // crashes. It dumps everything to $PROTON_LOG_DIR/steam-$APPID.log.
-      //
       env["PROTON_LOG"] = "1";
       env["PROTON_LOG_DIR"] = log_dir.string ();
     }
@@ -249,132 +286,195 @@ namespace launcher
   }
 
   asio::awaitable<ghost_result> proton_manager::
-  run_ghost_process (const proton_environment& env,
-                     const fs::path& helper)
+  run_ghost_process (const proton_environment& e, const fs::path& h)
   {
-    // We need to peek inside the Proton container to see if the Steam API
-    // is actually responding. This "ghost" process acts as a probe.
+    auto ex (co_await asio::this_coro::executor);
+    asio::steady_timer t (ex);
+
+    // Proton gets grumpy if it can't find the prefix root when bootstrapping
+    // its environment.
     //
-    auto executor (co_await asio::this_coro::executor);
-
-    if (!fs::exists (helper))
-    {
-      cerr << "error: steam helper not found: " << helper << "\n";
-      co_return ghost_result::error;
-    }
-
-    if (!fs::exists (env.proton_bin))
-    {
-      cerr << "error: proton binary not found: " << env.proton_bin << "\n";
-      co_return ghost_result::error;
-    }
-
-    // Create compatdata directory. Proton gets grumpy if it can't
-    // find the prefix root when bootstrapping the Wine environment.
-    //
-    if (!fs::exists (env.compatdata_path))
+    if (!fs::exists (e.compatdata_path))
     {
       error_code ec;
-      fs::create_directories (env.compatdata_path, ec);
+      fs::create_directories (e.compatdata_path, ec);
 
       if (ec)
       {
         cerr << "error: failed to create compatdata directory "
-             << env.compatdata_path << ": " << ec.message () << endl;
+            << e.compatdata_path << ": " << ec.message () << endl;
 
         co_return ghost_result::error;
       }
     }
 
+    // Steam Deck is a special kind of pain. It's a constrained environment
+    // where our ghost usually fails because of missing .NET runtimes (an
+    // implicit dependency of steam_api itself).
+    //
+    // For now we just grep for the process. It's brittle and we lose the
+    // handshake, but it's what works.
+    //
+    // @@ TODO: This really belongs in setup_for_launch() in steam-proton.cxx.
+    //
+    if (is_steam_deck ())
+    {
+      for (int i (0); i < 3; ++i)
+      {
+        if (_pgrep_is_steam_running ())
+          co_return ghost_result::steam_running;
+
+        // Steam isn't running, so try to kick it. There is a theoretical
+        // race here if Steam starts externally between our check and the
+        // spawn, but the steam binary handles its own locking, so the
+        // second instance will just bail out safely.
+        //
+        try
+        {
+          bp::child s ("steam");
+          s.detach ();
+        }
+        catch (...) {}
+
+        // Give it a moment to spin up.
+        //
+        t.expires_after (5s);
+        co_await t.async_wait (asio::use_awaitable);
+      }
+
+      cerr << "error: failed to start steam within the timeout period" << endl;
+      cerr << "falling back to wine is not supported on steamdeck" << endl;
+
+      // @@ TODO: We should probably propagate this properly instead of
+      // just nuking the process.
+      //
+      exit (1);
+    }
+
+    // On standard desktops we can do a proper probe.
+    //
     try
     {
-      bp::environment penv (boost::this_process::environment ());
-      auto map (env.build_env_map ());
+      bp::environment pe (boost::this_process::environment ());
+      auto m (e.build_env_map ());
 
-      for (const auto& [k, v] : map)
-        penv[k] = v;
+      for (const auto& [k, v] : m)
+        pe[k] = v;
 
-      bp::ipstream out;
-      bp::ipstream err;
-      bp::child ghost (
-        env.proton_bin.string (),
-        bp::args ({string ("run"), helper.string (), string ("check")}),
-        penv,
-        bp::std_out > out,
-        bp::std_err > err
+      bp::ipstream o;
+      bp::ipstream er;
+      bp::child g (
+        e.proton_bin.string (),
+        bp::args ({string ("run"), h.string (), string ("check")}),
+        pe,
+        bp::std_out > o,
+        bp::std_err > er
       );
 
-      ghost.wait ();
+      g.wait ();
 
-      string res;
-      getline (out, res);
+      string r;
+      getline (o, r);
 
-      // Capture any error output for debugging.
+      // Keep the error output around in the logs so we can actually
+      // debug it when the probe fails.
       //
-      string err_line;
-      while (getline (err, err_line))
-        cerr << "ghost process: " << err_line << "\n";
+      string l;
+      while (getline (er, l))
+        cerr << "ghost process: " << l << "\n";
 
-      if (ghost.exit_code () == 0 && res == "running")
+      if (g.exit_code () == 0 && r == "running")
         co_return ghost_result::steam_running;
       else
         co_return ghost_result::steam_not_running;
     }
-    catch (const exception& e)
+    catch (const exception& ex)
     {
-      cerr << "error: failed to run ghost process: " << e.what () << "\n";
+      cerr << "error: failed to run ghost process: " << ex.what () << "\n";
       co_return ghost_result::error;
     }
   }
 
   asio::awaitable<bool> proton_manager::
-  launch_through_proton (const proton_environment& env,
-                         const fs::path& exe,
-                         const vector<string>& args)
+  launch_through_proton (const proton_environment& e,
+                         const fs::path& x,
+                         const vector<string>& as)
   {
-    auto executor (co_await asio::this_coro::executor);
-
-    if (!fs::exists (exe))
+    if (!fs::exists (e.proton_bin))
     {
-      cerr << "error: executable not found: " << exe << "\n";
-      co_return false;
-    }
-
-    if (!fs::exists (env.proton_bin))
-    {
-      cerr << "error: proton binary not found: " << env.proton_bin << "\n";
+      cerr << "error: proton binary not found: " << e.proton_bin << "\n";
       co_return false;
     }
 
     try
     {
-      bp::environment penv (boost::this_process::environment ());
-      auto map (env.build_env_map ());
+      // Prepare the environment variables.
+      //
+      bp::environment pe (boost::this_process::environment ());
+      auto m (e.build_env_map ());
 
-      for (const auto& [k, v] : map)
-        penv[k] = v;
+      for (const auto& [k, v] : m)
+        pe[k] = v;
 
-      vector<string> cmd;
-      cmd.push_back ("run");
-      cmd.push_back (exe.string ());
+      string b;           // Binary to run.
+      vector<string> cs;  // Command strings.
 
-      for (const auto& a : args)
-        cmd.push_back (a);
+      if (is_steam_deck ())
+      {
+        // On Deck we have to wrap everything in the sniper runtime container.
+        // It's a nesting doll situation:
+        //
+        // 1. reaper:  Keeps track of the process tree.
+        // 2. wrapper: Sets up LD_LIBRARY_PATH and bootstrap.
+        // 3. sniper:  The actual container switch (usually _v2-entry-point).
+        // 4. proton:  The WINE runner.
+        //
+        auto r (e.steam_root / "ubuntu12_32" / "reaper");
+        auto w (e.steam_root / "ubuntu12_32" / "steam-launch-wrapper");
+        auto s (e.steam_root / "steamapps"   / "common" /
+                "SteamLinuxRuntime_sniper"   / "_v2-entry-point");
+
+        b = r.string ();
+
+        cs.push_back ("SteamLaunch");
+        cs.push_back ("AppId=" + std::to_string (e.appid));
+        cs.push_back ("--");
+        cs.push_back (w.string ());
+        cs.push_back ("--");
+        cs.push_back (s.string ());
+        cs.push_back ("--verb=waitforexitandrun");
+        cs.push_back ("--");
+        cs.push_back (e.proton_bin.string ());
+        cs.push_back ("waitforexitandrun");
+        cs.push_back (x.string ());
+      }
+      else
+      {
+        // Standard Proton run.
+        //
+        b = e.proton_bin.string ();
+        cs.push_back ("run");
+        cs.push_back (x.string ());
+      }
+
+      // Append user arguments.
+      //
+      for (const auto& a : as)
+        cs.push_back (a);
 
       // Launch and detach. We don't want the launcher to hang around blocking
       // the terminal while the game is running, nor do we want the game to
       // die if the launcher is closed.
       //
-      bp::child game (
-        env.proton_bin.string (),
-        bp::args (cmd),
-        penv,
+      bp::child c (
+        b,
+        bp::args (cs),
+        pe,
         bp::std_out > bp::null,
         bp::std_err > bp::null,
-        bp::start_dir (exe.parent_path ().string ())
-      );
+        bp::start_dir (x.parent_path ().string ()));
 
-      game.detach ();
+      c.detach ();
 
       co_return true;
     }
