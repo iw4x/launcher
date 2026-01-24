@@ -51,7 +51,7 @@ namespace launcher
     ifstream f ("/etc/os-release");
 
     if (!f.is_open ())
-      return (false);
+      return false;
 
     for (string l; getline (f, l); )
     {
@@ -93,7 +93,7 @@ namespace launcher
     env["STEAM_COMPAT_DATA_PATH"] = compatdata_path.string ();
     env["STEAM_COMPAT_CLIENT_INSTALL_PATH"] = client_install_path.string ();
 
-    // If we are on Deck, we need need LAA or the 32-bit address space may gets
+    // If we are on Deck, we need LAA or the 32-bit address space may gets
     // exhausted.
     //
     if (is_steam_deck ())
