@@ -197,6 +197,7 @@ namespace launcher
       string client;
       string raw;
       string helper;
+      string dxvk;
     };
 
     explicit
@@ -206,6 +207,7 @@ namespace launcher
         marker_ver_client_ (root_ / ".launcher-version-client"),
         marker_ver_raw_ (root_ / ".launcher-version-raw"),
         marker_ver_helper_ (root_ / ".launcher-version-helper"),
+        marker_ver_dxvk_ (root_ / ".launcher-version-dxvk"),
         archive_cache_path_ (root_ / ".launcher-archive.json")
     {
     }
@@ -224,7 +226,8 @@ namespace launcher
       return fs::exists (marker_installed_) &&
              fs::exists (marker_ver_client_) &&
              fs::exists (marker_ver_raw_) &&
-             fs::exists (marker_ver_helper_);
+             fs::exists (marker_ver_helper_) &&
+             fs::exists (marker_ver_dxvk_);
     }
 
     version_snapshot
@@ -232,7 +235,8 @@ namespace launcher
     {
       return {read_file (marker_ver_client_),
               read_file (marker_ver_raw_),
-              read_file (marker_ver_helper_)};
+              read_file (marker_ver_helper_),
+              read_file (marker_ver_dxvk_)};
     }
 
     // Atomically-ish commit the new versions.
@@ -243,6 +247,7 @@ namespace launcher
       write_file (marker_ver_client_, v.client);
       write_file (marker_ver_raw_, v.raw);
       write_file (marker_ver_helper_, v.helper);
+      write_file (marker_ver_dxvk_, v.dxvk);
 
       ofstream os (marker_installed_);
     }
@@ -269,6 +274,7 @@ namespace launcher
     fs::path marker_ver_client_;
     fs::path marker_ver_raw_;
     fs::path marker_ver_helper_;
+    fs::path marker_ver_dxvk_;
     fs::path archive_cache_path_;
   };
 
@@ -279,12 +285,13 @@ namespace launcher
     github_release client;
     github_release raw;
     github_release helper;
+    github_release dxvk;
     string dlc_manifest_json;
 
     persistence_layer::version_snapshot
     to_snapshot () const
     {
-      return {client.tag_name, raw.tag_name, helper.tag_name};
+      return {client.tag_name, raw.tag_name, helper.tag_name, dxvk.tag_name};
     }
   };
 
@@ -384,7 +391,8 @@ namespace launcher
     {
       return local.client == remote.client &&
              local.raw    == remote.raw &&
-             local.helper == remote.helper;
+             local.helper == remote.helper &&
+             local.dxvk   == remote.dxvk;
     }
 
     // Fetch upstream metadata.
@@ -414,9 +422,9 @@ namespace launcher
       // a fixed order, even though only the results are ultimately used.
       //
 #ifdef __linux__
-      auto [ord, ex_c, c, ex_r, r, ex_h, h, ex_d, d] =
+      auto [ord, ex_c, c, ex_r, r, ex_h, h, ex_x, x, ex_d, d] =
 #else
-      auto [ord, ex_c, c, ex_r, r, ex_d, d] =
+      auto [ord, ex_c, c, ex_r, r, ex_x, x, ex_d, d] =
 #endif
         co_await make_parallel_group (
           asio::co_spawn (
@@ -441,6 +449,12 @@ namespace launcher
 #endif
           asio::co_spawn (
             ioc_,
+            github_.fetch_latest_release ("iw4x",
+                                          "dxvk",
+                                          false),
+            asio::deferred),
+          asio::co_spawn (
+            ioc_,
             [this] () -> asio::awaitable<string>
             {
               co_return co_await http_.get ("https://cdn.iw4x.io/update.json");
@@ -453,12 +467,13 @@ namespace launcher
 #ifdef __linux__
       if (ex_h) rethrow_exception (ex_h);
 #endif
+      if (ex_x) rethrow_exception (ex_x);
       if (ex_d) rethrow_exception (ex_d);
 
 #ifdef __linux__
-      co_return remote_state {move (c), move (r), move (h), move (d)};
+      co_return remote_state {move (c), move (r), move (h), move (x), move (d)};
 #else
-      co_return remote_state {move (c), move (r), {}, move (d)};
+      co_return remote_state {move (c), move (r), {}, move (x), move (d)};
 #endif
     }
 
@@ -522,6 +537,15 @@ namespace launcher
 
       int raw_count (inject_assets (remote.raw.assets));
       log ("Added " + std::to_string (raw_count) + " rawfiles");
+
+      // Inject DXVK.
+      //
+      // Note that DXVK archive name includes the version prefix (e.g.,
+      // "dxvk-2.7.1.zip"), so we inject all assets from the DXVK release
+      // without filtering.
+      //
+      inject_assets (remote.dxvk.assets);
+      log ("Added DXVK");
 
       // Merge dlc.
       //
@@ -702,11 +726,20 @@ namespace launcher
         {
           try
           {
-            co_await manifest_coordinator::extract_archive (
-              a,
-              p,
-              ctx_.install_location,
-              &ac);
+            if (a.name.rfind ("dxvk-", 0) == 0 && ext == ".zip")
+            {
+              co_await manifest_coordinator::extract_dxvk_archive (
+                p,
+                ctx_.install_location);
+            }
+            else
+            {
+              co_await manifest_coordinator::extract_archive (
+                a,
+                p,
+                ctx_.install_location,
+                &ac);
+            }
 
             fs::remove (p);
           }
