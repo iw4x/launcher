@@ -267,7 +267,7 @@ namespace launcher
         // If the list is too long for the terminal, we truncate it and display
         // a count of hidden items.
         //
-        std::size_t n (0);
+        std::size_t n (c.completed_count);
         std::size_t max (std::min (c.items.size (),
                                    static_cast<std::size_t> (ah)));
 
