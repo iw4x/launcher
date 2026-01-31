@@ -1,7 +1,119 @@
 If:
+  PathMatch: .*/launcher/download/download-manager.(txx|ixx)
+
+CompileFlags:
+  Add:
+    - "-include"
+    - "launcher/launcher/download/download-manager.hxx"
+---
+If:
   PathMatch: .*/launcher/github/github-api.(txx)
 
 CompileFlags:
   Add:
     - "-include"
     - "launcher/launcher/github/github-api.hxx"
+---
+If:
+  PathMatch: .*/launcher/download/download-task.(txx)
+
+CompileFlags:
+  Add:
+    - "-include"
+    - "launcher/launcher/download/download-task.hxx"
+---
+If:
+  PathMatch: .*/launcher/http/http-client.(txx|ixx)
+
+CompileFlags:
+  Add:
+    - "-include"
+    - "launcher/launcher/http/http-client.hxx"
+---
+If:
+  PathMatch: .*/launcher/http/http-endpoint.(ixx)
+
+CompileFlags:
+  Add:
+    - "-include"
+    - "launcher/launcher/http/http-endpoint.hxx"
+---
+If:
+  PathMatch: .*/launcher/http/http-json.(ixx)
+
+CompileFlags:
+  Add:
+    - "-include"
+    - "launcher/launcher/http/http-json.hxx"
+---
+If:
+  PathMatch: .*/launcher/http/http-request.(ixx)
+
+CompileFlags:
+  Add:
+    - "-include"
+    - "launcher/launcher/http/http-request.hxx"
+---
+If:
+  PathMatch: .*/launcher/http/http-response.(ixx)
+
+CompileFlags:
+  Add:
+    - "-include"
+    - "launcher/launcher/http/http-response.hxx"
+---
+If:
+  PathMatch: .*/launcher/http/http-types.(ixx)
+
+CompileFlags:
+  Add:
+    - "-include"
+    - "launcher/launcher/http/http-types.hxx"
+---
+If:
+  PathMatch: .*/launcher/manifest/manifest.(txx|ixx)
+
+CompileFlags:
+  Add:
+    - "-include"
+    - "launcher/launcher/manifest/manifest.hxx"
+---
+If:
+  PathMatch: .*/launcher/manifest/manifest-parser.(txx)
+
+CompileFlags:
+  Add:
+    - "-include"
+    - "launcher/launcher/manifest/manifest-parser.hxx"
+---
+If:
+  PathMatch: .*/launcher/progress/progress-manager.(txx)
+
+CompileFlags:
+  Add:
+    - "-include"
+    - "launcher/launcher/progress/progress-manager.hxx"
+---
+If:
+  PathMatch: .*/launcher/progress/progress-renderer.(txx)
+
+CompileFlags:
+  Add:
+    - "-include"
+    - "launcher/launcher/progress/progress-renderer.hxx"
+---
+If:
+  PathMatch: .*/launcher/progress/progress-tracker.(txx|ixx)
+
+CompileFlags:
+  Add:
+    - "-include"
+    - "launcher/launcher/progress/progress-tracker.hxx"
+---
+If:
+  PathMatch: .*/launcher/pregenerated/launcher/launcher-options.(ixx)
+
+CompileFlags:
+  Add:
+    - "-include"
+    - "launcher/launcher/pregenerated/launcher/launcher-options.hxx"
