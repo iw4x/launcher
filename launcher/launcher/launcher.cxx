@@ -116,16 +116,16 @@ namespace launcher
     // On Windows, caches technically belong in LocalAppData.
     //
     if (const char* v = getenv ("LOCALAPPDATA"))
-      d = fs::path (v) / "iw4x-launcher";
+      d = fs::path (v) / "iw4x";
     else if (const char* v = getenv ("APPDATA"))
-      d = fs::path (v) / "iw4x-launcher";
+      d = fs::path (v) / "iw4x";
     else
-      d = fs::current_path () / ".launcher-cache";
+      d = fs::current_path () / ".iw4x";
 #elif defined(__APPLE__)
     if (const char* h = getenv ("HOME"))
-      d = fs::path (h) / "Library" / "Application Support" / "iw4x-launcher";
+      d = fs::path (h) / "Library" / "Application Support" / "iw4x";
     else
-      d = fs::current_path () / ".launcher-cache";
+      d = fs::current_path () / ".iw4x";
 #else
     // On Linux/Unix, we respect the XDG Base Directory specification.
     //
@@ -134,7 +134,7 @@ namespace launcher
     else if (const char* h = getenv ("HOME"))
       d = fs::path (h) / ".cache" / "iw4x";
     else
-      d = fs::current_path () / ".launcher-cache";
+      d = fs::current_path () / ".iw4x";
 #endif
 
     // If we are looking for the cache specific to an installation (to avoid
@@ -151,7 +151,7 @@ namespace launcher
       // Fallback: If we can't write to the system location, try a local
       // directory.
       //
-      d = fs::current_path () / ".launcher-cache";
+      d = fs::current_path () / ".iw4x";
 
       if (!scope.empty ())
         d /= path_digest (scope);
