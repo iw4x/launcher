@@ -352,11 +352,9 @@ namespace launcher
     v.minor = HELLO_VERSION_MINOR;
     v.patch = HELLO_VERSION_PATCH;
 
-    // If we are running a pre-release build, we need to be specific about the
-    // snapshot ID to upgrade to a newer pre-release or the final release
-    // properly.
+    // Parse the full version string to get pre-release and snapshot info. For
+    // stable releases these fields will be empty/zero.
     //
-#if HELLO_PRE_RELEASE
     auto p (parse_launcher_version (HELLO_VERSION_STR));
     if (p)
     {
@@ -364,7 +362,6 @@ namespace launcher
       v.snapshot_sn = p->snapshot_sn;
       v.snapshot_id = p->snapshot_id;
     }
-#endif
 
     coord->set_current_version (v);
     return coord;
