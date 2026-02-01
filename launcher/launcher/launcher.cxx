@@ -12,6 +12,7 @@
 #include <boost/asio/detached.hpp>
 #include <boost/asio/experimental/awaitable_operators.hpp>
 #include <boost/asio/experimental/parallel_group.hpp>
+
 #include <boost/process.hpp>
 
 #include <launcher/launcher-download.hxx>
@@ -21,9 +22,12 @@
 #include <launcher/launcher-options.hxx>
 #include <launcher/launcher-progress.hxx>
 #include <launcher/launcher-steam.hxx>
+#include <launcher/launcher-update.hxx>
+
 #ifdef __linux__
 #  include <launcher/launcher-steam-proton.hxx>
 #endif
+
 #include <launcher/version.hxx>
 
 // Include miniz last.
@@ -937,6 +941,63 @@ namespace launcher
 
     co_return nullopt;
   }
+
+  // Check for and optionally install launcher updates.
+  //
+  asio::awaitable<bool>
+  check_self_update (asio::io_context& io,
+                     bool hl,
+                     bool pre,
+                     bool only,
+                     progress_coordinator* pc = nullptr)
+  {
+    auto uc (make_update_coordinator (io));
+    uc->set_headless (hl);
+    uc->set_include_prerelease (pre);
+
+    // If the user explicitly requested an update, we let the coordinator
+    // attempt the restart immediately after installation.
+    //
+    uc->set_auto_restart (only);
+
+    if (pc != nullptr)
+      uc->set_progress_coordinator (pc);
+
+    try
+    {
+      auto s (co_await uc->check_and_update ());
+
+      // If we were strictly asked to update but couldn't even check (e.g.,
+      // network down), that's fatal. Otherwise, we treat it as a soft failure
+      // and proceed to the application.
+      //
+      if (s == update_status::check_failed && only)
+      {
+        cerr << "error: failed to check for launcher updates" << endl;
+        co_return false;
+      }
+
+      // Return true if we are in the middle of a restart (meaning we
+      // shouldn't continue with the calling logic).
+      //
+      if (uc->state () == update_state::restarting)
+        co_return true;
+
+      co_return false;
+    }
+    catch (const exception& e)
+    {
+      // Same logic as above: complain loudly if this was the only task,
+      // otherwise just warn and move on.
+      //
+      if (only)
+        cerr << "error: update failed: " << e.what () << endl;
+      else
+        cerr << "warning: update check failed: " << e.what () << endl;
+
+      co_return false;
+    }
+  }
 }
 
 int
@@ -1043,6 +1104,49 @@ main (int argc, char* argv[])
 
     if (opt.steam_helper_specified ())
       ctx.proton_helper_override = opt.steam_helper ();
+
+    if (!opt.no_self_update () || opt.self_update_only ())
+    {
+      bool r (false);
+
+      // Setup the progress feedback if we are not in the headless mode. Keep
+      // it dynamic since it's optional.
+      //
+      unique_ptr<progress_coordinator> pc;
+      if (!opt.no_ui ())
+        pc = make_unique<progress_coordinator> (ioc);
+
+      asio::co_spawn (
+        ioc,
+        check_self_update (ioc,
+                           opt.no_ui (),
+                           opt.prerelease (),
+                           opt.self_update_only (),
+                           pc.get ()),
+        [&r, &ioc, &pc] (exception_ptr e, bool v)
+        {
+          if (!e)
+            r = v;
+
+          if (pc != nullptr)
+            asio::co_spawn (ioc, pc->stop (), asio::detached);
+
+          ioc.stop ();
+        });
+
+      if (pc != nullptr)
+        pc->start ();
+
+      ioc.restart ();
+      ioc.run ();
+      ioc.restart ();
+
+      // If we applied an update that requires a restart (e.g. replaced the
+      // executable) or if the user only asked to update, we are done.
+      //
+      if (r || opt.self_update_only ())
+        return 0;
+    }
 
     // Control Loop.
     //

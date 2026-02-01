@@ -113,5 +113,17 @@ namespace launcher
     {
       "Enable Proton's internal logging system."
     };
+
+    bool --no-self-update
+    {
+      "Skip the automatic launcher self-update check. Use this if you want to
+       manage launcher updates manually."
+    };
+
+    bool --self-update-only
+    {
+      "Only check for and apply launcher updates, then exit. Does not update
+       game files."
+    };
   };
 }

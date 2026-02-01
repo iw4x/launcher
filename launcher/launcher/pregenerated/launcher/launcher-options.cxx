@@ -784,7 +784,9 @@ namespace launcher
     proton_app_id_ (10190),
     proton_app_id_specified_ (false),
     proton_verbose_ (),
-    proton_log_ ()
+    proton_log_ (),
+    no_self_update_ (),
+    self_update_only_ ()
   {
   }
 
@@ -817,7 +819,9 @@ namespace launcher
     proton_app_id_ (10190),
     proton_app_id_specified_ (false),
     proton_verbose_ (),
-    proton_log_ ()
+    proton_log_ (),
+    no_self_update_ (),
+    self_update_only_ ()
   {
     ::launcher::cli::argv_scanner s (argc, argv, erase);
     _parse (s, opt, arg);
@@ -853,7 +857,9 @@ namespace launcher
     proton_app_id_ (10190),
     proton_app_id_specified_ (false),
     proton_verbose_ (),
-    proton_log_ ()
+    proton_log_ (),
+    no_self_update_ (),
+    self_update_only_ ()
   {
     ::launcher::cli::argv_scanner s (start, argc, argv, erase);
     _parse (s, opt, arg);
@@ -889,7 +895,9 @@ namespace launcher
     proton_app_id_ (10190),
     proton_app_id_specified_ (false),
     proton_verbose_ (),
-    proton_log_ ()
+    proton_log_ (),
+    no_self_update_ (),
+    self_update_only_ ()
   {
     ::launcher::cli::argv_scanner s (argc, argv, erase);
     _parse (s, opt, arg);
@@ -927,7 +935,9 @@ namespace launcher
     proton_app_id_ (10190),
     proton_app_id_specified_ (false),
     proton_verbose_ (),
-    proton_log_ ()
+    proton_log_ (),
+    no_self_update_ (),
+    self_update_only_ ()
   {
     ::launcher::cli::argv_scanner s (start, argc, argv, erase);
     _parse (s, opt, arg);
@@ -961,7 +971,9 @@ namespace launcher
     proton_app_id_ (10190),
     proton_app_id_specified_ (false),
     proton_verbose_ (),
-    proton_log_ ()
+    proton_log_ (),
+    no_self_update_ (),
+    self_update_only_ ()
   {
     _parse (s, opt, arg);
   }
@@ -1010,6 +1022,10 @@ namespace launcher
     os << "--proton-verbose      Enable verbose output for Proton operations." << ::std::endl;
 
     os << "--proton-log          Enable Proton's internal logging system." << ::std::endl;
+
+    os << "--no-self-update      Skip the automatic launcher self-update check." << ::std::endl;
+
+    os << "--self-update-only    Only check for and apply launcher updates, then exit." << ::std::endl;
 
     p = ::launcher::cli::usage_para::option;
 
@@ -1070,6 +1086,10 @@ namespace launcher
       &::launcher::cli::thunk< options, &options::proton_verbose_ >;
       _cli_options_map_["--proton-log"] =
       &::launcher::cli::thunk< options, &options::proton_log_ >;
+      _cli_options_map_["--no-self-update"] =
+      &::launcher::cli::thunk< options, &options::no_self_update_ >;
+      _cli_options_map_["--self-update-only"] =
+      &::launcher::cli::thunk< options, &options::self_update_only_ >;
     }
   };
 
