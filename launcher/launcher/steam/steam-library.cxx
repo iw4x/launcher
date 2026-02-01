@@ -20,6 +20,32 @@ using namespace std;
 
 namespace launcher
 {
+#ifdef _WIN32
+  // Detect if we're running under Wine by checking for wine_get_version in
+  // ntdll.dll.
+  //
+  static bool
+  is_wine ()
+  {
+    static int r (-1); // Cache: -1 = unknown, 0 = no, 1 = yes.
+
+    if (r == -1)
+    {
+      HMODULE ntdll (GetModuleHandleA ("ntdll.dll"));
+
+      if (ntdll != nullptr)
+      {
+        auto proc = GetProcAddress (ntdll, "wine_get_version");
+        r = (proc != nullptr) ? 1 : 0;
+      }
+      else
+        r = 0;
+    }
+
+    return r == 1;
+  }
+#endif
+
   steam_library_manager::
   steam_library_manager (asio::io_context& ioc)
     : ioc_ (ioc),
@@ -39,7 +65,13 @@ namespace launcher
     optional<fs::path> r;
 
 #ifdef _WIN32
-    r = co_await detect_steam_path_windows ();
+    // If we're running under Wine, use Linux detection since Steam is likely
+    // installed on the host Linux system.
+    //
+    if (is_wine ())
+      r = co_await detect_steam_path_linux ();
+    else
+      r = co_await detect_steam_path_windows ();
 #elif defined(__APPLE__)
     r = co_await detect_steam_path_macos ();
 #else
@@ -64,23 +96,55 @@ namespace launcher
     vector<fs::path> candidates;
 
     const char* home (getenv ("HOME"));
-    fs::path home_path (home ? home : "");
+    fs::path h (home ? home : "");
 
-    if (!home_path.empty ())
+    // If we came up empty, this might be Wine.
+    //
+    if (h.empty ())
     {
-      candidates.push_back (home_path / ".steam" / "steam");
-      candidates.push_back (home_path / ".local" / "share" / "Steam");
+    #ifdef _WIN32
+      // Try to construct the path based on the username. Prefer USER but fall
+      // back to USERNAME which is standard on Windows.
+      //
+      const char* u (getenv ("USER"));
+      if (u == nullptr)
+        u = getenv ("USERNAME");
+
+      // Z:\home\<user>.
+      //
+      if (u != nullptr)
+      {
+        fs::path p ("Z:\\home");
+        p /= u;
+
+        if (fs::exists (p))
+          h = move (p);
+      }
+    #endif
+    }
+
+    if (!h.empty ())
+    {
+      candidates.push_back (h / ".steam" / "steam");
+      candidates.push_back (h / ".local" / "share" / "Steam");
 
       // Check for the Flatpak installation.
       //
       // This is located in the user's .var directory.
       //
       candidates.push_back (
-        home_path / ".var" / "app" / "com.valvesoftware.Steam" / "data" / "Steam");
+        h / ".var" / "app" / "com.valvesoftware.Steam" / "data" / "Steam");
     }
 
+#ifdef _WIN32
+    // Under Wine, use Z: prefixed paths for system directories.
+    //
+    candidates.push_back ("Z:\\usr\\share\\steam");
+    candidates.push_back ("Z:\\usr\\local\\share\\steam");
+#else
     candidates.push_back ("/usr/share/steam");
     candidates.push_back ("/usr/local/share/steam");
+#endif
 
     // Also check XDG_DATA_HOME if it is set.
     //
