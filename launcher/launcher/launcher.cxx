@@ -949,24 +949,6 @@ main (int argc, char* argv[])
   {
     options opt (argc, argv);
 
-    // Handle --build2-metadata (see also buildfile).
-    //
-    if (opt.build2_metadata_specified ())
-    {
-      auto& o (cout);
-
-      // The export.metadata variable must be the first non-blank, non-comment
-      // line.
-      //
-      o << "# build2 buildfile launcher"                                  << "\n"
-        << "export.metadata = 1 launcher"                                 << "\n"
-        << "launcher.name = [string] launcher"                            << "\n"
-        << "launcher.version = [string] '"  << HELLO_VERSION_FULL << '\'' << "\n"
-        << "launcher.checksum = [string] '" << HELLO_VERSION_FULL << '\'' << "\n";
-
-      return 0;
-    }
-
     // Handle --version.
     //
     if (opt.version ())

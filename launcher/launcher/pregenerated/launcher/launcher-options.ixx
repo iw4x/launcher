@@ -281,18 +281,6 @@ namespace launcher
   // options
   //
 
-  inline const std::uint64_t& options::
-  build2_metadata () const
-  {
-    return this->build2_metadata_;
-  }
-
-  inline bool options::
-  build2_metadata_specified () const
-  {
-    return this->build2_metadata_specified_;
-  }
-
   inline const bool& options::
   help () const
   {
@@ -306,9 +294,9 @@ namespace launcher
   }
 
   inline const bool& options::
-  build2_metadata1 () const
+  build2_metadata () const
   {
-    return this->build2_metadata1_;
+    return this->build2_metadata_;
   }
 
   inline const std::string& options::

@@ -17,26 +17,16 @@ import libs += libftxui%lib{ftxui-component}
 import libs += libftxui%lib{ftxui-dom}
 import libs += libftxui%lib{ftxui-screen}
 
-exe{launcher}: {hxx ixx txx cxx}{**  -steam/steam-proton    \
-                                     -launcher-steam-proton \
-                                     -version               \
-                                     -*-options             \
-                                     -pregenerated/**}
-exe{launcher}: {h c}{**}
-exe{launcher}: {hxx}{version}
-exe{launcher}: {hxx cxx}{steam/steam-proton}: include = ($tclass == 'linux')
-exe{launcher}: {hxx cxx}{launcher-steam-proton}: include = ($tclass == 'linux')
-exe{launcher}: $libs testscript
-
-# Target metadata, see also --build2-metadata in launcher.cxx.
-#
-exe{launcher}:
-{
-  export.metadata = 1 launcher
-  launcher.name = [string] launcher
-  launcher.version  = [string] $version
-  launcher.checksum = [string] $version
-}
+exe{iw4x-launcher}: {hxx ixx txx cxx}{**  -steam/steam-proton    \
+                                          -launcher-steam-proton \
+                                          -version               \
+                                          -*-options             \
+                                          -pregenerated/**}
+exe{iw4x-launcher}: {h c}{**}
+exe{iw4x-launcher}: {hxx}{version}
+exe{iw4x-launcher}: {hxx cxx}{steam/steam-proton}: include = ($tclass == 'linux')
+exe{iw4x-launcher}: {hxx cxx}{launcher-steam-proton}: include = ($tclass == 'linux')
+exe{iw4x-launcher}: $libs testscript
 
 # Version header generation.
 #
@@ -69,7 +59,7 @@ if ($tsys == 'win32-msvc')
 
 # Use pregenerated versions.
 #
-exe{launcher}: pregenerated/{hxx ixx cxx}{**}: include = (!$develop)
+exe{iw4x-launcher}: pregenerated/{hxx ixx cxx}{**}: include = (!$develop)
 
 # If we are consuming, we need to look in the pregenerated directory first.
 #
@@ -86,7 +76,7 @@ pregenerated/{hxx ixx cxx}{*}: dist = (!$develop)
 
 # Include the generated files in the build.
 #
-exe{launcher}: {hxx ixx cxx}{$options}: include = $develop
+exe{iw4x-launcher}: {hxx ixx cxx}{$options}: include = $develop
 
 if $develop
   import! [metadata] cli = cli%exe{cli}
