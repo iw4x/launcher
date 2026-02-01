@@ -273,6 +273,27 @@ namespace launcher
       //
       catch (const std::exception& e)
       {
+        std::string s (e.what ());
+
+        // 416 (Range Not Satisfiable).
+        //
+        // If we are resuming, this implies the local file state is invalid
+        // relative to the remote (e.g., the file on the server changed or
+        // shrunk). In this case our best bet is to scrap the local copy
+        // and try from scratch.
+        //
+        if (s.find ("416") != std::string::npos && resume_from)
+        {
+          std::error_code ec;
+          fs::remove (task->request.target, ec);
+          resume_from = std::nullopt;
+
+          // Retry the same URL without resuming.
+          //
+          --i;
+          continue;
+        }
+
         if (i == task->request.urls.size () - 1)
         {
           // All mirrors failed.
