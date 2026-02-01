@@ -424,6 +424,18 @@ namespace launcher
   {
     return this->proton_log_;
   }
+
+  inline const bool& options::
+  no_self_update () const
+  {
+    return this->no_self_update_;
+  }
+
+  inline const bool& options::
+  self_update_only () const
+  {
+    return this->self_update_only_;
+  }
 }
 
 // Begin epilogue.

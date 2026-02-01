@@ -35,7 +35,7 @@ namespace launcher
 
       if (ntdll != nullptr)
       {
-        auto proc = GetProcAddress (ntdll, "wine_get_version");
+        auto proc (GetProcAddress (ntdll, "wine_get_version"));
         r = (proc != nullptr) ? 1 : 0;
       }
       else

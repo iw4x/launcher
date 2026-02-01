@@ -546,6 +546,12 @@ namespace launcher
     const bool&
     proton_log () const;
 
+    const bool&
+    no_self_update () const;
+
+    const bool&
+    self_update_only () const;
+
     // Print usage information.
     //
     static ::launcher::cli::usage_para
@@ -589,6 +595,8 @@ namespace launcher
     bool proton_app_id_specified_;
     bool proton_verbose_;
     bool proton_log_;
+    bool no_self_update_;
+    bool self_update_only_;
   };
 }
 
