@@ -129,14 +129,6 @@ namespace launcher
                      const fs::path& install_dir,
                      archive_cache* cache = nullptr);
 
-    // Extract d3d9.dll from a DXVK archive.
-    //
-    // DXVK archives have a structure like "dxvk-X.Y.Z/x32/d3d9.dll".
-    //
-    static asio::awaitable<void>
-    extract_dxvk_archive (const fs::path& archive_path,
-                          const fs::path& dest_dir);
-
     // Get total download size.
     //
     // Calculates the total number of bytes that need to be downloaded based

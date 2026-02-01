@@ -412,69 +412,6 @@ namespace launcher
     co_return;
   }
 
-  // @@: We duplicate most logic from above so we may as well make it generic
-  // at some point.
-  //
-  asio::awaitable<void> manifest_coordinator::
-  extract_dxvk_archive (const fs::path& ar, const fs::path& dst)
-  {
-    mz_zip_archive z;
-    memset (&z, 0, sizeof (z));
-
-    if (!mz_zip_reader_init_file (&z, ar.string ().c_str (), 0))
-      throw runtime_error ("failed to open DXVK archive: " + ar.string ());
-
-    // We have to ensure we close the reader handle even if we throw
-    // halfway through the extraction. Since we don't have an RAII wrapper
-    // for miniz, we have to do the try-catch dance.
-    //
-    try
-    {
-      mz_uint n (mz_zip_reader_get_num_files (&z));
-      bool found (false);
-
-      for (mz_uint i (0); i < n; ++i)
-      {
-        mz_zip_archive_file_stat s;
-        if (!mz_zip_reader_file_stat (&z, i, &s))
-          continue;
-
-        string name (s.m_filename);
-
-        // The archive structure might be prefixed with a version directory or
-        // it might not. To be safe, we just look for the suffix in the path.
-        //
-        if (name.size () >= 12 &&
-            name.compare (name.size () - 12, 12, "x32/d3d9.dll") == 0)
-        {
-          fs::path out (dst / "d3d9.dll");
-
-          if (!mz_zip_reader_extract_to_file (&z,
-                                              i,
-                                              out.string ().c_str (),
-                                              0))
-            throw runtime_error (
-              "failed to extract d3d9.dll from DXVK archive");
-
-          found = true;
-          break;
-        }
-      }
-
-      mz_zip_reader_end (&z);
-
-      if (!found)
-        throw runtime_error ("d3d9.dll not found in DXVK archive");
-    }
-    catch (...)
-    {
-      mz_zip_reader_end (&z);
-      throw;
-    }
-
-    co_return;
-  }
-
   // Metrics.
   //
 
