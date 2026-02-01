@@ -474,12 +474,6 @@ namespace launcher
 
     // Option accessors.
     //
-    const std::uint64_t&
-    build2_metadata () const;
-
-    bool
-    build2_metadata_specified () const;
-
     const bool&
     help () const;
 
@@ -487,7 +481,7 @@ namespace launcher
     version () const;
 
     const bool&
-    build2_metadata1 () const;
+    build2_metadata () const;
 
     const std::string&
     path () const;
@@ -571,11 +565,9 @@ namespace launcher
             ::launcher::cli::unknown_mode argument);
 
     public:
-    std::uint64_t build2_metadata_;
-    bool build2_metadata_specified_;
     bool help_;
     bool version_;
-    bool build2_metadata1_;
+    bool build2_metadata_;
     std::string path_;
     bool path_specified_;
     bool no_ui_;

@@ -6,8 +6,6 @@ namespace launcher
 {
   class options
   {
-    std::uint64_t --build2-metadata; // leave undocumented/hidden
-
     bool --help
     {
       "Show this help message and exit."

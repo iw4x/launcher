@@ -761,11 +761,9 @@ namespace launcher
 
   options::
   options ()
-  : build2_metadata_ (),
-    build2_metadata_specified_ (false),
-    help_ (),
+  : help_ (),
     version_ (),
-    build2_metadata1_ (),
+    build2_metadata_ (),
     path_ (),
     path_specified_ (false),
     no_ui_ (),
@@ -796,11 +794,9 @@ namespace launcher
            bool erase,
            ::launcher::cli::unknown_mode opt,
            ::launcher::cli::unknown_mode arg)
-  : build2_metadata_ (),
-    build2_metadata_specified_ (false),
-    help_ (),
+  : help_ (),
     version_ (),
-    build2_metadata1_ (),
+    build2_metadata_ (),
     path_ (),
     path_specified_ (false),
     no_ui_ (),
@@ -834,11 +830,9 @@ namespace launcher
            bool erase,
            ::launcher::cli::unknown_mode opt,
            ::launcher::cli::unknown_mode arg)
-  : build2_metadata_ (),
-    build2_metadata_specified_ (false),
-    help_ (),
+  : help_ (),
     version_ (),
-    build2_metadata1_ (),
+    build2_metadata_ (),
     path_ (),
     path_specified_ (false),
     no_ui_ (),
@@ -872,11 +866,9 @@ namespace launcher
            bool erase,
            ::launcher::cli::unknown_mode opt,
            ::launcher::cli::unknown_mode arg)
-  : build2_metadata_ (),
-    build2_metadata_specified_ (false),
-    help_ (),
+  : help_ (),
     version_ (),
-    build2_metadata1_ (),
+    build2_metadata_ (),
     path_ (),
     path_specified_ (false),
     no_ui_ (),
@@ -912,11 +904,9 @@ namespace launcher
            bool erase,
            ::launcher::cli::unknown_mode opt,
            ::launcher::cli::unknown_mode arg)
-  : build2_metadata_ (),
-    build2_metadata_specified_ (false),
-    help_ (),
+  : help_ (),
     version_ (),
-    build2_metadata1_ (),
+    build2_metadata_ (),
     path_ (),
     path_specified_ (false),
     no_ui_ (),
@@ -948,11 +938,9 @@ namespace launcher
   options (::launcher::cli::scanner& s,
            ::launcher::cli::unknown_mode opt,
            ::launcher::cli::unknown_mode arg)
-  : build2_metadata_ (),
-    build2_metadata_specified_ (false),
-    help_ (),
+  : help_ (),
     version_ (),
-    build2_metadata1_ (),
+    build2_metadata_ (),
     path_ (),
     path_specified_ (false),
     no_ui_ (),
@@ -1038,15 +1026,12 @@ namespace launcher
   {
     _cli_options_map_init ()
     {
-      _cli_options_map_["--build2-metadata"] =
-      &::launcher::cli::thunk< options, std::uint64_t, &options::build2_metadata_,
-        &options::build2_metadata_specified_ >;
       _cli_options_map_["--help"] =
       &::launcher::cli::thunk< options, &options::help_ >;
       _cli_options_map_["--version"] =
       &::launcher::cli::thunk< options, &options::version_ >;
       _cli_options_map_["--build2-metadata"] =
-      &::launcher::cli::thunk< options, &options::build2_metadata1_ >;
+      &::launcher::cli::thunk< options, &options::build2_metadata_ >;
       _cli_options_map_["--path"] =
       &::launcher::cli::thunk< options, std::string, &options::path_,
         &options::path_specified_ >;
