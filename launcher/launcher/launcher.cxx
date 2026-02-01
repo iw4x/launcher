@@ -102,62 +102,24 @@ namespace launcher
 
   // Determine the directory for user preference and state caching.
   //
-  // We try to be good citizens by respecting platform conventions (XDG on
-  // Linux, AppData on Windows). However, if we can't create directories there
-  // (e.g., read-only home, restricted environment), we fall back to a local
-  // ".launcher-cache" in the current working directory to avoid crashing.
+  // The scope parameter specifies the game installation directory. When not
+  // provided (for global preferences like Steam path acceptance markers), we
+  // use the current working directory.
   //
   static fs::path
   resolve_cache_root (const fs::path& scope = {})
   {
-    fs::path d;
-
-#ifdef _WIN32
-    // On Windows, caches technically belong in LocalAppData.
+    // Use the scope (game installation directory) as the base for cache. If
+    // no scope is provided, fall back to the current working directory.
     //
-    if (const char* v = getenv ("LOCALAPPDATA"))
-      d = fs::path (v) / "iw4x";
-    else if (const char* v = getenv ("APPDATA"))
-      d = fs::path (v) / "iw4x";
-    else
-      d = fs::current_path () / ".iw4x";
-#elif defined(__APPLE__)
-    if (const char* h = getenv ("HOME"))
-      d = fs::path (h) / "Library" / "Application Support" / "iw4x";
-    else
-      d = fs::current_path () / ".iw4x";
-#else
-    // On Linux/Unix, we respect the XDG Base Directory specification.
-    //
-    if (const char* v = getenv ("XDG_CACHE_HOME"))
-      d = fs::path (v) / "iw4x";
-    else if (const char* h = getenv ("HOME"))
-      d = fs::path (h) / ".cache" / "iw4x";
-    else
-      d = fs::current_path () / ".iw4x";
-#endif
-
-    // If we are looking for the cache specific to an installation (to avoid
-    // conflicts between multiple installs), append its unique key.
-    //
-    if (!scope.empty ())
-      d /= path_digest (scope);
+    fs::path base (scope.empty () ? fs::current_path () : scope);
+    fs::path d (base / ".iw4x");
 
     error_code ec;
     fs::create_directories (d, ec);
 
-    if (ec)
-    {
-      // Fallback: If we can't write to the system location, try a local
-      // directory.
-      //
-      d = fs::current_path () / ".iw4x";
-
-      if (!scope.empty ())
-        d /= path_digest (scope);
-
-      fs::create_directories (d, ec);
-    }
+    // If we can't create the directory, there's not much we can do. The
+    // caller will discover the problem when they try to read/write files.
 
     return d;
   }
@@ -197,7 +159,6 @@ namespace launcher
       string client;
       string raw;
       string helper;
-      string dxvk;
     };
 
     explicit
@@ -207,7 +168,6 @@ namespace launcher
         marker_ver_client_ (root_ / ".launcher-version-client"),
         marker_ver_raw_ (root_ / ".launcher-version-raw"),
         marker_ver_helper_ (root_ / ".launcher-version-helper"),
-        marker_ver_dxvk_ (root_ / ".launcher-version-dxvk"),
         archive_cache_path_ (root_ / ".launcher-archive.json")
     {
     }
@@ -226,8 +186,7 @@ namespace launcher
       return fs::exists (marker_installed_) &&
              fs::exists (marker_ver_client_) &&
              fs::exists (marker_ver_raw_) &&
-             fs::exists (marker_ver_helper_) &&
-             fs::exists (marker_ver_dxvk_);
+             fs::exists (marker_ver_helper_);
     }
 
     version_snapshot
@@ -235,8 +194,7 @@ namespace launcher
     {
       return {read_file (marker_ver_client_),
               read_file (marker_ver_raw_),
-              read_file (marker_ver_helper_),
-              read_file (marker_ver_dxvk_)};
+              read_file (marker_ver_helper_)};
     }
 
     // Atomically-ish commit the new versions.
@@ -247,7 +205,6 @@ namespace launcher
       write_file (marker_ver_client_, v.client);
       write_file (marker_ver_raw_, v.raw);
       write_file (marker_ver_helper_, v.helper);
-      write_file (marker_ver_dxvk_, v.dxvk);
 
       ofstream os (marker_installed_);
     }
@@ -274,7 +231,6 @@ namespace launcher
     fs::path marker_ver_client_;
     fs::path marker_ver_raw_;
     fs::path marker_ver_helper_;
-    fs::path marker_ver_dxvk_;
     fs::path archive_cache_path_;
   };
 
@@ -285,13 +241,12 @@ namespace launcher
     github_release client;
     github_release raw;
     github_release helper;
-    github_release dxvk;
     string dlc_manifest_json;
 
     persistence_layer::version_snapshot
     to_snapshot () const
     {
-      return {client.tag_name, raw.tag_name, helper.tag_name, dxvk.tag_name};
+      return {client.tag_name, raw.tag_name, helper.tag_name};
     }
   };
 
@@ -391,8 +346,7 @@ namespace launcher
     {
       return local.client == remote.client &&
              local.raw    == remote.raw &&
-             local.helper == remote.helper &&
-             local.dxvk   == remote.dxvk;
+             local.helper == remote.helper;
     }
 
     // Fetch upstream metadata.
@@ -422,9 +376,9 @@ namespace launcher
       // a fixed order, even though only the results are ultimately used.
       //
 #ifdef __linux__
-      auto [ord, ex_c, c, ex_r, r, ex_h, h, ex_x, x, ex_d, d] =
+      auto [ord, ex_c, c, ex_r, r, ex_h, h, ex_d, d] =
 #else
-      auto [ord, ex_c, c, ex_r, r, ex_x, x, ex_d, d] =
+      auto [ord, ex_c, c, ex_r, r, ex_d, d] =
 #endif
         co_await make_parallel_group (
           asio::co_spawn (
@@ -449,12 +403,6 @@ namespace launcher
 #endif
           asio::co_spawn (
             ioc_,
-            github_.fetch_latest_release ("iw4x",
-                                          "dxvk",
-                                          false),
-            asio::deferred),
-          asio::co_spawn (
-            ioc_,
             [this] () -> asio::awaitable<string>
             {
               co_return co_await http_.get ("https://cdn.iw4x.io/update.json");
@@ -467,13 +415,12 @@ namespace launcher
 #ifdef __linux__
       if (ex_h) rethrow_exception (ex_h);
 #endif
-      if (ex_x) rethrow_exception (ex_x);
       if (ex_d) rethrow_exception (ex_d);
 
 #ifdef __linux__
-      co_return remote_state {move (c), move (r), move (h), move (x), move (d)};
+      co_return remote_state {move (c), move (r), move (h), move (d)};
 #else
-      co_return remote_state {move (c), move (r), {}, move (x), move (d)};
+      co_return remote_state {move (c), move (r), {}, move (d)};
 #endif
     }
 
@@ -537,15 +484,6 @@ namespace launcher
 
       int raw_count (inject_assets (remote.raw.assets));
       log ("Added " + std::to_string (raw_count) + " rawfiles");
-
-      // Inject DXVK.
-      //
-      // Note that DXVK archive name includes the version prefix (e.g.,
-      // "dxvk-2.7.1.zip"), so we inject all assets from the DXVK release
-      // without filtering.
-      //
-      inject_assets (remote.dxvk.assets);
-      log ("Added DXVK");
 
       // Merge dlc.
       //
@@ -726,20 +664,11 @@ namespace launcher
         {
           try
           {
-            if (a.name.rfind ("dxvk-", 0) == 0 && ext == ".zip")
-            {
-              co_await manifest_coordinator::extract_dxvk_archive (
-                p,
-                ctx_.install_location);
-            }
-            else
-            {
-              co_await manifest_coordinator::extract_archive (
-                a,
-                p,
-                ctx_.install_location,
-                &ac);
-            }
+            co_await manifest_coordinator::extract_archive (
+              a,
+              p,
+              ctx_.install_location,
+              &ac);
 
             fs::remove (p);
           }
