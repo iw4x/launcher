@@ -10,15 +10,17 @@
 #include <vector>
 
 #include <boost/json.hpp>
-#include <launcher/blake3.h>
+
 #include <miniz.h>
+
+#include <launcher/blake3.h>
 
 using namespace std;
 
 namespace launcher
 {
   manifest_coordinator::manifest_type manifest_coordinator::
-  parse (const string& s, manifest_format k)
+  parse (const string& s, manifest_format f)
   {
     if (s.empty ())
       throw runtime_error ("manifest JSON is empty");
@@ -27,14 +29,14 @@ namespace launcher
     // need the file entries to know about their parent archives (if any)
     // before we hand this object back to the caller.
     //
-    manifest_type m (s, k);
+    manifest_type m (s, f);
     m.link_files ();
 
     return m;
   }
 
   manifest_coordinator::manifest_type manifest_coordinator::
-  load (const fs::path& f, manifest_format k)
+  load (const fs::path& f, manifest_format fmt)
   {
     if (!fs::exists (f))
       throw runtime_error ("manifest file does not exist: " + f.string ());
@@ -47,7 +49,7 @@ namespace launcher
     //
     string s ((istreambuf_iterator<char> (is)), istreambuf_iterator<char> ());
 
-    return parse (s, k);
+    return parse (s, fmt);
   }
 
   void manifest_coordinator::
@@ -85,9 +87,7 @@ namespace launcher
   //
 
   vector<manifest_coordinator::file_type> manifest_coordinator::
-  get_missing_files (const manifest_type& m,
-                     const fs::path& dir,
-                     bool verify_hashes)
+  get_missing_files (const manifest_type& m, const fs::path& d, bool vc)
   {
     // We skip files that are part of an archive (e.g., inside a .zip) as
     // those are handled by the archive verification step.
@@ -99,7 +99,7 @@ namespace launcher
       if (f.archive_name)
         continue;
 
-      if (!verify_file (f, dir, verify_hashes))
+      if (!verify_file (f, d, vc))
         r.push_back (f);
     }
 
@@ -108,8 +108,8 @@ namespace launcher
 
   vector<manifest_coordinator::archive_type> manifest_coordinator::
   get_missing_archives (const manifest_type& m,
-                        const fs::path& dir,
-                        archive_cache* cache)
+                        const fs::path& d,
+                        archive_cache* c)
   {
     vector<archive_type> r;
 
@@ -118,15 +118,15 @@ namespace launcher
       // If we have a cache and the archive has a known hash, we can check if
       // we've already processed this specific version of the archive.
       //
-      if (cache != nullptr && !a.hash.empty ())
+      if (c != nullptr && !a.hash.empty ())
       {
-        auto e (cache->find (a.name, a.hash));
+        auto e (c->find (a.name, a.hash));
 
         // If we found a cache entry, we verify that the files listed in that
         // entry actually exist on disk and match the expected state. If they
         // do, we can save ourselves a download.
         //
-        if (e && cache->verify_entry (*e, dir))
+        if (e && c->verify_entry (*e, d))
           continue;
       }
 
@@ -137,7 +137,7 @@ namespace launcher
       // initial check to save time (hashing big zips is slow), unless the
       // caller forces it later.
       //
-      if (!verify_archive (a, dir, false))
+      if (!verify_archive (a, d, false))
         r.push_back (a);
     }
 
@@ -145,12 +145,12 @@ namespace launcher
   }
 
   bool manifest_coordinator::
-  verify_file (const file_type& f, const fs::path& dir, bool verify_hash)
+  verify_file (const file_type& f, const fs::path& d, bool vc)
   {
-    fs::path p (resolve_path (f, dir));
+    fs::path p (resolve_path (f, d));
     error_code ec;
 
-    // Check existence and size first.
+    // Check existence and size first to avoid expensive hashing.
     //
     if (!fs::exists (p, ec) || ec)
       return false;
@@ -160,7 +160,7 @@ namespace launcher
 
     // Only hash if explicitly requested.
     //
-    if (verify_hash && !f.hash.empty ())
+    if (vc && !f.hash.empty ())
     {
       string h (compute_file_hash (p, f.hash.algorithm));
 
@@ -172,9 +172,9 @@ namespace launcher
   }
 
   bool manifest_coordinator::
-  verify_archive (const archive_type& a, const fs::path& dir, bool verify_hash)
+  verify_archive (const archive_type& a, const fs::path& d, bool vc)
   {
-    fs::path p (resolve_path (a, dir));
+    fs::path p (resolve_path (a, d));
     error_code ec;
 
     if (!fs::exists (p, ec) || ec)
@@ -183,7 +183,7 @@ namespace launcher
     if (fs::file_size (p, ec) != a.size || ec)
       return false;
 
-    if (verify_hash && !a.hash.empty ())
+    if (vc && !a.hash.empty ())
     {
       string h (compute_file_hash (p, a.hash.algorithm));
 
@@ -198,11 +198,11 @@ namespace launcher
   //
 
   fs::path manifest_coordinator::
-  resolve_path (const file_type& f, const fs::path& dir)
+  resolve_path (const file_type& f, const fs::path& d)
   {
-    // This is where things get specific to IW4x. We have to map legacy
-    // paths (like "codo/") to the actual zone directory and determine where
-    // loose files like .iwd or .ff should live if their path isn't explicit.
+    // This is where things get specific to IW4x. We have to map legacy paths
+    // (like "codo/") to the actual zone directory and determine where loose
+    // files like .iwd or .ff should live if their path isn't explicit.
     //
     fs::path p (f.path);
     string ext (p.extension ().string ());
@@ -215,7 +215,7 @@ namespace launcher
     {
       string s (f.path);
       s.replace (0, 5, f.path[4] == '/' ? "zone/" : "zone\\");
-      return dir / s;
+      return d / s;
     }
 
     // If the path has a known prefix, trust it.
@@ -223,19 +223,19 @@ namespace launcher
     if (f.path.find ("zone/") == 0 || f.path.find ("zone\\") == 0 ||
         f.path.find ("iw4x/") == 0 || f.path.find ("iw4x\\") == 0)
     {
-      return dir / f.path;
+      return d / f.path;
     }
 
     // Heuristics for loose files.
     //
-    if (ext == ".iwd") return dir / "iw4x" / p.filename ();
-    if (ext == ".ff")  return dir / "zone" / "dlc" / p.filename ();
+    if (ext == ".iwd") return d / "iw4x" / p.filename ();
+    if (ext == ".ff")  return d / "zone" / "dlc" / p.filename ();
 
-    return dir / f.path;
+    return d / f.path;
   }
 
   fs::path manifest_coordinator::
-  resolve_path (const archive_type& a, const fs::path& dir)
+  resolve_path (const archive_type& a, const fs::path& d)
   {
     fs::path p (a.name);
     string ext (p.extension ().string ());
@@ -248,19 +248,19 @@ namespace launcher
     if (a.name.find ("zone/") == 0 || a.name.find ("zone\\") == 0 ||
         a.name.find ("iw4x/") == 0 || a.name.find ("iw4x\\") == 0)
     {
-      return dir / a.name;
+      return d / a.name;
     }
 
     // Heuristics.
     //
-    if (ext == ".iwd") return dir / "iw4x" / p.filename ();
-    if (ext == ".ff")  return dir / "zone" / "dlc" / p.filename ();
+    if (ext == ".iwd") return d / "iw4x" / p.filename ();
+    if (ext == ".ff")  return d / "zone" / "dlc" / p.filename ();
 
     // ZIP archives usually extract in-place at the root.
     //
-    if (ext == ".zip") return dir / p.filename ();
+    if (ext == ".zip") return d / p.filename ();
 
-    return dir / a.name;
+    return d / a.name;
   }
 
   // Extraction.
@@ -268,26 +268,26 @@ namespace launcher
 
   asio::awaitable<void> manifest_coordinator::
   extract_archive (const archive_type& a,
-                   const fs::path& archive_path,
-                   const fs::path& dir,
-                   archive_cache* cache)
+                   const fs::path& ap,
+                   const fs::path& d,
+                   archive_cache* c)
   {
-    if (!fs::exists (archive_path))
-      throw runtime_error ("archive file does not exist: " +
-                           archive_path.string ());
+    if (!fs::exists (ap))
+      throw runtime_error ("archive file does not exist: " + ap.string ());
 
-    mz_zip_archive zip;
-    memset (&zip, 0, sizeof (zip));
+    mz_zip_archive z;
+    memset (&z, 0, sizeof (z));
 
-    if (!mz_zip_reader_init_file (&zip, archive_path.string ().c_str (), 0))
-      throw runtime_error ("failed to open archive: " + archive_path.string ());
+    if (!mz_zip_reader_init_file (&z, ap.string ().c_str (), 0))
+      throw runtime_error ("failed to open archive: " + ap.string ());
 
-    // Prepare the cache entry. We will populate it as we extract files so that
-    // next time we can verify the extraction without doing the work again.
+    // Prepare the cache entry. We will populate it as we extract files so
+    // that next time we can verify the extraction without doing the work
+    // again.
     //
     archive_cache_entry ce;
 
-    if (cache != nullptr)
+    if (c != nullptr)
     {
       ce.archive_name = a.name;
       ce.archive_hash = a.hash;
@@ -303,14 +303,14 @@ namespace launcher
       {
         for (const auto& f : a.files)
         {
-          int idx (mz_zip_reader_locate_file (&zip,
+          int idx (mz_zip_reader_locate_file (&z,
                                               f.path.c_str (),
                                               nullptr,
                                               0));
           if (idx < 0)
             continue;
 
-          fs::path out (resolve_path (f, dir));
+          fs::path out (resolve_path (f, d));
 
           if (out.has_parent_path ())
           {
@@ -322,7 +322,7 @@ namespace launcher
                                    out.parent_path ().string ());
           }
 
-          if (!mz_zip_reader_extract_to_file (&zip,
+          if (!mz_zip_reader_extract_to_file (&z,
                                               idx,
                                               out.string ().c_str (),
                                               0))
@@ -330,10 +330,10 @@ namespace launcher
             throw runtime_error ("failed to extract file: " + f.path);
           }
 
-          if (cache != nullptr)
+          if (c != nullptr)
           {
             basic_manifest_cache_entry<>::extracted_file ef;
-            ef.path = fs::relative (out, dir).string ();
+            ef.path = fs::relative (out, d).string ();
             ef.hash = f.hash;
             ef.size = f.size;
             ce.files.push_back (move (ef));
@@ -342,21 +342,21 @@ namespace launcher
       }
       else
       {
-        mz_uint n (mz_zip_reader_get_num_files (&zip));
+        mz_uint n (mz_zip_reader_get_num_files (&z));
 
         for (mz_uint i (0); i < n; ++i)
         {
-          mz_zip_archive_file_stat stat;
-          if (!mz_zip_reader_file_stat (&zip, i, &stat))
+          mz_zip_archive_file_stat st;
+          if (!mz_zip_reader_file_stat (&z, i, &st))
             throw runtime_error ("failed to read file stat from archive");
 
-          if (mz_zip_reader_is_file_a_directory (&zip, i))
+          if (mz_zip_reader_is_file_a_directory (&z, i))
             continue;
 
           file_type f;
-          f.path = stat.m_filename;
+          f.path = st.m_filename;
 
-          fs::path out (resolve_path (f, dir));
+          fs::path out (resolve_path (f, d));
 
           if (out.has_parent_path ())
           {
@@ -368,20 +368,20 @@ namespace launcher
                                    out.parent_path ().string ());
           }
 
-          if (!mz_zip_reader_extract_to_file (&zip,
+          if (!mz_zip_reader_extract_to_file (&z,
                                               i,
                                               out.string ().c_str (),
                                               0))
           {
             throw runtime_error ("failed to extract file: " +
-                                 string (stat.m_filename));
+                                 string (st.m_filename));
           }
 
-          if (cache != nullptr)
+          if (c != nullptr)
           {
             archive_cache_entry::extracted_file ef;
-            ef.path = fs::relative (out, dir).string ();
-            ef.size = stat.m_uncomp_size;
+            ef.path = fs::relative (out, d).string ();
+            ef.size = st.m_uncomp_size;
 
             // We don't have a manifest hash for this file since it was
             // implicit, so compute it now to verify later.
@@ -394,18 +394,18 @@ namespace launcher
         }
       }
 
-      mz_zip_reader_end (&zip);
+      mz_zip_reader_end (&z);
 
       // Commit the entry to the cache.
       //
-      if (cache != nullptr && !ce.files.empty ())
-        cache->add (move (ce));
+      if (c != nullptr && !ce.files.empty ())
+        c->add (move (ce));
     }
     catch (...)
     {
       // Clean up C resource before throwing.
       //
-      mz_zip_reader_end (&zip);
+      mz_zip_reader_end (&z);
       throw;
     }
 
@@ -416,21 +416,21 @@ namespace launcher
   //
 
   uint64_t manifest_coordinator::
-  calculate_download_size (const manifest_type& m, const fs::path& dir)
+  calculate_download_size (const manifest_type& m, const fs::path& d)
   {
-    uint64_t total (0);
+    uint64_t t (0);
 
     // Sum up missing loose files.
     //
-    for (const auto& f : get_missing_files (m, dir, false))
-      total += f.size;
+    for (const auto& f : get_missing_files (m, d, false))
+      t += f.size;
 
     // Sum up missing archives.
     //
-    for (const auto& a : get_missing_archives (m, dir))
-      total += a.size;
+    for (const auto& a : get_missing_archives (m, d))
+      t += a.size;
 
-    return total;
+    return t;
   }
 
   size_t manifest_coordinator::
@@ -454,22 +454,22 @@ namespace launcher
   //
 
   string
-  compute_hash (const void* data, size_t size, hash_algorithm a)
+  compute_hash (const void* d, size_t n, hash_algorithm a)
   {
     if (a != hash_algorithm::blake3)
       throw runtime_error ("unsupported hash algorithm");
 
-    blake3_hasher hasher;
-    blake3_hasher_init (&hasher);
-    blake3_hasher_update (&hasher, data, size);
+    blake3_hasher h;
+    blake3_hasher_init (&h);
+    blake3_hasher_update (&h, d, n);
 
-    uint8_t output[BLAKE3_OUT_LEN];
-    blake3_hasher_finalize (&hasher, output, BLAKE3_OUT_LEN);
+    uint8_t out[BLAKE3_OUT_LEN];
+    blake3_hasher_finalize (&h, out, BLAKE3_OUT_LEN);
 
-    ostringstream oss;
+    ostringstream os;
     for (size_t i (0); i < BLAKE3_OUT_LEN; ++i)
-      oss << hex << setw (2) << setfill ('0') << static_cast<int> (output[i]);
+      os << hex << setw (2) << setfill ('0') << static_cast<int> (out[i]);
 
-    return oss.str ();
+    return os.str ();
   }
 }
