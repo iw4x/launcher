@@ -54,28 +54,15 @@ namespace launcher
     //
     if (include_prerelease)
     {
-      // Fetch a batch of releases. We ask for 20 to find at least one valid
-      // (non-draft) release.
+      // Fetch a small batch; the first one should be the newest.
       //
       vector<release_type> rs (
-        co_await api_->get_releases (owner, repo, 20));
+        co_await api_->get_releases (owner, repo, 10));
 
       if (rs.empty ())
         throw runtime_error ("no releases found for " + owner + "/" + repo);
 
-      // Iterate through releases and pick the first non-draft. The API
-      // returns them sorted by creation date (newest first).
-      //
-      for (const auto& r : rs)
-      {
-        if (r.draft)
-          continue;
-
-        co_return r;
-      }
-
-      throw runtime_error ("no valid releases found for " + owner + "/" + repo +
-                           " (all are drafts)");
+      co_return rs[0];
     }
     else
     {
