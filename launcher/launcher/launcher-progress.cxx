@@ -12,9 +12,9 @@ using namespace std;
 namespace launcher
 {
   progress_coordinator::
-  progress_coordinator (asio::io_context& ioc)
-    : ioc_ (ioc),
-      manager_ (make_unique<manager_type> (ioc))
+  progress_coordinator (asio::io_context& c)
+    : ioc_ (c),
+      manager_ (make_unique<manager_type> (c))
   {
   }
 
@@ -37,9 +37,9 @@ namespace launcher
   }
 
   shared_ptr<progress_coordinator::entry_type> progress_coordinator::
-  add_entry (string label)
+  add_entry (string l)
   {
-    return manager_->add_entry (move (label));
+    return manager_->add_entry (move (l));
   }
 
   void progress_coordinator::
@@ -49,32 +49,34 @@ namespace launcher
   }
 
   void progress_coordinator::
-  update_progress (shared_ptr<entry_type> e,
-                   uint64_t current,
-                   uint64_t total)
+  update_progress (shared_ptr<entry_type> e, uint64_t c, uint64_t t)
   {
-    // Note that we're using relaxed memory order because these values are only
-    // used for feedback. If the user sees a value that is a few CPU cycles
-    // stale, it's not the end of the world. We prefer performance here.
+    // We use relaxed memory order for metric updates. Since this data is
+    // purely for UI feedback, observing a value that is a few CPU cycles
+    // stale is an acceptable trade-off for minimizing synchronization
+    // overhead.
     //
     auto& m (e->metrics ());
-    m.current_bytes.store (current, memory_order_relaxed);
-    m.total_bytes.store (total, memory_order_relaxed);
+    m.current_bytes.store (c, memory_order_relaxed);
+    m.total_bytes.store (t, memory_order_relaxed);
 
-    // Determine the state.
+    // Determine state.
     //
-    progress_state s ((total > 0 && current >= total)
-                        ? progress_state::completed
-                        : progress_state::active);
+    // Note that we assume completion if we've hit the total bytes, provided
+    // we actually expect some data (t > 0).
+    //
+    progress_state s ((t > 0 && c >= t)
+                      ? progress_state::completed
+                      : progress_state::active);
 
     m.state.store (s, memory_order_relaxed);
 
-    // Update the tracker speed calculation.
+    // Update tracker speed.
     //
-    auto& t (e->tracker ());
-    t.update (current);
+    auto& tr (e->tracker ());
+    tr.update (c);
 
-    m.speed.store (t.speed (), memory_order_relaxed);
+    m.speed.store (tr.speed (), memory_order_relaxed);
   }
 
   void progress_coordinator::
@@ -84,9 +86,9 @@ namespace launcher
   }
 
   void progress_coordinator::
-  show_dialog (string title, string message)
+  show_dialog (string t, string m)
   {
-    manager_->show_dialog (move (title), move (message));
+    manager_->show_dialog (move (t), move (m));
   }
 
   void progress_coordinator::
@@ -113,58 +115,60 @@ namespace launcher
   string
   format_progress (const progress_metrics& m)
   {
-    // Load everything upfront so that we have a consistent snapshot (or as
-    // close as we can get with relaxed ordering).
+    // Snapshot the atomics. While relaxed ordering doesn't guarantee a
+    // strictly consistent view across all variables, loading them upfront
+    // gives us a "good enough" point-in-time for the string generation.
     //
-    uint64_t cur (m.current_bytes.load (memory_order_relaxed));
-    uint64_t tot (m.total_bytes.load (memory_order_relaxed));
-    float spd (m.speed.load (memory_order_relaxed));
+    uint64_t c (m.current_bytes.load (memory_order_relaxed));
+    uint64_t t (m.total_bytes.load (memory_order_relaxed));
+    float s (m.speed.load (memory_order_relaxed));
 
-    ostringstream oss;
-    oss << format_bytes (cur) << " / " << format_bytes (tot);
+    ostringstream o;
+    o << format_bytes (c) << " / " << format_bytes (t);
 
-    // If we have a total, we can calculate the percentage.
+    // Calculate percentage if we have a target.
     //
-    if (tot > 0)
+    if (t > 0)
     {
-      float r (static_cast<float> (cur) / static_cast<float> (tot));
-      oss << " (" << fixed << setprecision (1) << (r * 100.0f) << "%)";
+      float r (static_cast<float> (c) / static_cast<float> (t));
+      o << " (" << fixed << setprecision (1) << (r * 100.0f) << "%)";
     }
 
-    // Append speed and ETA if available.
+    // Append speed and ETA.
     //
-    if (spd > 0.0f)
+    if (s > 0.0f)
     {
-      oss << " @ " << format_speed (spd);
+      o << " @ " << format_speed (s);
 
       int eta (m.eta_seconds ());
       if (eta > 0)
-        oss << ", ETA " << format_duration (eta);
+        o << ", ETA " << format_duration (eta);
     }
 
-    return oss.str ();
+    return o.str ();
   }
 
   string
   format_bytes (uint64_t b)
   {
-    // Keep it simple: standard SI prefixes.
+    // Stick to standard IEC binary prefixes (KiB, MiB, etc.) rather than
+    // SI decimal ones since we are dealing with file sizes and buffers.
     //
-    static const char* units[] = {"B", "KiB", "MiB", "GiB", "TiB"};
-    static const size_t n_units (sizeof (units) / sizeof (*units));
+    static const char* u[] = {"B", "KiB", "MiB", "GiB", "TiB"};
+    static const size_t n (sizeof (u) / sizeof (*u));
 
     double v (static_cast<double> (b));
     size_t i (0);
 
-    while (v >= 1024.0 && i < n_units - 1)
+    while (v >= 1024.0 && i < n - 1)
     {
       v /= 1024.0;
       ++i;
     }
 
-    ostringstream oss;
-    oss << fixed << setprecision (1) << v << ' ' << units[i];
-    return oss.str ();
+    ostringstream o;
+    o << fixed << setprecision (1) << v << ' ' << u[i];
+    return o.str ();
   }
 
   string
@@ -176,63 +180,67 @@ namespace launcher
   string
   format_duration (int s)
   {
-    ostringstream oss;
+    ostringstream o;
 
     if (s < 60)
     {
-      oss << s << "s";
+      o << s << "s";
     }
     else if (s < 3600)
     {
+      // Minutes and remainder seconds.
+      //
       int m (s / 60);
       int r (s % 60);
 
-      oss << m << "m";
-      if (r > 0) oss << ' ' << r << "s";
+      o << m << "m";
+      if (r > 0) o << ' ' << r << "s";
     }
     else
     {
-      // Good enough for long durations: hours and minutes.
+      // Once we hit hours, second-level precision is mostly noise, so we
+      // drop it.
       //
       int h (s / 3600);
       int m ((s % 3600) / 60);
 
-      oss << h << "h";
-      if (m > 0) oss << ' ' << m << "m";
+      o << h << "h";
+      if (m > 0) o << ' ' << m << "m";
     }
 
-    return oss.str ();
+    return o.str ();
   }
 
   string
-  format_progress_bar (float ratio, int width, bool indeterminate)
+  format_progress_bar (float r, int w, bool ind)
   {
-    ostringstream oss;
-    oss << '[';
+    ostringstream o;
+    o << '[';
 
-    if (indeterminate)
+    if (ind)
     {
-      // If we don't know the progress, just throb in the middle.
+      // For indeterminate states, we just throb in the center to show
+      // liveness.
       //
-      for (int i (0); i < width; ++i)
-        oss << (i == width / 2 ? '>' : ' ');
+      for (int i (0); i < w; ++i)
+        o << (i == w / 2 ? '>' : ' ');
     }
     else
     {
-      int filled (static_cast<int> (round (ratio * width)));
-      filled = min (filled, width);
+      int f (static_cast<int> (round (r * w)));
+      f = min (f, w);
 
-      // Draw the bar: '===>   '
+      // Render the standard arrow: '===>   '
       //
-      for (int i (0); i < width; ++i)
+      for (int i (0); i < w; ++i)
       {
-        if      (i <  filled - 1) oss << '=';
-        else if (i == filled - 1) oss << '>';
-        else                      oss << ' ';
+        if      (i <  f - 1) o << '=';
+        else if (i == f - 1) o << '>';
+        else                 o << ' ';
       }
     }
 
-    oss << ']';
-    return oss.str ();
+    o << ']';
+    return o.str ();
   }
 }
