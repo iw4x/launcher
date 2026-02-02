@@ -1,9 +1,11 @@
 libs =
 
 options = launcher-options
+schemas = cache/cache-types
 
 import libs += libssl%lib{ssl}
 import libs += libcrypto%lib{crypto}
+
 import libs += libboost-asio%lib{boost_asio}
 import libs += libboost-beast%lib{boost_beast}
 import libs += libboost-filesystem%lib{boost_filesystem}
@@ -17,10 +19,14 @@ import libs += libftxui%lib{ftxui-component}
 import libs += libftxui%lib{ftxui-dom}
 import libs += libftxui%lib{ftxui-screen}
 
+import libs += libodb%lib{odb}
+import libs += libodb-sqlite%lib{odb-sqlite}
+
 exe{iw4x-launcher}: {hxx ixx txx cxx}{**  -steam/steam-proton    \
                                           -launcher-steam-proton \
                                           -version               \
                                           -*-options             \
+                                          -*-odb                 \
                                           -pregenerated/**}
 exe{iw4x-launcher}: {h c}{**}
 exe{iw4x-launcher}: {hxx}{version}
@@ -77,6 +83,7 @@ pregenerated/{hxx ixx cxx}{*}: dist = (!$develop)
 # Include the generated files in the build.
 #
 exe{iw4x-launcher}: {hxx ixx cxx}{$options}: include = $develop
+exe{iw4x-launcher}: {hxx ixx cxx}{$schemas-odb}: include = $develop
 
 if $develop
   import! [metadata] cli = cli%exe{cli}
@@ -158,3 +165,67 @@ if $develop
   cp $i $di
   cp $c $dc
 }}
+
+## ODB
+#
+
+if $develop
+  import! [metadata] odb = odb%exe{odb}
+
+for f: $schemas
+{
+  [rule_hint=cxx] libue{$f-meta}: $libs
+
+  exe{iw4x-launcher}: libue{$f-meta} $libs
+
+  <{hxx ixx cxx}{$f-odb}>: hxx{$f} libue{$f-meta} $odb
+  {
+    dist = ($develop ? $relative([dir_path] "pregenerated/launcher/$d", $d) : false)
+  }
+}
+
+<{hxx ixx cxx}{~'/(.+)-odb/'}>: hxx{~'/\1/'} libue{~'/.+-meta/'} $odb
+%
+if $develop
+{{
+  pops = $cxx.lib_poptions($<[1])
+
+  depdb hash $pops
+
+  h = $path($>[0])
+  i = $path($>[1])
+  c = $path($>[2])
+
+  d = $directory($h)
+  p = $string($leaf($d, $out_root))
+
+  options = --std c++17 --database sqlite -I $src_root              \
+            --include-with-brackets --include-prefix $p             \
+            --guard-prefix $regex.replace($ucase($p), '[/\\]', '_') \
+            --generate-schema --generate-query                      \
+            --output-dir $d
+
+  $odb $options $pops $path($<[0])
+
+  # If the result differs from the pregenerated version, copy it over.
+  #
+  d = [dir_path] $src_base/pregenerated/$p
+
+  dh = $d/$leaf($h)
+  di = $d/$leaf($i)
+  dc = $d/$leaf($c)
+
+  if diff $dh $h >- && \
+     diff $di $i >- && \
+     diff $dc $c >-
+  {
+    exit
+  }
+
+  cp $h $dh
+  cp $i $di
+  cp $c $dc
+}}
+
+#
+##
