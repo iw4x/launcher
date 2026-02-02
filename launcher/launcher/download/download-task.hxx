@@ -34,30 +34,6 @@ namespace launcher
     // State change callback type.
     //
     using state_callback = std::function<void (download_state, download_state)>;
-
-    // Verification function type.
-    //
-    using verification_function =
-        std::function<bool (const fs::path&, const string_type&)>;
-
-    // Default verification implementation.
-    //
-    static bool
-    verify (const fs::path& file,
-            const string_type& checksum,
-            download_verification method);
-
-    // Compute hash of a file.
-    //
-    static string_type
-    compute_hash (const fs::path& file,
-                  download_verification method);
-
-    // Compare two hashes (case-insensitive).
-    //
-    static bool
-    compare_hashes (const string_type& hash1,
-                    const string_type& hash2);
   };
 
   // Basic download task abstraction.
@@ -167,8 +143,7 @@ namespace launcher
     {
       download_state st (state.load ());
       return st == download_state::connecting ||
-             st == download_state::downloading ||
-             st == download_state::verifying;
+             st == download_state::downloading;
     }
 
     bool

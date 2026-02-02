@@ -90,44 +90,6 @@ namespace launcher
     return a == "y" || a == "Y";
   }
 
-  // Generate a collision-resistant identifier for filesystem paths.
-  //
-  // We need to associate metadata (like the "accepted" state) with specific
-  // installation paths. Since paths can contain characters that are invalid for
-  // filenames (separators, etc.) or exceed length limits, hashing the string
-  // gives us a stable, safe identifier.
-  //
-  static string
-  path_digest (const fs::path& p)
-  {
-    std::hash<string> h;
-    return std::to_string (h (p.string ()));
-  }
-
-  // Determine the directory for user preference and state caching.
-  //
-  // The scope parameter specifies the game installation directory. When not
-  // provided (for global preferences like Steam path acceptance markers), we
-  // use the current working directory.
-  //
-  static fs::path
-  resolve_cache_root (const fs::path& scope = {})
-  {
-    // Use the scope (game installation directory) as the base for cache. If
-    // no scope is provided, fall back to the current working directory.
-    //
-    fs::path base (scope.empty () ? fs::current_path () : scope);
-    fs::path d (base / ".iw4x");
-
-    error_code ec;
-    fs::create_directories (d, ec);
-
-    // If we can't create the directory, there's not much we can do. The
-    // caller will discover the problem when they try to read/write files.
-
-    return d;
-  }
-
   // Aggregates all the configuration options, environment paths, and flags
   // derived from CLI arguments and platform detection, so we can pass them
   // around as a single unit.
@@ -138,104 +100,10 @@ namespace launcher
     string         upstream_owner;
     string         upstream_repo;
     bool           prerelease;
-    bool           force_verification;
-    bool           disable_integrity_check;
     size_t         concurrency_limit;
     bool           headless;
-    bool           enable_execution;
-    bool           use_proton;
     fs::path       proton_binary;
-    fs::path       proton_steam_root;
-    fs::path       proton_helper_override;
-    uint32_t       proton_appid;
     vector<string> proton_arguments;
-    bool           verbose_proton;
-    bool           proton_logging;
-  };
-
-  // Manages version pinning markers and the archive extraction cache.
-  //
-  class persistence_layer
-  {
-  public:
-    struct version_snapshot
-    {
-      string client;
-      string raw;
-      string helper;
-    };
-
-    explicit
-    persistence_layer (const fs::path& install_root)
-      : root_ (resolve_cache_root (install_root)),
-        marker_installed_ (root_ / ".launcher-installed"),
-        marker_ver_client_ (root_ / ".launcher-version-client"),
-        marker_ver_raw_ (root_ / ".launcher-version-raw"),
-        marker_ver_helper_ (root_ / ".launcher-version-helper"),
-        archive_cache_path_ (root_ / ".launcher-archive.json")
-    {
-    }
-
-    const fs::path&
-    archive_cache_path () const
-    {
-      return archive_cache_path_;
-    }
-
-    // Check if the installation is complete and valid.
-    //
-    bool
-    is_fully_installed () const
-    {
-      return fs::exists (marker_installed_) &&
-             fs::exists (marker_ver_client_) &&
-             fs::exists (marker_ver_raw_) &&
-             fs::exists (marker_ver_helper_);
-    }
-
-    version_snapshot
-    read_versions () const
-    {
-      return {read_file (marker_ver_client_),
-              read_file (marker_ver_raw_),
-              read_file (marker_ver_helper_)};
-    }
-
-    // Atomically-ish commit the new versions.
-    //
-    void
-    commit_versions (const version_snapshot& v)
-    {
-      write_file (marker_ver_client_, v.client);
-      write_file (marker_ver_raw_, v.raw);
-      write_file (marker_ver_helper_, v.helper);
-
-      ofstream os (marker_installed_);
-    }
-
-  private:
-    static string
-    read_file (const fs::path& p)
-    {
-      ifstream is (p);
-      string s;
-      getline (is, s);
-      return s;
-    }
-
-    static void
-    write_file (const fs::path& p, const string& content)
-    {
-      ofstream os (p);
-      os << content;
-    }
-
-    fs::path root_;
-    fs::path marker_installed_;
-    fs::path marker_ver_client_;
-    fs::path marker_ver_raw_;
-    fs::path marker_ver_helper_;
-    fs::path archive_cache_path_;
   };
 
   // Aggregates remote state required for synchronization.
@@ -246,12 +114,6 @@ namespace launcher
     github_release raw;
     github_release helper;
     string dlc_manifest_json;
-
-    persistence_layer::version_snapshot
-    to_snapshot () const
-    {
-      return {client.tag_name, raw.tag_name, helper.tag_name};
-    }
   };
 
   // Main controller for the bootstrap process.
@@ -262,7 +124,6 @@ namespace launcher
     launcher_controller (asio::io_context& ioc, runtime_context ctx)
         : ioc_ (ioc),
           ctx_ (move (ctx)),
-          state_ (ctx_.install_location),
           github_ (ioc_),
           http_ (ioc_),
           downloads_ (ioc_, ctx_.concurrency_limit),
@@ -290,39 +151,11 @@ namespace launcher
       //
       remote_state remote (co_await resolve_remote_state ());
 
-      // Verification Phase.
-      //
-      // If our local version markers match the remote tags, we assume the core
-      // components are up to date and can skip the expensive manifest
-      // resolution.
-      //
-      bool up_to_date (state_.is_fully_installed () &&
-                       compare_versions (state_.read_versions (),
-                                         remote.to_snapshot ()));
-
-      if (up_to_date && !ctx_.force_verification)
-      {
-        if (ctx_.headless)
-          cout << "Client is up to date (" << remote.client.tag_name << ").\n";
-        else
-          co_await progress_.stop ();
-
-        co_return co_await execute_payload ();
-      }
-
       // Provisioning Phase.
       //
-      // State is divergent or verification was forced. We need to calculate the
-      // diff and synchronize artifacts.
+      // Always synchronize artifacts from remote.
       //
       co_await reconcile_artifacts (remote);
-
-      // Commit Phase.
-      //
-      // If we made it this far, update the version markers to reflect the new
-      // state.
-      //
-      state_.commit_versions (remote.to_snapshot ());
 
       if (ctx_.headless)
         cout << "Update complete.\n";
@@ -342,15 +175,6 @@ namespace launcher
         cout << msg << "\n";
       else
         progress_.add_log (msg);
-    }
-
-    bool
-    compare_versions (const persistence_layer::version_snapshot& local,
-                      const persistence_layer::version_snapshot& remote)
-    {
-      return local.client == remote.client &&
-             local.raw    == remote.raw &&
-             local.helper == remote.helper;
     }
 
     // Fetch upstream metadata.
@@ -433,21 +257,6 @@ namespace launcher
     asio::awaitable<void>
     reconcile_artifacts (const remote_state& remote)
     {
-      // Load extraction cache so we don't re-extract archives we've already
-      // processed.
-      //
-      archive_cache ac (state_.archive_cache_path ());
-      try
-      {
-        ac.load ();
-      }
-      catch (const exception& e)
-      {
-        if (ctx_.headless)
-          cerr << "warning: archive cache corruption detected: "
-               << e.what () << "\n";
-      }
-
       log ("Downloading manifest...");
 
       // We only need to fetch the client manifest (the DLC manifest was
@@ -515,29 +324,32 @@ namespace launcher
         log ("Added " + std::to_string (dlc.files.size ()) + " DLC");
       }
 
-      // With the full manifest built, we can now diff it against the local
-      // filesystem to see what's missing or outdated.
+      // Collect all files and archives to download.
       //
-      log ("Checking local files...");
+      // We filter out files that are part of archives (they'll be extracted
+      // from the archive after download).
+      //
+      vector<manifest_file> files_to_download;
+      for (const auto& f : m.files)
+      {
+        if (!f.archive_name)
+          files_to_download.push_back (f);
+      }
 
-      vector<manifest_file> missing_files (
-        manifest_coordinator::get_missing_files (m, ctx_.install_location, false));
+      const auto& archives_to_download (m.archives);
 
-      vector<manifest_archive> missing_archives (
-        manifest_coordinator::get_missing_archives (m, ctx_.install_location, &ac));
-
-      if (missing_files.empty () && missing_archives.empty ())
+      if (files_to_download.empty () && archives_to_download.empty ())
         co_return;
 
       // Queue acquisition tasks.
       //
       uint64_t total_bytes (0);
-      for (const auto& f : missing_files) total_bytes += f.size;
-      for (const auto& a : missing_archives) total_bytes += a.size;
+      for (const auto& f : files_to_download) total_bytes += f.size;
+      for (const auto& a : archives_to_download) total_bytes += a.size;
 
       if (ctx_.headless)
         cout << "Need to download "
-             << (missing_files.size () + missing_archives.size ()) << " items ("
+             << (files_to_download.size () + archives_to_download.size ()) << " items ("
              << format_bytes (total_bytes) << ")\n";
 
       unordered_map<shared_ptr<download_coordinator::task_type>,
@@ -546,8 +358,7 @@ namespace launcher
       auto schedule_download = [&] (const string& url,
                                     const fs::path& target,
                                     const string& name,
-                                    uint64_t size,
-                                    const auto& hash)
+                                    uint64_t size)
       {
         download_request req;
         req.urls.push_back (url);
@@ -558,17 +369,7 @@ namespace launcher
         if (url.find ("cdn.iw4x.io") != string::npos)
           req.rate_limit_bytes_per_second = 2097152; // 2 MB/s
 
-        if (!hash.empty ())
-        {
-          req.verification_method = ctx_.disable_integrity_check
-            ? download_verification::none
-            : download_verification::sha256;
-          req.verification_value = hash.string ();
-        }
-        else
-        {
-          req.verification_method = download_verification::none;
-        }
+        req.verification_method = download_verification::none;
 
         auto task (downloads_.queue_download (move (req)));
 
@@ -587,7 +388,7 @@ namespace launcher
         }
       };
 
-      for (const auto& f : missing_files)
+      for (const auto& f : files_to_download)
       {
         if (!f.asset_name)
           continue;
@@ -609,11 +410,10 @@ namespace launcher
         schedule_download (a->browser_download_url,
                            t,
                            t.filename ().string (),
-                           f.size,
-                           f.hash);
+                           f.size);
       }
 
-      for (const auto& a : missing_archives)
+      for (const auto& a : archives_to_download)
       {
         if (a.url.empty ()) continue;
 
@@ -623,7 +423,7 @@ namespace launcher
         if (t.has_parent_path ())
           fs::create_directories (t.parent_path ());
 
-        schedule_download (a.url, t, a.name, a.size, a.hash);
+        schedule_download (a.url, t, a.name, a.size);
       }
 
       asio::co_spawn (ioc_, downloads_.execute_all (), asio::detached);
@@ -657,7 +457,7 @@ namespace launcher
       // Only .zip files need extraction; .iwd, .ff, and .exe files are
       // already in their final form.
       //
-      for (const auto& a : missing_archives)
+      for (const auto& a : archives_to_download)
       {
         fs::path p (manifest_coordinator::resolve_path (a, ctx_.install_location));
         string ext (p.extension ().string ());
@@ -671,8 +471,7 @@ namespace launcher
             co_await manifest_coordinator::extract_archive (
               a,
               p,
-              ctx_.install_location,
-              &ac);
+              ctx_.install_location);
 
             fs::remove (p);
           }
@@ -682,27 +481,16 @@ namespace launcher
           }
         }
       }
-
-      try { ac.save (); } catch (...) {}
     }
 
     asio::awaitable<int>
     execute_payload ()
     {
-      if (!ctx_.enable_execution)
-        co_return 0;
-
 #ifdef __linux__
-      if (ctx_.use_proton)
-        co_return co_await execute_proton ();
+      co_return co_await execute_proton ();
 #else
       co_return co_await execute_native ();
 #endif
-
-      if (ctx_.headless)
-        cout << "Native execution requested (not implemented).\n";
-
-      co_return 0;
     }
 
 #ifdef __linux__
@@ -725,36 +513,6 @@ namespace launcher
       log ("Starting Proton...");
 
       proton_coordinator proton (ioc_);
-      proton.set_verbose (ctx_.verbose_proton);
-      proton.set_enable_logging (ctx_.proton_logging);
-
-      // If we have a custom helper (steam.exe), copy it in.
-      //
-      // Mostly useful for development/debugging where we might want to test a
-      // specific steam helper build without pushing it to GitHub.
-      //
-      if (!ctx_.proton_helper_override.empty ())
-      {
-        if (fs::exists (ctx_.proton_helper_override))
-        {
-          try
-          {
-            fs::copy_file (ctx_.proton_helper_override,
-                           ctx_.install_location / "steam.exe",
-                           fs::copy_options::overwrite_existing);
-          }
-          catch (const exception& e)
-          {
-            cerr << "warning: failed to inject helper override: "
-                 << e.what () << "\n";
-          }
-        }
-        else
-        {
-          cerr << "warning: helper override not found: "
-               << ctx_.proton_helper_override << "\n";
-        }
-      }
 
       if (!fs::exists (ctx_.install_location / "steam.exe"))
       {
@@ -762,9 +520,15 @@ namespace launcher
         co_return 1;
       }
 
-      bool success (co_await proton.complete_launch (ctx_.proton_steam_root,
+      // Try to detect Steam path from environment.
+      //
+      fs::path steam_root;
+      if (const char* home = getenv ("HOME"))
+        steam_root = fs::path (home) / ".steam" / "steam";
+
+      bool success (co_await proton.complete_launch (steam_root,
                                                      binary_path,
-                                                     ctx_.proton_appid,
+                                                     10190,
                                                      ctx_.proton_arguments));
 
       if (!success)
@@ -865,7 +629,6 @@ namespace launcher
 
     asio::io_context& ioc_;
     runtime_context ctx_;
-    persistence_layer state_;
     github_coordinator github_;
     http_coordinator http_;
     download_coordinator downloads_;
@@ -874,9 +637,8 @@ namespace launcher
 
   // Resolve MW2 installation root via Steam.
   //
-  // If we find something, we check our local cache to see if the user has
-  // previously made a decision about this path to avoid pestering them on every
-  // run.
+  // If we find a Steam installation, prompt the user to confirm whether they
+  // want to use it.
   //
   asio::awaitable<optional<fs::path>>
   resolve_install_root (asio::io_context& ioc)
@@ -887,50 +649,17 @@ namespace launcher
 
       if (p && fs::exists (*p))
       {
-        fs::path cache (resolve_cache_root ());
-        string digest (path_digest (*p));
+        cout
+          << "Found Steam installation of Call of Duty: Modern Warfare 2:\n"
+          << "  " << p->string () << "\n\n";
 
-        fs::path marker_y (cache / (digest + ".yes"));
-        fs::path marker_n (cache / (digest + ".no"));
+        bool accepted (
+          confirm_action (
+            "Install IW4x to this directory? [Y/n] "
+            "(n = use current directory)", 'y'));
 
-        bool has_y (fs::exists (marker_y));
-        bool has_n (fs::exists (marker_n));
-
-        // If we have both markers, the cache is inconsistent (maybe user
-        // fiddling or a race condition). Better to wipe both and ask again.
-        //
-        if (has_y && has_n)
-        {
-          fs::remove (marker_y);
-          fs::remove (marker_n);
-          has_y = has_n = false;
-        }
-
-        if (has_y || has_n)
-        {
-          // Using cached preference.
-          //
-          if (has_y)
-            co_return p;
-        }
-        else
-        {
-          cout
-            << "Found Steam installation of Call of Duty: Modern Warfare 2:\n"
-            << "  " << p->string () << "\n\n";
-
-          bool accepted (
-            confirm_action (
-              "Install IW4x to this directory? [Y/n] "
-              "(n = use current directory)", 'y'));
-
-          // Cache the answer by touching a marker file.
-          //
-          { ofstream os (accepted ? marker_y : marker_n); }
-
-          if (accepted)
-            co_return p;
-        }
+        if (accepted)
+          co_return p;
       }
     }
     catch (const exception&)
@@ -948,17 +677,11 @@ namespace launcher
   check_self_update (asio::io_context& io,
                      bool hl,
                      bool pre,
-                     bool only,
                      progress_coordinator* pc = nullptr)
   {
     auto uc (make_update_coordinator (io));
     uc->set_headless (hl);
     uc->set_include_prerelease (pre);
-
-    // If the user explicitly requested an update, we let the coordinator
-    // attempt the restart immediately after installation.
-    //
-    uc->set_auto_restart (only);
 
     if (pc != nullptr)
       uc->set_progress_coordinator (pc);
@@ -966,16 +689,6 @@ namespace launcher
     try
     {
       auto s (co_await uc->check_and_update ());
-
-      // If we were strictly asked to update but couldn't even check (e.g.,
-      // network down), that's fatal. Otherwise, we treat it as a soft failure
-      // and proceed to the application.
-      //
-      if (s == update_status::check_failed && only)
-      {
-        cerr << "error: failed to check for launcher updates" << endl;
-        co_return false;
-      }
 
       // Return true if we are in the middle of a restart (meaning we
       // shouldn't continue with the calling logic).
@@ -987,13 +700,9 @@ namespace launcher
     }
     catch (const exception& e)
     {
-      // Same logic as above: complain loudly if this was the only task,
-      // otherwise just warn and move on.
+      // Warn and move on if update check fails.
       //
-      if (only)
-        cerr << "error: update failed: " << e.what () << endl;
-      else
-        cerr << "warning: update check failed: " << e.what () << endl;
+      cerr << "warning: update check failed: " << e.what () << endl;
 
       co_return false;
     }
@@ -1065,52 +774,27 @@ main (int argc, char* argv[])
     else
       ctx.install_location = fs::path (opt.path ());
 
-    // Platform Configuration.
-    //
-#ifdef __linux__
-    ctx.use_proton = true;
-#else
-    ctx.use_proton = false;
-#endif
-
     // Map the command line options to our context.
     //
     ctx.upstream_owner = "iw4x";
     ctx.upstream_repo = "iw4x-client";
     ctx.prerelease = opt.prerelease ();
-    ctx.force_verification = opt.force_update ();
     ctx.headless = opt.no_ui ();
-    ctx.disable_integrity_check = opt.disable_checksum ();
     ctx.concurrency_limit = opt.jobs ();
 
     // Execution settings.
     //
-    ctx.enable_execution = opt.launch ();
     ctx.proton_binary = opt.game_exe ();
-    ctx.proton_appid = opt.proton_app_id ();
-    ctx.verbose_proton = opt.proton_verbose ();
-    ctx.proton_logging = opt.proton_log ();
 
     if (opt.game_args_specified ())
       ctx.proton_arguments = opt.game_args ();
 
-    if (opt.steam_path_specified ())
-      ctx.proton_steam_root = opt.steam_path ();
-    else
-      // Try to detect Steam path from environment.
-      //
-      if (const char* home = getenv ("HOME"))
-        ctx.proton_steam_root = fs::path (home) / ".steam" / "steam";
-
-    if (opt.steam_helper_specified ())
-      ctx.proton_helper_override = opt.steam_helper ();
-
-    if (!opt.no_self_update () || opt.self_update_only ())
+    // Self-update check.
+    //
     {
       bool r (false);
 
-      // Setup the progress feedback if we are not in the headless mode. Keep
-      // it dynamic since it's optional.
+      // Setup the progress feedback if we are not in the headless mode.
       //
       unique_ptr<progress_coordinator> pc;
       if (!opt.no_ui ())
@@ -1121,7 +805,6 @@ main (int argc, char* argv[])
         check_self_update (ioc,
                            opt.no_ui (),
                            opt.prerelease (),
-                           opt.self_update_only (),
                            pc.get ()),
         [&r, &ioc, &pc] (exception_ptr e, bool v)
         {
@@ -1142,9 +825,9 @@ main (int argc, char* argv[])
       ioc.restart ();
 
       // If we applied an update that requires a restart (e.g. replaced the
-      // executable) or if the user only asked to update, we are done.
+      // executable), we are done.
       //
-      if (r || opt.self_update_only ())
+      if (r)
         return 0;
     }
 

@@ -17,7 +17,6 @@ namespace launcher
     pending,     // Not started yet
     connecting,  // Connecting to server
     downloading, // Actively downloading
-    verifying,   // Verifying checksum
     completed,   // Successfully completed
     failed,      // Failed with error
     paused       // Paused by user
@@ -31,7 +30,6 @@ namespace launcher
     case download_state::pending:     return os << "pending";
     case download_state::connecting:  return os << "connecting";
     case download_state::downloading: return os << "downloading";
-    case download_state::verifying:   return os << "verifying";
     case download_state::completed:   return os << "completed";
     case download_state::failed:      return os << "failed";
     case download_state::paused:      return os << "paused";
@@ -58,31 +56,6 @@ namespace launcher
       case download_priority::normal:   return os << "normal";
       case download_priority::high:     return os << "high";
       case download_priority::critical: return os << "critical";
-    }
-    return os;
-  }
-
-  // Download verification method.
-  //
-  enum class download_verification
-  {
-    none,     // No verification
-    md5,      // MD5 checksum
-    sha1,     // SHA-1 checksum
-    sha256,   // SHA-256 checksum
-    sha512    // SHA-512 checksum
-  };
-
-  inline std::ostream&
-  operator<< (std::ostream& os, download_verification v)
-  {
-    switch (v)
-    {
-      case download_verification::none:   return os << "none";
-      case download_verification::md5:    return os << "md5";
-      case download_verification::sha1:   return os << "sha1";
-      case download_verification::sha256: return os << "sha256";
-      case download_verification::sha512: return os << "sha512";
     }
     return os;
   }

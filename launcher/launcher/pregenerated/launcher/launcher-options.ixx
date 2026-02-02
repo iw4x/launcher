@@ -318,21 +318,9 @@ namespace launcher
   }
 
   inline const bool& options::
-  force_update () const
-  {
-    return this->force_update_;
-  }
-
-  inline const bool& options::
   prerelease () const
   {
     return this->prerelease_;
-  }
-
-  inline const bool& options::
-  disable_checksum () const
-  {
-    return this->disable_checksum_;
   }
 
   inline const std::size_t& options::
@@ -345,12 +333,6 @@ namespace launcher
   jobs_specified () const
   {
     return this->jobs_specified_;
-  }
-
-  inline const bool& options::
-  launch () const
-  {
-    return this->launch_;
   }
 
   inline const std::string& options::
@@ -375,66 +357,6 @@ namespace launcher
   game_args_specified () const
   {
     return this->game_args_specified_;
-  }
-
-  inline const std::string& options::
-  steam_path () const
-  {
-    return this->steam_path_;
-  }
-
-  inline bool options::
-  steam_path_specified () const
-  {
-    return this->steam_path_specified_;
-  }
-
-  inline const std::string& options::
-  steam_helper () const
-  {
-    return this->steam_helper_;
-  }
-
-  inline bool options::
-  steam_helper_specified () const
-  {
-    return this->steam_helper_specified_;
-  }
-
-  inline const std::uint32_t& options::
-  proton_app_id () const
-  {
-    return this->proton_app_id_;
-  }
-
-  inline bool options::
-  proton_app_id_specified () const
-  {
-    return this->proton_app_id_specified_;
-  }
-
-  inline const bool& options::
-  proton_verbose () const
-  {
-    return this->proton_verbose_;
-  }
-
-  inline const bool& options::
-  proton_log () const
-  {
-    return this->proton_log_;
-  }
-
-  inline const bool& options::
-  no_self_update () const
-  {
-    return this->no_self_update_;
-  }
-
-  inline const bool& options::
-  self_update_only () const
-  {
-    return this->self_update_only_;
   }
 }
 

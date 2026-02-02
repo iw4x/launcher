@@ -12,7 +12,6 @@ namespace launcher
   {
     using launcher::download_state;
     using launcher::download_priority;
-    using launcher::download_verification;
     using launcher::download_progress;
     using launcher::download_error;
 

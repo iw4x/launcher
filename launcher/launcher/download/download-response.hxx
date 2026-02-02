@@ -42,10 +42,6 @@ namespace launcher
     string_type content_type;
     std::optional<std::uint64_t> server_reported_size;
 
-    // Verification result.
-    //
-    bool verification_passed {false};
-
     // Constructors.
     //
     basic_download_response () = default;
@@ -74,8 +70,7 @@ namespace launcher
     in_progress () const
     {
       return state == download_state::connecting ||
-             state == download_state::downloading ||
-             state == download_state::verifying;
+             state == download_state::downloading;
     }
 
     // Duration calculation.
