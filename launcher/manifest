@@ -11,7 +11,10 @@ email: wroy@proton.me
 depends: * build2 >= 0.18.0-
 depends: * bpkg >= 0.18.0-
 depends: * cli >= 1.2.0 ? ($config.launcher.develop)
+depends: * odb >= 2.5.0 ? ($config.launcher.develop)
 depends: { libboost-asio libboost-beast libboost-json libboost-filesystem libboost-process } >= 1.87.0
 depends: { libssl libcrypto } >= 3.3.1
-depends: libftxui
-depends: libminiz
+depends: libftxui >= 4.1.1
+depends: libminiz >= 3.0.2
+depends: libodb >= 2.5.0
+depends: libodb-sqlite >= 2.5.0
