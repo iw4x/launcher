@@ -128,6 +128,6 @@ namespace launcher
     // Configuration flags.
     //
     bool verbose_;
-    bool enable_logging_;
+    bool logging_;
   };
 }
