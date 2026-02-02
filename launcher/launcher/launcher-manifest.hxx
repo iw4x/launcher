@@ -78,7 +78,8 @@ namespace launcher
     static std::vector<archive_type>
     get_missing_archives (const manifest_type& m,
                           const fs::path& install_dir,
-                          archive_cache* cache = nullptr);
+                          archive_cache* cache = nullptr,
+                          bool verify_hashes = false);
 
     // Verify file against manifest entry.
     //

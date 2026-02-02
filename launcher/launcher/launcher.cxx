@@ -310,12 +310,16 @@ namespace launcher
         co_return co_await execute_payload ();
       }
 
+      // Determine if this is a fresh install (no version markers).
+      //
+      bool fi (!state_.is_fully_installed ());
+
       // Provisioning Phase.
       //
       // State is divergent or verification was forced. We need to calculate the
       // diff and synchronize artifacts.
       //
-      co_await reconcile_artifacts (remote);
+      co_await reconcile_artifacts (remote, fi);
 
       // Commit Phase.
       //
@@ -430,8 +434,12 @@ namespace launcher
 
     // Synchronize local filesystem with the remote manifest.
     //
+    // The force_hash parameter is used when version markers don't exist
+    // (fresh install). In that case, we can't trust existing files,
+    // obviously.
+    //
     asio::awaitable<void>
-    reconcile_artifacts (const remote_state& remote)
+    reconcile_artifacts (const remote_state& remote, bool force_hash)
     {
       // Load extraction cache so we don't re-extract archives we've already
       // processed.
@@ -521,10 +529,10 @@ namespace launcher
       log ("Checking local files...");
 
       vector<manifest_file> missing_files (
-        manifest_coordinator::get_missing_files (m, ctx_.install_location, false));
+        manifest_coordinator::get_missing_files (m, ctx_.install_location, force_hash));
 
       vector<manifest_archive> missing_archives (
-        manifest_coordinator::get_missing_archives (m, ctx_.install_location, &ac));
+        manifest_coordinator::get_missing_archives (m, ctx_.install_location, &ac, force_hash));
 
       if (missing_files.empty () && missing_archives.empty ())
         co_return;

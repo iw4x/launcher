@@ -108,36 +108,32 @@ namespace launcher
 
   vector<manifest_coordinator::archive_type> manifest_coordinator::
   get_missing_archives (const manifest_type& m,
-                        const fs::path& dir,
-                        archive_cache* cache)
+                        const fs::path& d,
+                        archive_cache* c,
+                        bool vh)
   {
     vector<archive_type> r;
 
-    for (const auto& a : m.archives)
+    for (const auto& a: m.archives)
     {
-      // If we have a cache and the archive has a known hash, we can check if
-      // we've already processed this specific version of the archive.
+      // See if we can satisfy the request from the cache. To do this safely
+      // we need the archive hash.
       //
-      if (cache != nullptr && !a.hash.empty ())
+      if (c != nullptr && !a.hash.empty ())
       {
-        auto e (cache->find (a.name, a.hash));
+        auto e (c->find (a.name, a.hash));
 
-        // If we found a cache entry, we verify that the files listed in that
-        // entry actually exist on disk and match the expected state. If they
-        // do, we can save ourselves a download.
+        // If the entry is present, verify the on-disk artifacts match the
+        // cached state. If they do, we are done.
         //
-        if (e && cache->verify_entry (*e, dir))
+        if (e && c->verify_entry (*e, d))
           continue;
       }
 
-      // If we are not using the cache or the cache check failed, we fall back
-      // to verifying the archive file itself.
+      // Otherwise verify the archive file itself. If the hash check is
+      // requested (vh), then we enforce the checksum.
       //
-      // Note that we generally don't verify the hash strictly during this
-      // initial check to save time (hashing big zips is slow), unless the
-      // caller forces it later.
-      //
-      if (!verify_archive (a, dir, false))
+      if (!verify_archive (a, d, vh))
         r.push_back (a);
     }
 
@@ -145,53 +141,70 @@ namespace launcher
   }
 
   bool manifest_coordinator::
-  verify_file (const file_type& f, const fs::path& dir, bool verify_hash)
+  verify_file (const file_type& f, const fs::path& d, bool vh)
   {
-    fs::path p (resolve_path (f, dir));
+    fs::path p (resolve_path (f, d));
     error_code ec;
 
-    // Check existence and size first.
+    // First check if the file actually exists. If stat fails or says "no",
+    // we are done.
     //
-    if (!fs::exists (p, ec) || ec)
+    if (!exists (p, ec) || ec)
       return false;
 
-    if (fs::file_size (p, ec) != f.size || ec)
-      return false;
-
-    // Only hash if explicitly requested.
+    // If we were asked to verify the hash and the file info has one, this is
+    // the authoritative check.
     //
-    if (verify_hash && !f.hash.empty ())
+    // Note that if the hash matches, we don't bother checking the size: it is
+    // impossible for the hash to be correct while the size is wrong.
+    //
+    if (vh && !f.hash.empty ())
     {
       string h (compute_file_hash (p, f.hash.algorithm));
-
-      if (!compare_hashes (h, f.hash.value))
-        return false;
+      return compare_hashes (h, f.hash.value);
     }
+
+    // Fall back to the size check. While this doesn't guarantee content
+    // integrity, it's a cheap way to catch truncated files or obvious
+    // corruption when hash verification is skipped.
+    //
+    uint64_t s (file_size (p, ec));
+
+    if (ec || s != f.size)
+      return false;
 
     return true;
   }
 
   bool manifest_coordinator::
-  verify_archive (const archive_type& a, const fs::path& dir, bool verify_hash)
+  verify_archive (const archive_type& a, const fs::path& d, bool vh)
   {
-    fs::path p (resolve_path (a, dir));
+    fs::path p (resolve_path (a, d));
     error_code ec;
 
+    // Start with the cheap check: existence. If we can't stat the path,
+    // then the archive is definitely not valid.
+    //
     if (!fs::exists (p, ec) || ec)
       return false;
 
-    if (fs::file_size (p, ec) != a.size || ec)
-      return false;
-
-    if (verify_hash && !a.hash.empty ())
+    // If the caller requested hash verification (and we have the data),
+    // then do the expensive but authoritative check.
+    //
+    if (vh && !a.hash.empty ())
     {
       string h (compute_file_hash (p, a.hash.algorithm));
-
-      if (!compare_hashes (h, a.hash.value))
-        return false;
+      return compare_hashes (h, a.hash.value);
     }
 
-    return true;
+    // Otherwise fall back to the size check. Note that we query the size
+    // here (lazily) to avoid the syscall if we went the hash route above.
+    //
+    // Also watch out for errors: file_size() can fail even if exists()
+    // succeeded (race, permissions, etc).
+    //
+    auto s (fs::file_size (p, ec));
+    return !ec && s == a.size;
   }
 
   // Path resolution.
