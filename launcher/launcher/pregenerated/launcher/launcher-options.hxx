@@ -493,22 +493,13 @@ namespace launcher
     no_ui () const;
 
     const bool&
-    force_update () const;
-
-    const bool&
     prerelease () const;
-
-    const bool&
-    disable_checksum () const;
 
     const std::size_t&
     jobs () const;
 
     bool
     jobs_specified () const;
-
-    const bool&
-    launch () const;
 
     const std::string&
     game_exe () const;
@@ -521,36 +512,6 @@ namespace launcher
 
     bool
     game_args_specified () const;
-
-    const std::string&
-    steam_path () const;
-
-    bool
-    steam_path_specified () const;
-
-    const std::string&
-    steam_helper () const;
-
-    bool
-    steam_helper_specified () const;
-
-    const std::uint32_t&
-    proton_app_id () const;
-
-    bool
-    proton_app_id_specified () const;
-
-    const bool&
-    proton_verbose () const;
-
-    const bool&
-    proton_log () const;
-
-    const bool&
-    no_self_update () const;
-
-    const bool&
-    self_update_only () const;
 
     // Print usage information.
     //
@@ -577,26 +538,13 @@ namespace launcher
     std::string path_;
     bool path_specified_;
     bool no_ui_;
-    bool force_update_;
     bool prerelease_;
-    bool disable_checksum_;
     std::size_t jobs_;
     bool jobs_specified_;
-    bool launch_;
     std::string game_exe_;
     bool game_exe_specified_;
     std::vector<std::string> game_args_;
     bool game_args_specified_;
-    std::string steam_path_;
-    bool steam_path_specified_;
-    std::string steam_helper_;
-    bool steam_helper_specified_;
-    std::uint32_t proton_app_id_;
-    bool proton_app_id_specified_;
-    bool proton_verbose_;
-    bool proton_log_;
-    bool no_self_update_;
-    bool self_update_only_;
   };
 }
 

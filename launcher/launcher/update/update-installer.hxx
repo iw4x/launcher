@@ -141,13 +141,6 @@ namespace launcher
     extract_launcher (const fs::path& archive_path,
                       const update_info& info);
 
-    // Simple size check for now. Hash verification would go here later
-    // if we decide to sign our updates.
-    //
-    bool
-    validate_download (const fs::path& file_path,
-                       std::uint64_t expected_size);
-
     // Perform safe replacement of the launcher binary.
     //
     // Uses a two-step process:

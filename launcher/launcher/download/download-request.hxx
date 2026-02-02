@@ -27,11 +27,6 @@ namespace launcher
     //
     fs::path target;
 
-    // Optional verification.
-    //
-    download_verification verification_method {download_verification::none};
-    string_type verification_value;
-
     // Optional size hint.
     //
     std::optional<std::uint64_t> expected_size;
@@ -69,8 +64,8 @@ namespace launcher
     }
 
     basic_download_request (std::vector<string_type> us, fs::path tgt)
-        : urls (std::move (us)),
-          target (std::move (tgt))
+      : urls (std::move (us)),
+        target (std::move (tgt))
     {
     }
 
@@ -91,9 +86,7 @@ namespace launcher
               const basic_download_request<S>& y)
   {
     return x.urls == y.urls &&
-           x.target == y.target &&
-           x.verification_method == y.verification_method &&
-           x.verification_value == y.verification_value;
+           x.target == y.target;
   }
 
   template <typename S>

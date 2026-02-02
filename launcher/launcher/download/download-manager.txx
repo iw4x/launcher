@@ -207,59 +207,6 @@ namespace launcher
         task->response.http_status_code = 200; // Successful download
         task->response.server_reported_size = bytes_downloaded;
 
-        // Verify the downloaded file.
-        //
-        if (task->request.verification_method != download_verification::none &&
-            !task->request.verification_value.empty ())
-        {
-          task->set_state (download_state::verifying);
-
-          // Compute the hash before comparison so we can display the mismatch
-          // in the logs if verification fails.
-          //
-          std::string computed_hash (
-            T::task_traits::compute_hash (task->request.target,
-                                          task->request.verification_method));
-
-          bool verified (
-            !computed_hash.empty () &&
-            T::task_traits::compare_hashes (computed_hash,
-                                            task->request.verification_value));
-
-          task->response.verification_passed = verified;
-
-          if (!verified)
-          {
-            auto& error (std::cerr);
-
-            error << "checksum verification failed for file: "
-                  << task->request.name;
-            error << "expected: " << task->request.verification_value;
-            error << "found:    "
-                  << (computed_hash.empty () ? "(failed)" : computed_hash);
-            error << "file:     " << task->request.target;
-            error << "installation aborted: file may be corrupted";
-
-            // Cleanup the corrupted file so we don't resume from it next time.
-            //
-            std::error_code ec;
-            fs::remove (task->request.target, ec);
-
-            task->set_error (
-              download_error ("Installation aborted. File may be corrupted.",
-                              url,
-                              0));
-
-            // @@ This is a library function, but we are calling exit(1). This
-            // suggests a fatal error in the deployment logic (e.g., a master
-            // server providing bad hashes) that we cannot recover from safely.
-            //
-            std::exit (1);
-          }
-        }
-        else
-          task->response.verification_passed = true;
-
         task->response.successful_url_index = i;
         task->set_state (download_state::completed);
         success = true;
