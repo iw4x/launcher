@@ -80,21 +80,6 @@ namespace launcher
       fs::path a (co_await download_archive (ui));
       temp_files_.push_back (a);
 
-      // If we have an expected size, verify it. This catches the nasty case
-      // where a proxy or unstable connection gives us a truncated-but-valid
-      // zip file that fails later during extraction (or worse, extracts
-      // garbage).
-      //
-      if (verify_size_ && ui.asset_size > 0)
-      {
-        if (!validate_download (a, ui.asset_size))
-        {
-          r.error_message = "download validation failed: size mismatch";
-          cleanup ();
-          co_return r;
-        }
-      }
-
       // 2. Extract.
       //
       fs::path b (co_await extract_launcher (a, ui));
@@ -429,18 +414,6 @@ bool update_installer::
     }
 
     throw runtime_error ("launcher binary not found in archive");
-  }
-
-  bool update_installer::
-  validate_download (const fs::path& p, uint64_t s)
-  {
-    error_code ec;
-    auto as (fs::file_size (p, ec));
-
-    if (ec)
-      return false;
-
-    return as == s;
   }
 
   update_result update_installer::
