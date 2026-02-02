@@ -95,19 +95,4 @@ namespace launcher
     asio::io_context& ioc_;
     std::unique_ptr<client_type> client_;
   };
-
-  // Parse JSON response body.
-  //
-  // Convenience function for parsing JSON from HTTP response bodies.
-  // Throws if JSON is malformed.
-  //
-  boost::json::value
-  parse_json (const std::string& body);
-
-  // Format HTTP error message.
-  //
-  // Creates a descriptive error message from an HTTP response.
-  //
-  std::string
-  format_http_error (const http_response& response);
 }
