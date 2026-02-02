@@ -9,9 +9,9 @@ using namespace std;
 namespace launcher
 {
   steam_coordinator::
-  steam_coordinator (asio::io_context& ioc)
-    : ioc_ (ioc),
-      manager_ (make_unique<steam_library_manager> (ioc)),
+  steam_coordinator (asio::io_context& c)
+    : ioc_ (c),
+      manager_ (make_unique<steam_library_manager> (c)),
       initialized_ (false)
   {
   }
@@ -19,14 +19,9 @@ namespace launcher
   asio::awaitable<bool> steam_coordinator::
   initialize ()
   {
-    // If we are already up and running, short-circuit.
-    //
     if (initialized_)
       co_return true;
 
-    // Try to sniff out the Steam installation path. If we find it, the
-    // manager is ready to roll.
-    //
     auto p (co_await manager_->detect_steam_path ());
     initialized_ = p.has_value ();
 
@@ -41,13 +36,6 @@ namespace launcher
 
     co_return initialized_;
   }
-
-  // App lookups.
-  //
-  // MW2 has split personalities: 10190 (MP) and 10180 (SP). While they
-  // usually live together in the same directory, we care about MP (10190)
-  // because that's what IW4x hooks into.
-  //
 
   asio::awaitable<optional<fs::path>> steam_coordinator::
   find_mw2_multiplayer ()
@@ -64,9 +52,6 @@ namespace launcher
   asio::awaitable<optional<fs::path>> steam_coordinator::
   find_mw2 ()
   {
-    // Prioritize MP. If that's missing, we could try SP, but honestly if MP
-    // isn't there, IW4x probably won't be happy anyway.
-    //
     auto mp (co_await find_mw2_multiplayer ());
 
     if (mp)
@@ -74,9 +59,6 @@ namespace launcher
 
     co_return nullopt;
   }
-
-  // App Manifests.
-  //
 
   asio::awaitable<optional<steam_coordinator::manifest_type>> steam_coordinator::
   get_mw2_multiplayer_manifest ()
@@ -113,21 +95,21 @@ namespace launcher
 
     // Check for common MW2 artifacts.
     //
-    // Note that we accept the path if *any* of these are found. This is perhaps
-    // a bit lenient, but it accounts for partial installs or dedicated server
+    // Note that we accept the path if *any* of these are found. This is
+    // lenient, but it accounts for partial installs and dedicated server
     // setups.
     //
-    static const char* expected[] =
+    static const char* l[] =
     {
-      "iw4mp.exe",      // Windows MP executable.
-      "iw4sp.exe",      // Windows SP executable.
-      "iw4x.exe",       // IW4x client (if already present).
-      "main",           // Main asset directory.
-      "zone",           // Zone files.
-      "players"         // Profiles.
+      "iw4mp.exe",
+      "iw4sp.exe",
+      "iw4x.exe",
+      "main",
+      "zone",
+      "players"
     };
 
-    for (const char* f : expected)
+    for (const char* f: l)
     {
       if (fs::exists (p / f))
         return true;
@@ -139,12 +121,10 @@ namespace launcher
   asio::awaitable<optional<fs::path>> steam_coordinator::
   get_default_mw2_path ()
   {
-    // First, ask Steam.
-    //
-    auto sp (co_await find_mw2 ());
+    auto p (co_await find_mw2 ());
 
-    if (sp)
-      co_return sp;
+    if (p)
+      co_return p;
 
     // If Steam came up empty (or we couldn't find Steam itself), we are done.
     // We could try poking around the Registry or Program Files, but that's a
@@ -180,25 +160,22 @@ namespace launcher
     co_return co_await manager_->load_app_manifest (id);
   }
 
-  // Standalone wrappers.
-  //
-  // These are for one-off lookups where the caller doesn't want to manage the
-  // coordinator lifecycle manually.
+  // One-off lookup wrappers.
   //
 
   asio::awaitable<optional<fs::path>>
-  locate_mw2 (asio::io_context& ioc)
+  locate_mw2 (asio::io_context& c)
   {
-    steam_coordinator c (ioc);
-    co_await c.initialize ();
-    co_return co_await c.find_mw2 ();
+    steam_coordinator sc (c);
+    co_await sc.initialize ();
+    co_return co_await sc.find_mw2 ();
   }
 
   asio::awaitable<optional<fs::path>>
-  get_mw2_default_path (asio::io_context& ioc)
+  get_mw2_default_path (asio::io_context& c)
   {
-    steam_coordinator c (ioc);
-    co_await c.initialize ();
-    co_return co_await c.get_default_mw2_path ();
+    steam_coordinator sc (c);
+    co_await sc.initialize ();
+    co_return co_await sc.get_default_mw2_path ();
   }
 }
