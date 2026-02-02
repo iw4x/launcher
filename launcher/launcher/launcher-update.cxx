@@ -18,9 +18,9 @@ namespace launcher
       discovery_ (make_unique<discovery_type> (c)),
       installer_ (make_unique<installer_type> (c))
   {
-    // Wire up the installer's progress reporting to our internal handler
-    // immediately. We want to make sure that if the installer starts doing
-    // work (even during setup), we catch those signals.
+    // Wire up the installer's progress reporting immediately. If the
+    // installer starts doing work during setup (e.g., resuming a
+    // transaction), we need to catch those signals.
     //
     installer_->set_progress_callback (
       [this] (update_state s, double p, const string& m)
@@ -66,15 +66,15 @@ namespace launcher
   }
 
   void update_coordinator::
-  set_progress_callback (progress_callback_type cb)
+  set_progress_callback (progress_callback_type c)
   {
-    progress_callback_ = move (cb);
+    progress_callback_ = move (c);
   }
 
   void update_coordinator::
-  set_completion_callback (completion_callback_type cb)
+  set_completion_callback (completion_callback_type c)
   {
-    completion_callback_ = move (cb);
+    completion_callback_ = move (c);
   }
 
   void update_coordinator::
@@ -98,13 +98,11 @@ namespace launcher
   asio::awaitable<update_status> update_coordinator::
   check_for_updates ()
   {
-    // We are entering the checking phase.
-    //
     state_ = update_state::checking;
 
     try
     {
-      // Ask the discovery backend. This might hit the network, so we await.
+      // Ask the backend. This might hit the network so we await.
       //
       last_update_info_ = co_await discovery_->check_for_update (
         owner_, repo_, current_version_);
@@ -113,17 +111,17 @@ namespace launcher
       {
         state_ = update_state::idle;
 
-        // In headless mode, we still want a textual confirmation that we are
-        // clean, but we don't need the full UI song and dance.
+        // Even in headless mode, log to stdout so we have a record that the
+        // check ran and found nothing.
         //
         if (headless_)
-          cout << "launcher is up to date (" << current_version_ << ").\n";
+          cout << "launcher is up to date (" << current_version_ << ")." << endl;
 
         report_completion (update_status::up_to_date);
         co_return update_status::up_to_date;
       }
 
-      // If we got here, we have a candidate.
+      // We have a candidate.
       //
       state_ = update_state::idle;
       report_completion (update_status::update_available);
@@ -132,7 +130,7 @@ namespace launcher
     catch (const exception& e)
     {
       // Network errors or parsing failures aren't fatal to the application,
-      // but they do mean the update process stops here.
+      // but the update process stops here.
       //
       state_ = update_state::failed;
       report_completion (update_status::check_failed, e.what ());
@@ -151,24 +149,24 @@ namespace launcher
     if (s == update_status::check_failed)
     {
       if (!headless_)
-        cerr << "warning: failed to check for launcher updates\n";
+        cerr << "warning: failed to check for launcher updates" << endl;
       co_return s;
     }
 
     // Inform the user. Even in headless mode, if an update is found, we want
-    // to log it to stdout so logs capture the transition.
+    // to log it to stdout so logs capture the state transition.
     //
     cout << "launcher update available: " << last_update_info_.version
-         << " (current: " << current_version_ << ")\n";
+         << " (current: " << current_version_ << ")" << endl;
 
     if (!headless_ && !last_update_info_.body.empty ())
-      cout << "Release notes:\n" << last_update_info_.body << "\n\n";
+      cout << "Release notes:\n" << last_update_info_.body << "\n" << endl;
 
     auto r (co_await install_update (last_update_info_));
 
     if (!r.success)
     {
-      cerr << "error: update failed: " << r.error_message << "\n";
+      cerr << "error: update failed: " << r.error_message << endl;
       state_ = update_state::failed;
       report_completion (update_status::check_failed, r.error_message);
       co_return update_status::check_failed;
@@ -176,13 +174,14 @@ namespace launcher
 
     // Try to restart into the new version. If this fails, we are in a
     // partially valid state (new binary on disk, old binary running). The
-    // user will have to manually restart, but the data is safe.
+    // user will have to manually restart, but the data is safe so we don't
+    // hard fail.
     //
     if (restart ())
       co_return update_status::update_available;
 
-    cerr << "warning: failed to restart launcher automatically\n";
-    cout << "please restart the launcher manually.\n";
+    cerr << "warning: failed to restart launcher automatically" << endl;
+    cout << "please restart the launcher manually." << endl;
 
     co_return update_status::update_available;
   }
@@ -200,8 +199,9 @@ namespace launcher
     // If we have a progress coordinator, we need to create an entry for the
     // download.
     //
-    // Note: We are capturing the entry `e` in the lambda by value
-    // (shared_ptr) to keep it alive during the async download process.
+    // Note that we capture the entry `e` in the lambda by value (shared_ptr)
+    // to keep it alive during the async download process which might outlive
+    // this scope.
     //
     shared_ptr<progress_entry> e;
 
@@ -213,9 +213,8 @@ namespace launcher
       installer_->set_progress_callback (
         [this, e] (update_state s, double p, const string& m)
       {
-        // We need to translate the generic percentage coming from the
-        // installer into specific byte counts required by the progress
-        // coordinator.
+        // Map the generic percentage coming from the installer to specific
+        // byte counts required by the progress coordinator.
         //
         if (s == update_state::downloading && e)
         {
@@ -228,7 +227,7 @@ namespace launcher
             e->metrics ().total_bytes.load (memory_order_relaxed));
         }
 
-        // Forward to the general UI callback as well.
+        // Forward to the general UI callback.
         //
         report_progress (s, p, m);
       });
@@ -245,9 +244,7 @@ namespace launcher
       last_installed_path_ = r.installed_path;
     }
     else
-    {
       state_ = update_state::failed;
-    }
 
     co_return r;
   }
@@ -255,15 +252,13 @@ namespace launcher
   bool update_coordinator::
   restart ()
   {
-    // Determine the target executable.
-    //
     // On some platforms (Windows), the installer might have moved the
     // currently running executable to a temporary location (e.g., .backup) to
     // allow writing the new one.
     //
-    // Therefore, we should prefer `last_installed_path_` if it's set, as that
-    // points to the fresh binary. Fallback to `current_executable_path` only
-    // if we haven't installed anything or the path is weird.
+    // Prefer `last_installed_path_` if it's set, as that points to the fresh
+    // binary. Fallback to `current_executable_path` only if we haven't
+    // installed anything or the path is weird.
     //
     fs::path t;
     if (!last_installed_path_.empty () && fs::exists (last_installed_path_))
@@ -343,7 +338,7 @@ namespace launcher
   unique_ptr<update_coordinator>
   make_update_coordinator (asio::io_context& c)
   {
-    auto coord (make_unique<update_coordinator> (c));
+    auto uc (make_unique<update_coordinator> (c));
 
     // Bake in the compiled version constants.
     //
@@ -363,8 +358,8 @@ namespace launcher
       v.snapshot_id = p->snapshot_id;
     }
 
-    coord->set_current_version (v);
-    return coord;
+    uc->set_current_version (v);
+    return uc;
   }
 
   string
@@ -374,21 +369,25 @@ namespace launcher
 
     switch (s)
     {
-      case update_status::up_to_date:
+    case update_status::up_to_date:
+      {
         os << "launcher is up to date";
         if (!i.empty ())
           os << " (" << i.version << ")";
         break;
-
-      case update_status::update_available:
+      }
+    case update_status::update_available:
+      {
         os << "update available: " << i.version;
         if (i.prerelease)
           os << " (pre-release)";
         break;
-
-      case update_status::check_failed:
+      }
+    case update_status::check_failed:
+      {
         os << "failed to check for updates";
         break;
+      }
     }
 
     return os.str ();
