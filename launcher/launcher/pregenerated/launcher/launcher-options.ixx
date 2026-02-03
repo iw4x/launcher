@@ -312,12 +312,6 @@ namespace launcher
   }
 
   inline const bool& options::
-  no_ui () const
-  {
-    return this->no_ui_;
-  }
-
-  inline const bool& options::
   prerelease () const
   {
     return this->prerelease_;
