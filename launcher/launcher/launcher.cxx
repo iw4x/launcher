@@ -101,7 +101,6 @@ namespace launcher
     string         upstream_repo;
     bool           prerelease;
     size_t         concurrency_limit;
-    bool           headless;
     fs::path       proton_binary;
     vector<string> proton_arguments;
   };
@@ -139,8 +138,7 @@ namespace launcher
     asio::awaitable<int>
     run ()
     {
-      if (!ctx_.headless)
-        progress_.start ();
+      progress_.start ();
 
       // Discovery Phase.
       //
@@ -151,32 +149,12 @@ namespace launcher
       //
       remote_state remote (co_await resolve_remote_state ());
 
-      // Provisioning Phase.
-      //
-      // Always synchronize artifacts from remote.
-      //
       co_await reconcile_artifacts (remote);
-
-      if (ctx_.headless)
-        cout << "Update complete.\n";
-      else
-        co_await progress_.stop ();
-
-      // Execution Phase.
-      //
+      co_await progress_.stop ();
       co_return co_await execute_payload ();
     }
 
   private:
-    void
-    log (const string& msg)
-    {
-      if (ctx_.headless)
-        cout << msg << "\n";
-      else
-        progress_.add_log (msg);
-    }
-
     // Fetch upstream metadata.
     //
     // We use make_parallel_group to launch requests concurrently. This allows
@@ -257,8 +235,6 @@ namespace launcher
     asio::awaitable<void>
     reconcile_artifacts (const remote_state& remote)
     {
-      log ("Downloading manifest...");
-
       // We only need to fetch the client manifest (the DLC manifest was
       // prefetched during discovery).
       //
@@ -292,11 +268,9 @@ namespace launcher
 #ifdef __linux__
       inject_assets (remote.helper.assets, "steam.exe");
       inject_assets (remote.helper.assets, "steam_api64.dll");
-      log ("Added steam helper");
 #endif
 
       int raw_count (inject_assets (remote.raw.assets));
-      log ("Added " + std::to_string (raw_count) + " rawfiles");
 
       // Merge dlc.
       //
@@ -320,8 +294,6 @@ namespace launcher
           ma.hash = f.hash;
           m.archives.push_back (move (ma));
         }
-
-        log ("Added " + std::to_string (dlc.files.size ()) + " DLC");
       }
 
       // Collect all files and archives to download.
@@ -347,11 +319,6 @@ namespace launcher
       for (const auto& f : files_to_download) total_bytes += f.size;
       for (const auto& a : archives_to_download) total_bytes += a.size;
 
-      if (ctx_.headless)
-        cout << "Need to download "
-             << (files_to_download.size () + archives_to_download.size ()) << " items ("
-             << format_bytes (total_bytes) << ")\n";
-
       unordered_map<shared_ptr<download_coordinator::task_type>,
                     shared_ptr<progress_entry>> task_map;
 
@@ -369,23 +336,17 @@ namespace launcher
         if (url.find ("cdn.iw4x.io") != string::npos)
           req.rate_limit_bytes_per_second = 2097152; // 2 MB/s
 
-        req.verification_method = download_verification::none;
-
         auto task (downloads_.queue_download (move (req)));
+        auto entry (progress_.add_entry (name));
 
-        if (!ctx_.headless)
+        task_map[task] = entry;
+        entry->metrics ().total_bytes.store (size, memory_order_relaxed);
+        task->on_progress = [entry, this] (const download_progress& p)
         {
-          auto entry (progress_.add_entry (name));
-          task_map[task] = entry;
-          entry->metrics ().total_bytes.store (size, memory_order_relaxed);
-
-          task->on_progress = [entry, this] (const download_progress& p)
-          {
-            progress_.update_progress (entry,
-                                       p.downloaded_bytes,
-                                       p.total_bytes);
-          };
-        }
+          progress_.update_progress (entry,
+                                     p.downloaded_bytes,
+                                     p.total_bytes);
+        };
       };
 
       for (const auto& f : files_to_download)
@@ -433,18 +394,16 @@ namespace launcher
       while (downloads_.completed_count () + downloads_.failed_count () <
              downloads_.total_count ())
       {
-        if (!ctx_.headless)
+        for (auto it (task_map.begin ()); it != task_map.end (); )
         {
-          for (auto it (task_map.begin ()); it != task_map.end (); )
+          if (it->first->completed () || it->first->failed ())
           {
-            if (it->first->completed () || it->first->failed ())
-            {
-              progress_.remove_entry (it->second);
-              it = task_map.erase (it);
-            }
-            else ++it;
+            progress_.remove_entry (it->second);
+            it = task_map.erase (it);
           }
+          else ++it;
         }
+
         asio::steady_timer timer (ioc_, chrono::milliseconds (100));
         co_await timer.async_wait (asio::use_awaitable);
       }
@@ -510,8 +469,6 @@ namespace launcher
         co_return 1;
       }
 
-      log ("Starting Proton...");
-
       proton_coordinator proton (ioc_);
 
       if (!fs::exists (ctx_.install_location / "steam.exe"))
@@ -536,9 +493,6 @@ namespace launcher
         cerr << "error: execution failed\n";
         co_return 1;
       }
-
-      if (ctx_.headless)
-        cout << "Game launched.\n";
 
       co_return 0;
     }
@@ -573,8 +527,6 @@ namespace launcher
         co_return 1;
       }
 
-      log ("Starting game...");
-
       try
       {
         namespace bp = boost::process;
@@ -592,9 +544,6 @@ namespace launcher
         co_return 1;
       }
 
-      if (ctx_.headless)
-        cout << "Game launched.\n";
-
       co_return 0;
     }
 #endif
@@ -608,23 +557,16 @@ namespace launcher
       // If we are running with the UI, pop up a dialog with the countdown so
       // the user knows exactly why we are stalled.
       //
-      if (!ctx_.headless)
-      {
-        string s (
-          msg + "\n\nTime remaining: " + std::to_string (rem) + " seconds");
+      string s (
+        msg + "\n\nTime remaining: " + std::to_string (rem) + " seconds");
 
-        progress_.show_dialog ("Rate Limit", s);
+      progress_.show_dialog ("Rate Limit", s);
 
-        // If the countdown has finished, we can dismiss the dialog and
-        // carry on.
-        //
-        if (rem == 0)
-          progress_.hide_dialog ();
-      }
-      // Otherwise, if we are headless, just dump it to the console.
+      // If the countdown has finished, we can dismiss the dialog and
+      // carry on.
       //
-      else
-        cout << msg << " (" << rem << " seconds remaining)\n";
+      if (rem == 0)
+        progress_.hide_dialog ();
     }
 
     asio::io_context& ioc_;
@@ -779,7 +721,6 @@ main (int argc, char* argv[])
     ctx.upstream_owner = "iw4x";
     ctx.upstream_repo = "iw4x-client";
     ctx.prerelease = opt.prerelease ();
-    ctx.headless = opt.no_ui ();
     ctx.concurrency_limit = opt.jobs ();
 
     // Execution settings.
@@ -796,14 +737,11 @@ main (int argc, char* argv[])
 
       // Setup the progress feedback if we are not in the headless mode.
       //
-      unique_ptr<progress_coordinator> pc;
-      if (!opt.no_ui ())
-        pc = make_unique<progress_coordinator> (ioc);
+      auto pc (make_unique<progress_coordinator> (ioc));
 
       asio::co_spawn (
         ioc,
         check_self_update (ioc,
-                           opt.no_ui (),
                            opt.prerelease (),
                            pc.get ()),
         [&r, &ioc, &pc] (exception_ptr e, bool v)
