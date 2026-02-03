@@ -490,9 +490,6 @@ namespace launcher
     path_specified () const;
 
     const bool&
-    no_ui () const;
-
-    const bool&
     prerelease () const;
 
     const std::size_t&
@@ -537,7 +534,6 @@ namespace launcher
     bool build2_metadata_;
     std::string path_;
     bool path_specified_;
-    bool no_ui_;
     bool prerelease_;
     std::size_t jobs_;
     bool jobs_specified_;

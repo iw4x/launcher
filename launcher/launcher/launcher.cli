@@ -41,10 +41,10 @@ namespace launcher
        features before they are marked as stable."
     };
 
-    std::size_t --jobs | -j = 5
+    std::size_t --jobs | -j = 99
     {
       "<num>",
-      "The number of parallel download jobs to run. Defaults to 999."
+      "The number of parallel download jobs to run. Defaults to 99."
     };
 
     std::string --game-exe = "iw4x.exe"
