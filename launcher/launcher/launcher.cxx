@@ -12,9 +12,11 @@
 #include <boost/asio/detached.hpp>
 #include <boost/asio/experimental/awaitable_operators.hpp>
 #include <boost/asio/experimental/parallel_group.hpp>
+#include <boost/asio/experimental/awaitable_operators.hpp>
 
 #include <boost/process.hpp>
 
+#include <launcher/launcher-cache.hxx>
 #include <launcher/launcher-download.hxx>
 #include <launcher/launcher-github.hxx>
 #include <launcher/launcher-http.hxx>
@@ -121,18 +123,25 @@ namespace launcher
   {
   public:
     launcher_controller (asio::io_context& ioc, runtime_context ctx)
-        : ioc_ (ioc),
-          ctx_ (move (ctx)),
-          github_ (ioc_),
-          http_ (ioc_),
-          downloads_ (ioc_, ctx_.concurrency_limit),
-          progress_ (ioc_)
+      : ioc_ (ioc),
+        ctx_ (move (ctx)),
+        github_ (ioc_),
+        http_ (ioc_),
+        downloads_ (ioc_, ctx_.concurrency_limit),
+        progress_ (ioc_),
+        cache_ (ioc_, ctx_.install_location)
     {
       github_.set_progress_callback (
         [this] (const string& message, uint64_t seconds_remaining)
       {
         this->handle_rate_limit_progress (message, seconds_remaining);
       });
+
+      // Wire cache coordinator to other subsystems.
+      //
+      cache_.set_github_coordinator (&github_);
+      cache_.set_download_coordinator (&downloads_);
+      cache_.set_progress_coordinator (&progress_);
     }
 
     asio::awaitable<int>
@@ -149,8 +158,16 @@ namespace launcher
       //
       remote_state remote (co_await resolve_remote_state ());
 
+      // Provisioning Phase.
+      //
+      // Always synchronize artifacts from remote.
+      //
       co_await reconcile_artifacts (remote);
+
       co_await progress_.stop ();
+
+      // Execution Phase.
+      //
       co_return co_await execute_payload ();
     }
 
@@ -230,216 +247,334 @@ namespace launcher
 #endif
     }
 
-    // Synchronize local filesystem with the remote manifest.
-    //
     asio::awaitable<void>
-    reconcile_artifacts (const remote_state& remote)
+    reconcile_artifacts (const remote_state& r)
     {
-      // We only need to fetch the client manifest (the DLC manifest was
-      // prefetched during discovery).
-      //
-      manifest m (co_await github_.fetch_manifest (remote.client));
+      using ct = component_type;
+      using fs_st = file_state;
+      using ga = github_asset;
+      using ma = manifest_archive;
+      using sv = string_view;
 
-      // Inject assets from secondary repositories.
+      // First, check the high-level state. If our tags match the remote tags,
+      // we are theoretically up to date, but we must also audit the files on
+      // disk in case the user hasn't manually deleted or corrupted something.
       //
-      // Rawfiles and the steam helper come from different repositories, but we
-      // treat them as "archives" in the manifest system so they can be
-      // downloaded and verified using the same pipeline.
-      //
-      auto inject_assets = [&m] (const vector<github_asset>& assets,
-                                 const string& filter = "")
+      bool c_out (cache_.outdated (ct::client, r.client.tag_name));
+      bool r_out (cache_.outdated (ct::rawfiles, r.raw.tag_name));
+
+    #ifdef __linux__
+      bool h_out (cache_.outdated (ct::helper, r.helper.tag_name));
+    #else
+      bool h_out (false);
+    #endif
+
+      if (!c_out && !r_out && !h_out)
       {
-        int count (0);
+        auto valid ([this] (ct t)
+        {
+          auto s (cache_.audit (t));
+          return std::all_of (s.begin (), s.end (), [] (const auto& p)
+          {
+            return p.second == fs_st::valid;
+          });
+        });
+
+        // If tags match and physical files are valid, we can short-circuit.
+        //
+        if (valid (ct::client) &&
+            valid (ct::rawfiles)
+    #ifdef __linux__
+            && valid (ct::helper)
+    #endif
+        ) co_return;
+      }
+
+      // We need to merge the 'raw' assets and 'client' assets into a single
+      // operational manifest. To do this, we fetch both simultaneously.
+      //
+      auto t_m (github_.fetch_manifest (r.client));
+      auto t_r (github_.fetch_manifest (r.raw));
+
+      auto [d_m, d_r] =
+        co_await (std::move (t_m) && std::move (t_r));
+
+      manifest m (std::move (d_m));
+      manifest raw (std::move (d_r));
+
+      // The raw manifest doesn't map 1:1 to the download structure. We index
+      // all known hashes from both sources so we can attach integrity data to
+      // the assets we are about to inject.
+      //
+      unordered_map<string, manifest::hash_type> hashes;
+      hashes.reserve (m.files.size () + raw.files.size ());
+
+      auto idx ([&hashes] (const manifest& x)
+      {
+        for (const auto& a : x.archives)
+          if (!a.name.empty () && !a.hash.value.empty ())
+            hashes[a.name] = a.hash;
+
+        for (const auto& f : x.files)
+        {
+          if (f.path.empty () || f.hash.value.empty ())
+            continue;
+
+          hashes[f.path] = f.hash;
+          hashes[fs::path (f.path).filename ().string ()] = f.hash;
+        }
+      });
+
+      idx (m);
+      idx (raw);
+
+      // We need quick lookups for raw structure to map assets to their
+      // internal metadata.
+      //
+      unordered_map<sv, const ma*> raw_archs;
+      for (const auto& a : raw.archives) raw_archs[a.name] = &a;
+
+      unordered_map<string, const manifest_file*> raw_files;
+      for (const auto& f : raw.files)
+      {
+        if (f.archive_name) continue;
+
+        if (f.asset_name) raw_files[*f.asset_name] = &f;
+        else raw_files[fs::path (f.path).filename ().string ()] = &f;
+      }
+
+      unordered_map<sv, const ga*> c_assets;
+      for (const auto& a : r.client.assets) c_assets[a.name] = &a;
+
+      // Consolidate injection logic. We iterate the github assets and convert
+      // them into manifest archives, trying to resolve their hash from the
+      // indices we built above.
+      //
+      auto inject ([&] (const vector<ga>& assets, const string& filter = "")
+      {
         for (const auto& a : assets)
         {
-          if (!filter.empty () && a.name != filter)
-            continue;
+          if (!filter.empty () && a.name != filter) continue;
 
-          manifest_archive ma;
-          ma.name = a.name;
-          ma.url = a.browser_download_url;
-          ma.size = a.size;
-          m.archives.push_back (move (ma));
-          count++;
+          ma x;
+          x.name = a.name;
+          x.url = a.browser_download_url;
+          x.size = a.size;
+
+          if (auto it (raw_archs.find (a.name)); it != raw_archs.end ())
+          {
+            x.hash = it->second->hash;
+            x.files = it->second->files;
+          }
+          else if (auto it (raw_files.find (a.name)); it != raw_files.end ())
+          {
+            x.hash = it->second->hash;
+          }
+          else if (auto it (hashes.find (a.name)); it != hashes.end ())
+          {
+            x.hash = it->second;
+          }
+
+          m.archives.push_back (std::move (x));
         }
-        return count;
-      };
+      });
 
-#ifdef __linux__
-      inject_assets (remote.helper.assets, "steam.exe");
-      inject_assets (remote.helper.assets, "steam_api64.dll");
-#endif
+      m.archives.reserve (m.archives.size () + r.raw.assets.size ());
+      inject (r.raw.assets);
 
-      int raw_count (inject_assets (remote.raw.assets));
-
-      // Merge dlc.
+    #ifdef __linux__
+      // On Linux, we need the steam helper binaries which live in a
+      // separate repo.
       //
-      // We can't reuse inject_assets() here because the data source differs:
-      // DLCs are parsed from a custom JSON manifest (manifest_file objects)
-      // rather than GitHub API assets. The URL logic is also CDN-specific.
-      //
-      if (!remote.dlc_manifest_json.empty ())
+      inject (r.helper.assets, "steam.exe");
+      inject (r.helper.assets, "steam_api64.dll");
+    #endif
+
+      if (!r.dlc_manifest_json.empty ())
       {
-        manifest dlc (remote.dlc_manifest_json, manifest_format::dlc);
+        manifest dlc (r.dlc_manifest_json, manifest_format::dlc);
+        m.archives.reserve (m.archives.size () + dlc.files.size ());
 
+        // DLCs are treated as archives for download.
+        //
         for (const auto& f : dlc.files)
         {
-          if (f.path.empty ())
-            continue;
+          if (f.path.empty ()) continue;
 
-          manifest_archive ma;
-          ma.name = f.path;
-          ma.url = "https://cdn.iw4x.io/" + f.path;
-          ma.size = f.size;
-          ma.hash = f.hash;
-          m.archives.push_back (move (ma));
+          ma x;
+          x.name = f.path;
+          x.url = "https://cdn.iw4x.io/" + f.path;
+          x.size = f.size;
+          x.hash = f.hash;
+
+          m.archives.push_back (std::move (x));
         }
       }
 
-      // Collect all files and archives to download.
+      // Ask the reconciler what actually needs to be done based on the
+      // assembled manifest.
       //
-      // We filter out files that are part of archives (they'll be extracted
-      // from the archive after download).
-      //
-      vector<manifest_file> files_to_download;
+      auto plan (cache_.get_reconciler ().plan (m, ct::client, r.client.tag_name));
+
+      unordered_map<sv, const manifest_file*> m_files;
       for (const auto& f : m.files)
+        if (f.asset_name) m_files[*f.asset_name] = &f;
+
+      // The reconciler doesn't know about GitHub URLs, so we patch
+      // them back into the plan.
+      //
+      for (auto& item : plan)
       {
-        if (!f.archive_name)
-          files_to_download.push_back (f);
+        if (item.action != reconcile_action::download || !item.url.empty ())
+          continue;
+
+        fs::path p (item.path);
+        string fn (p.filename ().string ());
+
+        if (m_files.count (fn))
+        {
+          if (auto it (c_assets.find (fn)); it != c_assets.end ())
+            item.url = it->second->browser_download_url;
+        }
       }
 
-      const auto& archives_to_download (m.archives);
+      auto sum (cache_.get_reconciler ().summarize (plan));
 
-      if (files_to_download.empty () && archives_to_download.empty ())
+      auto stamp ([this, &r] ()
+      {
+        cache_.stamp (ct::client, r.client.tag_name);
+        cache_.stamp (ct::rawfiles, r.raw.tag_name);
+    #ifdef __linux__
+        cache_.stamp (ct::helper, r.helper.tag_name);
+    #endif
+      });
+
+      if (sum.up_to_date ())
+      {
+        stamp ();
         co_return;
+      }
 
-      // Queue acquisition tasks.
+      // Execute downloads. We map the active task to its progress entry so we
+      // can update the UI and clean up finished tasks in the loop.
       //
-      uint64_t total_bytes (0);
-      for (const auto& f : files_to_download) total_bytes += f.size;
-      for (const auto& a : archives_to_download) total_bytes += a.size;
-
       unordered_map<shared_ptr<download_coordinator::task_type>,
-                    shared_ptr<progress_entry>> task_map;
+                    shared_ptr<progress_entry>> tasks;
+      tasks.reserve (plan.size ());
 
-      auto schedule_download = [&] (const string& url,
-                                    const fs::path& target,
-                                    const string& name,
-                                    uint64_t size)
+      for (const auto& item : plan)
       {
-        download_request req;
-        req.urls.push_back (url);
-        req.target = target;
-        req.name = name;
-        req.expected_size = size;
-
-        if (url.find ("cdn.iw4x.io") != string::npos)
-          req.rate_limit_bytes_per_second = 2097152; // 2 MB/s
-
-        auto task (downloads_.queue_download (move (req)));
-        auto entry (progress_.add_entry (name));
-
-        task_map[task] = entry;
-        entry->metrics ().total_bytes.store (size, memory_order_relaxed);
-        task->on_progress = [entry, this] (const download_progress& p)
-        {
-          progress_.update_progress (entry,
-                                     p.downloaded_bytes,
-                                     p.total_bytes);
-        };
-      };
-
-      for (const auto& f : files_to_download)
-      {
-        if (!f.asset_name)
+        if (item.action != reconcile_action::download || item.url.empty ())
           continue;
 
-        auto a (github_.find_asset (remote.client, *f.asset_name));
-
-        if (!a)
+        fs::path dst (item.path);
+        if (dst.has_parent_path ())
         {
-          cerr << "warning: asset not found for file: " << f.path << "\n";
-          continue;
+          std::error_code ec;
+          fs::create_directories (dst.parent_path (), ec);
         }
 
-        fs::path t (
-          manifest_coordinator::resolve_path (f, ctx_.install_location));
+        download_request req;
+        req.urls.push_back (item.url);
+        req.target = dst;
+        req.name = dst.filename ().string ();
+        req.expected_size = item.expected_size;
 
-        if (t.has_parent_path ())
-          fs::create_directories (t.parent_path ());
+        string n (req.name);
+        auto t (downloads_.queue_download (std::move (req)));
+        auto e (progress_.add_entry (n));
 
-        schedule_download (a->browser_download_url,
-                           t,
-                           t.filename ().string (),
-                           f.size);
-      }
+        e->metrics ().total_bytes.store (item.expected_size,
+                                        std::memory_order_relaxed);
+        tasks[t] = e;
 
-      for (const auto& a : archives_to_download)
-      {
-        if (a.url.empty ()) continue;
-
-        fs::path t (
-          manifest_coordinator::resolve_path (a, ctx_.install_location));
-
-        if (t.has_parent_path ())
-          fs::create_directories (t.parent_path ());
-
-        schedule_download (a.url, t, a.name, a.size);
+        t->on_progress = [e, this] (const download_progress& p)
+        {
+          progress_.update_progress (e, p.downloaded_bytes, p.total_bytes);
+        };
       }
 
       asio::co_spawn (ioc_, downloads_.execute_all (), asio::detached);
 
-      // Drain the queue.
+      // Wait for the queue to drain.
       //
+      asio::steady_timer timer (ioc_);
       while (downloads_.completed_count () + downloads_.failed_count () <
-             downloads_.total_count ())
+            downloads_.total_count ())
       {
-        for (auto it (task_map.begin ()); it != task_map.end (); )
+        std::erase_if (tasks, [&] (const auto& kv)
         {
-          if (it->first->completed () || it->first->failed ())
+          if (kv.first->completed () || kv.first->failed ())
           {
-            progress_.remove_entry (it->second);
-            it = task_map.erase (it);
+            progress_.remove_entry (kv.second);
+            return true;
           }
-          else ++it;
-        }
+          return false;
+        });
 
-        asio::steady_timer timer (ioc_, chrono::milliseconds (100));
+        timer.expires_after (chrono::milliseconds (25));
         co_await timer.async_wait (asio::use_awaitable);
       }
 
       if (downloads_.failed_count () > 0)
         throw runtime_error ("download failed");
 
-      // Materialize artifacts.
+      // Post-process downloads (extraction).
       //
-      // Only .zip files need extraction; .iwd, .ff, and .exe files are
-      // already in their final form.
+      const auto& root (ctx_.install_location);
+
+      // Track direct downloads first.
       //
-      for (const auto& a : archives_to_download)
+      for (const auto& item : plan)
       {
-        fs::path p (manifest_coordinator::resolve_path (a, ctx_.install_location));
-        string ext (p.extension ().string ());
-        transform (ext.begin (), ext.end (), ext.begin (),
-                   [] (unsigned char c) { return tolower (c); });
+        if (item.action == reconcile_action::download && fs::exists (item.path))
+          cache_.track (item.path, item.component, item.version, item.expected_hash);
+      }
 
-        if (ext == ".zip" && fs::exists (p))
+      unordered_map<string, const ma*> amap;
+      for (const auto& a : m.archives)
+        amap[manifest_coordinator::resolve_path (a, root).string ()] = &a;
+
+      // Handle archives. If a downloaded item is a zip and appears in our
+      // manifest archive list, we extract it and track the contents.
+      //
+      for (const auto& item : plan)
+      {
+        if (item.action != reconcile_action::download) continue;
+
+        fs::path p (item.path);
+        if (p.extension () != ".zip" && p.extension () != ".ZIP") continue;
+
+        auto it (amap.find (p.string ()));
+        if (it == amap.end ()) continue;
+
+        const auto* arch (it->second);
+
+        try
         {
-          try
-          {
-            co_await manifest_coordinator::extract_archive (
-              a,
-              p,
-              ctx_.install_location);
+          co_await manifest_coordinator::extract_archive (*arch, p, root);
 
-            fs::remove (p);
-          }
-          catch (const exception& e)
+          vector<fs::path> extracted;
+          extracted.reserve (arch->files.size ());
+
+          for (const auto& f : arch->files)
           {
-            throw runtime_error ("extraction failure: " + a.name + ": " + e.what ());
+            fs::path ep (manifest_coordinator::resolve_path (f, root));
+            extracted.push_back (std::move (ep));
           }
+
+          cache_.track (extracted, item.component, item.version);
+
+          std::error_code ec;
+          fs::remove (p, ec);
+        }
+        catch (const exception& e)
+        {
+          throw runtime_error ("extraction failure: " + arch->name + ": " + e.what ());
         }
       }
+
+      stamp ();
     }
 
     asio::awaitable<int>
@@ -554,9 +689,6 @@ namespace launcher
     void
     handle_rate_limit_progress (const string& msg, uint64_t rem)
     {
-      // If we are running with the UI, pop up a dialog with the countdown so
-      // the user knows exactly why we are stalled.
-      //
       string s (
         msg + "\n\nTime remaining: " + std::to_string (rem) + " seconds");
 
@@ -575,6 +707,7 @@ namespace launcher
     http_coordinator http_;
     download_coordinator downloads_;
     progress_coordinator progress_;
+    cache_coordinator cache_;
   };
 
   // Resolve MW2 installation root via Steam.
@@ -598,10 +731,15 @@ namespace launcher
         bool accepted (
           confirm_action (
             "Install IW4x to this directory? [Y/n] "
-            "(n = use current directory)", 'y'));
+            "(n = cancel, use --path to specify a different location)", 'y'));
 
         if (accepted)
           co_return p;
+        else
+        {
+          cout << "Installation cancelled.\n";
+          co_return nullopt;
+        }
       }
     }
     catch (const exception&)
@@ -617,12 +755,10 @@ namespace launcher
   //
   asio::awaitable<bool>
   check_self_update (asio::io_context& io,
-                     bool hl,
                      bool pre,
                      progress_coordinator* pc = nullptr)
   {
     auto uc (make_update_coordinator (io));
-    uc->set_headless (hl);
     uc->set_include_prerelease (pre);
 
     if (pc != nullptr)
@@ -711,7 +847,14 @@ main (int argc, char* argv[])
       ioc.run ();
       ioc.restart ();
 
-      ctx.install_location = heuristic.value_or (fs::current_path ());
+      if (!heuristic)
+      {
+        // User cancelled or no Steam installation found.
+        //
+        return 1;
+      }
+
+      ctx.install_location = *heuristic;
     }
     else
       ctx.install_location = fs::path (opt.path ());
@@ -735,9 +878,8 @@ main (int argc, char* argv[])
     {
       bool r (false);
 
-      // Setup the progress feedback if we are not in the headless mode.
-      //
-      auto pc (make_unique<progress_coordinator> (ioc));
+      unique_ptr<progress_coordinator> pc;
+      pc = make_unique<progress_coordinator> (ioc);
 
       asio::co_spawn (
         ioc,
