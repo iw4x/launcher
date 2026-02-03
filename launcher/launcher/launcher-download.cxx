@@ -80,20 +80,6 @@ namespace launcher
     return queue_download (move (r));
   }
 
-  shared_ptr<download_coordinator::task_type> download_coordinator::
-  queue_download (string u, fs::path f, download_verification m, string v)
-  {
-    request_type r;
-    r.urls.push_back (move (u));
-    r.target = move (f);
-    r.name = r.target.filename ().string ();
-
-    r.verification_method = m;
-    r.verification_value = move (v);
-
-    return queue_download (move (r));
-  }
-
   // Statistics & State.
   //
 
