@@ -800,10 +800,11 @@ namespace launcher
       // If the file is in the DB but not in our expected list, it is an
       // orphan.
       //
-      // Note that this implies if a standalone file is moved into an archive
-      // in a newer version, the old standalone DB entry will be flagged as an
-      // orphan and removed here. This is correct: the file on disk will
-      // arguably be overwritten or adopted by the archive extraction later.
+      // Note that this implies that if a standalone file is moved into an
+      // archive in a newer version, the old standalone DB entry will be
+      // flagged as an orphan and removed here. This is correct: the file on
+      // disk will arguably be overwritten or adopted by the archive
+      // extraction later.
       //
       if (!std::binary_search (expect.begin (), expect.end (), f.path ()))
         orphans.push_back (f.path ());
@@ -814,8 +815,8 @@ namespace launcher
     // We only remove the records from the DB here. We do not physically
     // delete the files at this stage. That is, physical removal is a
     // separate, more dangerous operation that usually requires specific
-    // permissions or user consent (e.g., during the "uninstall" phase). The
-    // the garbage collector to pick it up later if needed.
+    // permissions or user consent (e.g., during the "uninstall" phase). Leave
+    // it to the garbage collector to pick it up later if needed.
     //
     if (traits::auto_prune && !orphans.empty ())
       db_.erase (orphans);
