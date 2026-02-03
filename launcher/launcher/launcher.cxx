@@ -102,12 +102,9 @@ namespace launcher
     asio::awaitable<int>
     run ()
     {
-      progress_.start ();
-
       remote_state remote (co_await resolve_remote_state ());
 
       co_await reconcile_artifacts (remote);
-      co_await progress_.stop ();
       co_return co_await execute_payload ();
     }
 
@@ -402,10 +399,16 @@ namespace launcher
                     shared_ptr<progress_entry>> tasks;
       tasks.reserve (plan.size ());
 
+      // Count how many downloads we actually need.
+      //
+      std::size_t download_count (0);
+
       for (const auto& item : plan)
       {
         if (item.action != reconcile_action::download || item.url.empty ())
           continue;
+
+        ++download_count;
 
         fs::path dst (item.path);
         if (dst.has_parent_path ())
@@ -434,30 +437,41 @@ namespace launcher
         };
       }
 
-      asio::co_spawn (ioc_, downloads_.execute_all (), asio::detached);
-
-      // Wait for the queue to drain.
+      // Only show the progress UI if there are actual downloads.
       //
-      asio::steady_timer timer (ioc_);
-      while (downloads_.completed_count () + downloads_.failed_count () <
-            downloads_.total_count ())
+      if (download_count > 0)
       {
-        std::erase_if (tasks, [&] (const auto& kv)
+        progress_.start ();
+
+        asio::co_spawn (ioc_, downloads_.execute_all (), asio::detached);
+
+        // Wait for the queue to drain.
+        //
+        asio::steady_timer timer (ioc_);
+        while (downloads_.completed_count () + downloads_.failed_count () <
+              downloads_.total_count ())
         {
-          if (kv.first->completed () || kv.first->failed ())
+          std::erase_if (tasks, [&] (const auto& kv)
           {
-            progress_.remove_entry (kv.second);
-            return true;
-          }
-          return false;
-        });
+            if (kv.first->completed () || kv.first->failed ())
+            {
+              progress_.remove_entry (kv.second);
+              return true;
+            }
+            return false;
+          });
 
-        timer.expires_after (chrono::milliseconds (25));
-        co_await timer.async_wait (asio::use_awaitable);
+          timer.expires_after (chrono::milliseconds (25));
+          co_await timer.async_wait (asio::use_awaitable);
+        }
+
+        // Stop the progress UI.
+        //
+        co_await progress_.stop ();
+
+        if (downloads_.failed_count () > 0)
+          throw runtime_error ("download failed");
       }
-
-      if (downloads_.failed_count () > 0)
-        throw runtime_error ("download failed");
 
       // Post-process downloads (extraction).
       //
@@ -801,27 +815,18 @@ main (int argc, char* argv[])
     {
       bool r (false);
 
-      unique_ptr<progress_coordinator> pc;
-      pc = make_unique<progress_coordinator> (ioc);
-
       asio::co_spawn (
         ioc,
         check_self_update (ioc,
                            opt.prerelease (),
-                           pc.get ()),
-        [&r, &ioc, &pc] (exception_ptr e, bool v)
+                           nullptr),
+        [&r, &ioc] (exception_ptr e, bool v)
         {
           if (!e)
             r = v;
 
-          if (pc != nullptr)
-            asio::co_spawn (ioc, pc->stop (), asio::detached);
-
           ioc.stop ();
         });
-
-      if (pc != nullptr)
-        pc->start ();
 
       ioc.restart ();
       ioc.run ();
