@@ -119,10 +119,11 @@ namespace launcher
     if (traits_type::wal)
       sqlite3_exec (h, "PRAGMA journal_mode=WAL", nullptr, nullptr, nullptr);
 
-    // We prioritize build performance over absolute durability. If we
-    // lose power, we just rebuild the cache.
+    // Use FULL synchronous mode for durability. While this is slower, we want
+    // to prevents is rare edge cases where a transaction appears committed
+    // but is lost on process termination.
     //
-    sqlite3_exec (h, "PRAGMA synchronous=NORMAL", nullptr, nullptr, nullptr);
+    sqlite3_exec (h, "PRAGMA synchronous=FULL", nullptr, nullptr, nullptr);
     sqlite3_exec (h, "PRAGMA foreign_keys=ON", nullptr, nullptr, nullptr);
   }
 
