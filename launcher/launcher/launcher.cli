@@ -35,22 +35,16 @@ namespace launcher
        current working directory is used."
     };
 
-    bool --no-ui
-    {
-      "Disable the text-based progress UI. This is useful when running in a
-       scripted environment or where terminal capabilities are limited."
-    };
-
     bool --prerelease
     {
       "Opt-in to pre-release (beta) updates. Use this to test upcoming
        features before they are marked as stable."
     };
 
-    std::size_t --jobs | -j = 1
+    std::size_t --jobs | -j = 5
     {
       "<num>",
-      "The number of parallel download jobs to run. Defaults to 1."
+      "The number of parallel download jobs to run. Defaults to 999."
     };
 
     std::string --game-exe = "iw4x.exe"
