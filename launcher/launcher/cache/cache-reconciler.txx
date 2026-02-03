@@ -560,6 +560,10 @@ namespace launcher
       //
       if (f.archive_name) continue;
 
+      // Skip manifest files. These describe the update, not files to install.
+      //
+      if (f.path.ends_with ("update.json")) continue;
+
       fs::path p (path (f));
       str_type k (key (p));
       auto cached (db_.find (k));
