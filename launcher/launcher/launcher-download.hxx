@@ -75,14 +75,6 @@ namespace launcher
     std::shared_ptr<task_type>
     queue_download (std::string url, fs::path target);
 
-    // Convenience: queue a download with verification.
-    //
-    std::shared_ptr<task_type>
-    queue_download (std::string url,
-                    fs::path target,
-                    download_verification verification_method,
-                    std::string verification_value);
-
     // Statistics.
     //
     std::size_t
