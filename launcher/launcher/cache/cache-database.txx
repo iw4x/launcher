@@ -119,12 +119,13 @@ namespace launcher
     if (traits_type::wal)
       sqlite3_exec (h, "PRAGMA journal_mode=WAL", nullptr, nullptr, nullptr);
 
-    // Use FULL synchronous mode for durability. While this is slower, we want
-    // to prevents is rare edge cases where a transaction appears committed
-    // but is lost on process termination.
+    // We prioritize performance. If someting corrupt, we just rebuild the
+    // cache.
     //
-    sqlite3_exec (h, "PRAGMA synchronous=FULL", nullptr, nullptr, nullptr);
-    sqlite3_exec (h, "PRAGMA foreign_keys=ON", nullptr, nullptr, nullptr);
+    sqlite3_exec (h, "PRAGMA synchronous=OFF", nullptr, nullptr, nullptr);
+    sqlite3_exec (h, "PRAGMA foreign_keys=OFF", nullptr, nullptr, nullptr);
+    sqlite3_exec (h, "PRAGMA locking_mode=EXCLUSIVE", nullptr, nullptr, nullptr);
+    sqlite3_exec (h, "PRAGMA temp_store=MEMORY", nullptr, nullptr, nullptr);
   }
 
   template <typename T>
