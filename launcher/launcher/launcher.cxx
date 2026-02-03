@@ -47,51 +47,6 @@ using namespace boost::asio::experimental::awaitable_operators;
 
 namespace launcher
 {
-  // Prompt the user for a Yes/No answer.
-  //
-  // We strictly require a 'y' or 'n' (case-insensitive) to proceed. While
-  // defaulting on EOF might seem convenient, it's safer to bail out if the
-  // input stream is broken or closed unexpectedly.
-  //
-  static bool
-  confirm_action (const string& prompt, char def = '\0')
-  {
-    string a;
-    do
-    {
-      cout << prompt << ' ';
-
-      // Note: getline() sets the failbit if it fails to extract anything, and
-      // the eofbit if it hits EOF before the delimiter.
-      //
-      getline (cin, a);
-
-      bool f (cin.fail ());
-      bool e (cin.eof ());
-
-      // If we hit EOF or fail without a newline, force one out so the next
-      // output doesn't get messed up.
-      //
-      if (f || e)
-        cout << endl;
-
-      if (f)
-        throw ios_base::failure ("unable to read y/n answer from stdin");
-
-      if (a.empty () && def != '\0')
-      {
-        // We don't want to treat EOF as the default answer; we want to see an
-        // actual newline from the user to confirm they are present and paying
-        // attention.
-        //
-        if (!e)
-          a = def;
-      }
-    } while (a != "y" && a != "Y" && a != "n" && a != "N");
-
-    return a == "y" || a == "Y";
-  }
-
   // Aggregates all the configuration options, environment paths, and flags
   // derived from CLI arguments and platform detection, so we can pass them
   // around as a single unit.
@@ -149,25 +104,10 @@ namespace launcher
     {
       progress_.start ();
 
-      // Discovery Phase.
-      //
-      // We resolve the remote state of all components (Client, Rawfiles,
-      // Helper, and DLC) in parallel to minimize latency. We don't log here yet
-      // because we want the first output to be the result ("Up to date" or
-      // "Update available").
-      //
       remote_state remote (co_await resolve_remote_state ());
 
-      // Provisioning Phase.
-      //
-      // Always synchronize artifacts from remote.
-      //
       co_await reconcile_artifacts (remote);
-
       co_await progress_.stop ();
-
-      // Execution Phase.
-      //
       co_return co_await execute_payload ();
     }
 
@@ -723,24 +663,7 @@ namespace launcher
       auto p (co_await get_mw2_default_path (ioc));
 
       if (p && fs::exists (*p))
-      {
-        cout
-          << "Found Steam installation of Call of Duty: Modern Warfare 2:\n"
-          << "  " << p->string () << "\n\n";
-
-        bool accepted (
-          confirm_action (
-            "Install IW4x to this directory? [Y/n] "
-            "(n = cancel, use --path to specify a different location)", 'y'));
-
-        if (accepted)
-          co_return p;
-        else
-        {
-          cout << "Installation cancelled.\n";
-          co_return nullopt;
-        }
-      }
+        co_return p;
     }
     catch (const exception&)
     {
