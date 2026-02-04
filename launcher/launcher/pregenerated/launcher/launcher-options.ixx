@@ -294,6 +294,12 @@ namespace launcher
   }
 
   inline const bool& options::
+  wipe_settings () const
+  {
+    return this->wipe_settings_;
+  }
+
+  inline const bool& options::
   build2_metadata () const
   {
     return this->build2_metadata_;

@@ -47,6 +47,127 @@ using namespace boost::asio::experimental::awaitable_operators;
 
 namespace launcher
 {
+  // Prompt the user for a Yes/No answer.
+  //
+  // We strictly require a 'y' or 'n' (case-insensitive) to proceed. While
+  // defaulting on EOF might seem convenient, it's safer to bail out if the
+  // input stream is broken or closed unexpectedly.
+  //
+  static bool
+  confirm_action (const string& prompt, char def = '\0')
+  {
+    string a;
+    do
+    {
+      cout << prompt << ' ';
+
+      // Note: getline() sets the failbit if it fails to extract anything, and
+      // the eofbit if it hits EOF before the delimiter.
+      //
+      getline (cin, a);
+
+      bool f (cin.fail ());
+      bool e (cin.eof ());
+
+      // If we hit EOF or fail without a newline, force one out so the next
+      // output doesn't get messed up.
+      //
+      if (f || e)
+        cout << endl;
+
+      if (f)
+        throw ios_base::failure ("unable to read y/n answer from stdin");
+
+      if (a.empty () && def != '\0')
+      {
+        // We don't want to treat EOF as the default answer; we want to see an
+        // actual newline from the user to confirm they are present and paying
+        // attention.
+        //
+        if (!e)
+          a = def;
+      }
+    } while (a != "y" && a != "Y" && a != "n" && a != "N");
+
+    return a == "y" || a == "Y";
+  }
+
+  // Generate a collision-resistant identifier for filesystem paths.
+  //
+  // We need to associate metadata (like the "accepted" state) with specific
+  // installation paths. Since paths can contain characters that are invalid for
+  // filenames (separators, etc.) or exceed length limits, hashing the string
+  // gives us a stable, safe identifier.
+  //
+  static string
+  path_digest (const fs::path& p)
+  {
+    std::hash<string> h;
+    return std::to_string (h (p.string ()));
+  }
+
+  // Determine the directory for user preference and state caching.
+  //
+  // We try to be good citizens by respecting platform conventions (XDG on
+  // Linux, AppData on Windows). However, if we can't create directories there
+  // (e.g., read-only home, restricted environment), we fall back to a local
+  // ".launcher-cache" in the current working directory to avoid crashing.
+  //
+  static fs::path
+  resolve_cache_root (const fs::path& scope = {})
+  {
+    fs::path d;
+
+#ifdef _WIN32
+    // On Windows, caches technically belong in LocalAppData.
+    //
+    if (const char* v = getenv ("LOCALAPPDATA"))
+      d = fs::path (v) / "iw4x";
+    else if (const char* v = getenv ("APPDATA"))
+      d = fs::path (v) / "iw4x";
+    else
+      d = fs::current_path () / ".iw4x";
+#elif defined(__APPLE__)
+    if (const char* h = getenv ("HOME"))
+      d = fs::path (h) / "Library" / "Application Support" / "iw4x";
+    else
+      d = fs::current_path () / ".iw4x";
+#else
+    // On Linux/Unix, we respect the XDG Base Directory specification.
+    //
+    if (const char* v = getenv ("XDG_CACHE_HOME"))
+      d = fs::path (v) / "iw4x";
+    else if (const char* h = getenv ("HOME"))
+      d = fs::path (h) / ".cache" / "iw4x";
+    else
+      d = fs::current_path () / ".iw4x";
+#endif
+
+    // If we are looking for the cache specific to an installation (to avoid
+    // conflicts between multiple installs), append its unique key.
+    //
+    if (!scope.empty ())
+      d /= path_digest (scope);
+
+    error_code ec;
+    fs::create_directories (d, ec);
+
+    if (ec)
+    {
+      // Fallback: If we can't write to the system location, try a local
+      // directory.
+      //
+      d = fs::current_path () / ".iw4x";
+
+      if (!scope.empty ())
+        d /= path_digest (scope);
+
+      fs::create_directories (d, ec);
+    }
+
+    return d;
+  }
+
   // Aggregates all the configuration options, environment paths, and flags
   // derived from CLI arguments and platform detection, so we can pass them
   // around as a single unit.
@@ -666,26 +787,80 @@ namespace launcher
 
   // Resolve MW2 installation root via Steam.
   //
-  // If we find a Steam installation, prompt the user to confirm whether they
-  // want to use it.
-  //
   asio::awaitable<optional<fs::path>>
-  resolve_install_root (asio::io_context& ioc)
+  resolve_root (asio::io_context& ctx)
   {
+    // First check if we have a path saved from a previous --path override.
+    // If it's still there on disk, we are done.
+    //
+    fs::path cr (resolve_cache_root ());
+
+    cache_database db (cr);
+
+    string s (path_digest (fs::current_path ()));
+    string c (db.setting_value (setting_keys::inst_path (s)));
+
+    if (!c.empty ())
+    {
+      fs::path p (c);
+      if (fs::exists (p))
+        co_return p;
+    }
+
+    // No override, so try to sniff out the Steam install.
+    //
     try
     {
-      auto p (co_await get_mw2_default_path (ioc));
+      auto p (co_await get_mw2_default_path (ctx));
 
       if (p && fs::exists (*p))
-        co_return p;
+      {
+        // We found a Steam path, but we don't want to nag the user every
+        // single time if they've already said no.
+        //
+        string d (path_digest (*p));
+        string k (setting_keys::steam_prompt (s, d));
+        string a (db.setting_value (k));
+
+        if (!a.empty ())
+        {
+          if (a == "yes")
+            co_return p;
+        }
+        else
+        {
+          // New path detected. Drop a note to the user and see if they
+          // actually want to use it or stick to the current directory.
+          //
+          cout << "Found Steam installation\n"
+              << "  " << p->string () << "\n\n";
+
+          bool ok (confirm_action (
+            "Install IW4x to this directory? [Y/n] (n = use current directory)",
+            'y'
+          ));
+
+          db.setting (k, ok ? "yes" : "no");
+
+          if (ok)
+            co_return p;
+          else
+            co_return fs::current_path ();
+        }
+        // User previously said no, so use the current directory.
+        //
+        co_return fs::current_path ();
+      }
     }
     catch (const exception&)
     {
-      // Silently fall back to the current directory if detection fails.
+      // If something blows up, just fall through to the default.
       //
     }
 
-    co_return nullopt;
+    // No Steam installation found; use the current directory.
+    //
+    co_return fs::current_path ();
   }
 
   // Check for and optionally install launcher updates.
@@ -759,6 +934,28 @@ main (int argc, char* argv[])
       return 0;
     }
 
+    // Handle --wipe-settings.
+    //
+    // We only wipe the global settings cache. The game file cache (.iw4x in
+    // the install directory) must be deleted manually by the user if needed.
+    //
+    if (opt.wipe_settings ())
+    {
+      fs::path r (resolve_cache_root ());
+
+      if (fs::exists (r))
+      {
+        error_code ec;
+        fs::remove_all (r, ec);
+
+        if (ec)
+        {
+          cerr << "error: unable to wipe settings: " << ec.message () << endl;
+          return 1;
+        }
+      }
+    }
+
     asio::io_context ioc;
     runtime_context ctx;
 
@@ -770,7 +967,7 @@ main (int argc, char* argv[])
 
       asio::co_spawn (
         ioc,
-        resolve_install_root (ioc),
+        resolve_root (ioc),
         [&heuristic, &ioc] (exception_ptr ex, optional<fs::path> p)
         {
           if (!ex) heuristic = p;
@@ -794,7 +991,20 @@ main (int argc, char* argv[])
       ctx.install_location = *heuristic;
     }
     else
+    {
       ctx.install_location = fs::path (opt.path ());
+
+      // Cache the user-specified path in the database for future runs
+      // without --path.
+      //
+      fs::path r (resolve_cache_root ());
+
+      cache_database db (r);
+
+      string s (path_digest (fs::current_path ()));
+      db.setting (setting_keys::inst_path (s),
+                  ctx.install_location.string ());
+    }
 
     // Map the command line options to our context.
     //
