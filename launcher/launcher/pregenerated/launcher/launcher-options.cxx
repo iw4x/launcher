@@ -773,7 +773,9 @@ namespace launcher
     game_exe_ ("iw4x.exe"),
     game_exe_specified_ (false),
     game_args_ (),
-    game_args_specified_ (false)
+    game_args_specified_ (false),
+    no_self_update_ (),
+    self_update_only_ ()
   {
   }
 
@@ -795,7 +797,9 @@ namespace launcher
     game_exe_ ("iw4x.exe"),
     game_exe_specified_ (false),
     game_args_ (),
-    game_args_specified_ (false)
+    game_args_specified_ (false),
+    no_self_update_ (),
+    self_update_only_ ()
   {
     ::launcher::cli::argv_scanner s (argc, argv, erase);
     _parse (s, opt, arg);
@@ -820,7 +824,9 @@ namespace launcher
     game_exe_ ("iw4x.exe"),
     game_exe_specified_ (false),
     game_args_ (),
-    game_args_specified_ (false)
+    game_args_specified_ (false),
+    no_self_update_ (),
+    self_update_only_ ()
   {
     ::launcher::cli::argv_scanner s (start, argc, argv, erase);
     _parse (s, opt, arg);
@@ -845,7 +851,9 @@ namespace launcher
     game_exe_ ("iw4x.exe"),
     game_exe_specified_ (false),
     game_args_ (),
-    game_args_specified_ (false)
+    game_args_specified_ (false),
+    no_self_update_ (),
+    self_update_only_ ()
   {
     ::launcher::cli::argv_scanner s (argc, argv, erase);
     _parse (s, opt, arg);
@@ -872,7 +880,9 @@ namespace launcher
     game_exe_ ("iw4x.exe"),
     game_exe_specified_ (false),
     game_args_ (),
-    game_args_specified_ (false)
+    game_args_specified_ (false),
+    no_self_update_ (),
+    self_update_only_ ()
   {
     ::launcher::cli::argv_scanner s (start, argc, argv, erase);
     _parse (s, opt, arg);
@@ -895,7 +905,9 @@ namespace launcher
     game_exe_ ("iw4x.exe"),
     game_exe_specified_ (false),
     game_args_ (),
-    game_args_specified_ (false)
+    game_args_specified_ (false),
+    no_self_update_ (),
+    self_update_only_ ()
   {
     _parse (s, opt, arg);
   }
@@ -908,23 +920,27 @@ namespace launcher
     if (p == ::launcher::cli::usage_para::text)
       os << ::std::endl;
 
-    os << "--help            Show this help message and exit." << ::std::endl;
+    os << "--help             Show this help message and exit." << ::std::endl;
 
-    os << "--version         Show version information and exit." << ::std::endl;
+    os << "--version          Show version information and exit." << ::std::endl;
 
-    os << "--wipe-settings   Clear the global settings cache." << ::std::endl;
+    os << "--wipe-settings    Clear the global settings cache." << ::std::endl;
 
-    os << "--build2-metadata Print the build2 metadata and exit." << ::std::endl;
+    os << "--build2-metadata  Print the build2 metadata and exit." << ::std::endl;
 
-    os << "--path <dir>      The installation directory for the game files." << ::std::endl;
+    os << "--path <dir>       The installation directory for the game files." << ::std::endl;
 
-    os << "--prerelease      Opt-in to pre-release (beta) updates." << ::std::endl;
+    os << "--prerelease       Opt-in to pre-release (beta) updates." << ::std::endl;
 
-    os << "--jobs|-j <num>   The number of parallel download jobs to run." << ::std::endl;
+    os << "--jobs|-j <num>    The number of parallel download jobs to run." << ::std::endl;
 
-    os << "--game-exe <file> The game executable to launch." << ::std::endl;
+    os << "--game-exe <file>  The game executable to launch." << ::std::endl;
 
-    os << "--game-args <arg> Additional arguments to pass to the game executable." << ::std::endl;
+    os << "--game-args <arg>  Additional arguments to pass to the game executable." << ::std::endl;
+
+    os << "--no-self-update   Skip the automatic launcher self-update check." << ::std::endl;
+
+    os << "--self-update-only Only check for and apply launcher updates, then exit." << ::std::endl;
 
     p = ::launcher::cli::usage_para::option;
 
@@ -966,6 +982,10 @@ namespace launcher
       _cli_options_map_["--game-args"] =
       &::launcher::cli::thunk< options, std::vector<std::string>, &options::game_args_,
         &options::game_args_specified_ >;
+      _cli_options_map_["--no-self-update"] =
+      &::launcher::cli::thunk< options, &options::no_self_update_ >;
+      _cli_options_map_["--self-update-only"] =
+      &::launcher::cli::thunk< options, &options::self_update_only_ >;
     }
   };
 

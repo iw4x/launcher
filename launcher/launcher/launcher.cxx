@@ -743,7 +743,7 @@ namespace launcher
         bp::child game (
           binary_path.string (),
           bp::args (ctx_.proton_arguments),
-          bp::start_dir (ctx_.install_location.string ())
+          bp::start_dir (ctx_.install_location.make_preferred ().string ())
         );
 
         game.detach ();
@@ -865,34 +865,94 @@ namespace launcher
 
   // Check for and optionally install launcher updates.
   //
+  // Returns true if the launcher is restarting (caller should exit), false
+  // otherwise.
+  //
+  // If `pc` is provided and an update is available, the progress coordinator
+  // will be started to display download progress. The UI is only shown when
+  // there is actually an update to install, avoiding unnecessary UI for
+  // up-to-date scenarios.
+  //
   asio::awaitable<bool>
   check_self_update (asio::io_context& io,
                      bool pre,
+                     bool only,
                      progress_coordinator* pc = nullptr)
   {
     auto uc (make_update_coordinator (io));
     uc->set_include_prerelease (pre);
 
-    if (pc != nullptr)
-      uc->set_progress_coordinator (pc);
+    // If the user explicitly requested an update, we let the coordinator
+    // attempt the restart immediately after installation.
+    //
+    uc->set_auto_restart (only);
 
     try
     {
-      auto s (co_await uc->check_and_update ());
-
-      // Return true if we are in the middle of a restart (meaning we
-      // shouldn't continue with the calling logic).
+      // First, check if an update is available without starting the UI.
       //
-      if (uc->state () == update_state::restarting)
+      auto s (co_await uc->check_for_updates ());
+
+      // If we were strictly asked to update but couldn't even check (e.g.,
+      // network down), that's fatal. Otherwise, we treat it as a soft failure
+      // and proceed to the application.
+      //
+      if (s == update_status::check_failed && only)
+      {
+        cerr << "error: failed to check for launcher updates" << endl;
+        co_return false;
+      }
+
+      // No update available, nothing to do.
+      //
+      if (s == update_status::up_to_date)
+        co_return false;
+
+      // An update is available. Now we can start the UI if requested.
+      //
+      if (pc != nullptr)
+      {
+        uc->set_progress_coordinator (pc);
+        pc->start ();
+      }
+
+      // Proceed to install the update.
+      //
+      const auto& info (uc->last_update_info ());
+
+      cout << "launcher update available: " << info.version
+           << " (current: " << uc->current_version () << ")" << endl;
+
+      if (!info.body.empty ())
+        cout << "Release notes:\n" << info.body << "\n" << endl;
+
+      auto r (co_await uc->install_update (info));
+
+      if (!r.success)
+      {
+        cerr << "error: update failed: " << r.error_message << endl;
+        co_return false;
+      }
+
+      // Try to restart into the new version.
+      //
+      if (uc->restart ())
         co_return true;
+
+      cerr << "warning: failed to restart launcher automatically" << endl;
+      cout << "please restart the launcher manually." << endl;
 
       co_return false;
     }
     catch (const exception& e)
     {
-      // Warn and move on if update check fails.
+      // Same logic as above: complain loudly if this was the only task,
+      // otherwise just warn and move on.
       //
-      cerr << "warning: update check failed: " << e.what () << endl;
+      if (only)
+        cerr << "error: update failed: " << e.what () << endl;
+      else
+        cerr << "warning: update check failed: " << e.what () << endl;
 
       co_return false;
     }
@@ -1020,20 +1080,28 @@ main (int argc, char* argv[])
     if (opt.game_args_specified ())
       ctx.proton_arguments = opt.game_args ();
 
-    // Self-update check.
-    //
+    if (!opt.no_self_update () || opt.self_update_only ())
     {
       bool r (false);
+
+      // Setup the progress feedback. The progress coordinator is passed to
+      // check_self_update but only started if an update is actually available.
+      //
+      auto pc (make_unique<progress_coordinator> (ioc));
 
       asio::co_spawn (
         ioc,
         check_self_update (ioc,
                            opt.prerelease (),
-                           nullptr),
-        [&r, &ioc] (exception_ptr e, bool v)
+                           opt.self_update_only (),
+                           pc.get ()),
+        [&r, &ioc, &pc] (exception_ptr e, bool v)
         {
           if (!e)
             r = v;
+
+          if (pc != nullptr)
+            asio::co_spawn (ioc, pc->stop (), asio::detached);
 
           ioc.stop ();
         });
@@ -1043,9 +1111,9 @@ main (int argc, char* argv[])
       ioc.restart ();
 
       // If we applied an update that requires a restart (e.g. replaced the
-      // executable), we are done.
+      // executable) or if the user only asked to update, we are done.
       //
-      if (r)
+      if (r || opt.self_update_only ())
         return 0;
     }
 

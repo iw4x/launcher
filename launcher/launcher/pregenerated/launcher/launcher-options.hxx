@@ -513,6 +513,12 @@ namespace launcher
     bool
     game_args_specified () const;
 
+    const bool&
+    no_self_update () const;
+
+    const bool&
+    self_update_only () const;
+
     // Print usage information.
     //
     static ::launcher::cli::usage_para
@@ -545,6 +551,8 @@ namespace launcher
     bool game_exe_specified_;
     std::vector<std::string> game_args_;
     bool game_args_specified_;
+    bool no_self_update_;
+    bool self_update_only_;
   };
 }
 
