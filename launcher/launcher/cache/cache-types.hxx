@@ -216,6 +216,72 @@ namespace launcher
     std::int64_t installed_at_;
   };
 
+  // Persist user preferences (e.g., install paths, Steam prompt decisions).
+  //
+  // We use a simple key-value store approach here. While it's slightly less
+  // structured than individual columns, it allows us to add new settings
+  // without migrating the schema every time we add a toggle.
+  //
+  #pragma db object table("user_settings")
+  class user_setting
+  {
+  public:
+    user_setting () = default;
+
+    // Use direct initialization for efficiency.
+    //
+    user_setting (std::string k, std::string v)
+      : key_ (std::move (k)),
+        val_ (std::move (v))
+    {
+    }
+
+    const std::string&
+    key () const noexcept { return key_; }
+
+    const std::string&
+    val () const noexcept { return val_; }
+
+    void
+    val (std::string v) { val_ = std::move (v); }
+
+  private:
+    friend class odb::access;
+
+    #pragma db id
+    std::string key_;
+
+    // Shorten to val_ to keep the implementation lines compact.
+    //
+    std::string val_;
+  };
+
+  // Map logical setting names to their database keys.
+  //
+  // Note that settings that need to be scoped per-installation (to support
+  // multiple MW2 installations each with their own launcher) take a scope
+  // parameter which is typically the digest of the launcher's current
+  // directory.
+  //
+  namespace setting_keys
+  {
+    // Format as "install_path.<scope>".
+    //
+    inline std::string
+    inst_path (const std::string& s)
+    {
+      return "install_path." + s;
+    }
+
+    // Format as "steam_prompt.<scope>.<digest>".
+    //
+    inline std::string
+    steam_prompt (const std::string& s, const std::string& d)
+    {
+      return "steam_prompt." + s + "." + d;
+    }
+  }
+
   // Refer to the legacy cache implementation for context.
   //
 
