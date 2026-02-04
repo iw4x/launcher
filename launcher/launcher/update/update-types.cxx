@@ -157,6 +157,17 @@ namespace launcher
     if (p >= s.size () || !parse_c (s, p, '.'))
       return v;
 
+    // Build2 uses ".z" as a development snapshot placeholder (e.g.,
+    // "1.2.0-a.1.z"). Treat it as a minimal snapshot indicator so the version
+    // sorts correctly.
+    //
+    if (p < s.size () && (s[p] == 'z' || s[p] == 'Z'))
+    {
+      ++p;
+      v.snapshot_sn = 1; // any non-zero value to mark it as a snapshot
+      return v;
+    }
+
     // Parse snapshot sequence (YYYYMMDDhhmmss).
     //
     auto sn (parse_u64 (s, p));
