@@ -586,12 +586,103 @@ namespace launcher
           co_await timer.async_wait (asio::use_awaitable);
         }
 
-        // Stop the progress UI.
+        // Second pass: unconditionally re-check the filesystem.
         //
-        co_await progress_.stop ();
+        // In practice this almost never finds anything, the first pass is
+        // already strict. Still, Downloads can theoretically fail in
+        // subtle ways (dropped connection, truncated write) so we don't
+        // trust the reported state. Instead, we re-run the reconciler
+        // against the actual disk to catch stragglers.
+        //
+        // That is, the real source of truth is the filesystem.
+        //
+        downloads_.clear ();
+        tasks.clear ();
 
-        if (downloads_.failed_count () > 0)
-          throw runtime_error ("download failed");
+        auto ps (
+          cache_.get_reconciler ().plan (m, ct::client, r.client.tag_name));
+
+        size_t n (0);
+
+        for (auto& p: ps)
+        {
+          if (p.action != reconcile_action::download)
+            continue;
+
+          // The reconciler plan might lack the URL so we have to patch it
+          // back in from the asset list.
+          //
+          if (p.url.empty ())
+          {
+            fs::path d (p.path);
+            string fn (d.filename ().string ());
+
+            if (auto i (c_assets.find (fn)); i != c_assets.end ())
+              p.url = i->second->browser_download_url;
+          }
+
+          if (p.url.empty ())
+            continue;
+
+          n++;
+
+          fs::path d (p.path);
+          if (d.has_parent_path ())
+          {
+            error_code ec;
+            create_directories (d.parent_path (), ec);
+          }
+
+          download_request rq;
+          rq.urls.push_back (p.url);
+          rq.target = d;
+          rq.name = d.filename ().string ();
+          rq.expected_size = p.expected_size;
+
+          string nm (rq.name);
+          auto t (downloads_.queue_download (move (rq)));
+          auto e (progress_.add_entry (nm + " (verify)"));
+
+          e->metrics ().total_bytes.store (p.expected_size, memory_order_relaxed);
+          tasks[t] = e;
+
+          t->on_progress = [e, this] (const download_progress& dp)
+          {
+            progress_.update_progress (e, dp.downloaded_bytes, dp.total_bytes);
+          };
+        }
+
+        if (n > 0)
+        {
+          asio::co_spawn (ioc_, downloads_.execute_all (), asio::detached);
+
+          while (downloads_.completed_count () + downloads_.failed_count () <
+                downloads_.total_count ())
+          {
+            // Prune completed or failed tasks from the UI list.
+            //
+            erase_if (tasks, [&] (const auto& kv)
+            {
+              if (kv.first->completed () || kv.first->failed ())
+              {
+                progress_.remove_entry (kv.second);
+                return true;
+              }
+              return false;
+            });
+
+            timer.expires_after (chrono::milliseconds (25));
+            co_await timer.async_wait (asio::use_awaitable);
+          }
+
+          if (downloads_.failed_count () > 0)
+          {
+            co_await progress_.stop ();
+            throw runtime_error ("download failed after verification pass");
+          }
+        }
+
+        co_await progress_.stop ();
       }
 
       // Post-process downloads (extraction).
@@ -870,8 +961,8 @@ namespace launcher
   //
   // If `pc` is provided and an update is available, the progress coordinator
   // will be started to display download progress. The UI is only shown when
-  // there is actually an update to install, avoiding unnecessary UI for
-  // up-to-date scenarios.
+  // there is actually an update to install, that is, we want to avoid
+  // unnecessary UI for up-to-date scenarios.
   //
   asio::awaitable<bool>
   check_self_update (asio::io_context& io,
