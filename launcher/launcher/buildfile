@@ -22,17 +22,68 @@ import libs += libftxui%lib{ftxui-screen}
 import libs += libodb%lib{odb}
 import libs += libodb-sqlite%lib{odb-sqlite}
 
-exe{iw4x-launcher}: {hxx ixx txx cxx}{**  -steam/steam-proton    \
-                                          -launcher-steam-proton \
-                                          -version               \
-                                          -*-options             \
-                                          -*-odb                 \
-                                          -pregenerated/**}
+# HACK:
+#
+# We have a conflict between libue integration and our directory-anchored
+# executable. Specifically, libue doesn't seem to tolerate the libue{...}
+# qualification inside a directory-anchored ./: exe{...} group.
+#
+# To handle this, we define a shadow target (ending in -u) specifically for
+# libue's consumption and a separate main target for the actual launcher.
+#
+# And yes, this is a massive, horrible hack that forces us to duplicate the
+# prerequisite list (so keep them in sync). We probably should figure out
+# how to make the build system happy with a single target, but today is not
+# that day.
+#
+# (Maybe ask boris wtf is going on)
+#
+exe{iw4x-launcher-u}: libue{iw4x-launcher-u}: \
+  {hxx ixx txx cxx}{** -steam/steam-proton    \
+                       -launcher-steam-proton \
+                       -version               \
+                       -*-options             \
+                       -*-odb                 \
+                       -**.test...            \
+                       -pregenerated/**}
+
+exe{iw4x-launcher-u}: libue{iw4x-launcher-u}: {h c}{**}
+exe{iw4x-launcher-u}: libue{iw4x-launcher-u}: {hxx}{version}
+exe{iw4x-launcher-u}: libue{iw4x-launcher-u}: {hxx cxx}{steam/steam-proton}: include = ($tclass == 'linux')
+exe{iw4x-launcher-u}: libue{iw4x-launcher-u}: {hxx cxx}{launcher-steam-proton}: include = ($tclass == 'linux')
+exe{iw4x-launcher-u}: libue{iw4x-launcher-u}: $libs testscript
+
+./: exe{iw4x-launcher}:                            \
+      {hxx ixx txx cxx}{** -steam/steam-proton     \
+                            -launcher-steam-proton \
+                            -version               \
+                            -*-options             \
+                            -*-odb                 \
+                            -**.test...            \
+                            -pregenerated/**}
+
 exe{iw4x-launcher}: {h c}{**}
 exe{iw4x-launcher}: {hxx}{version}
 exe{iw4x-launcher}: {hxx cxx}{steam/steam-proton}: include = ($tclass == 'linux')
 exe{iw4x-launcher}: {hxx cxx}{launcher-steam-proton}: include = ($tclass == 'linux')
-exe{iw4x-launcher}: $libs testscript
+exe{iw4x-launcher}: $libs
+
+# Unit tests.
+#
+exe{*.test -iw4x-launcher}:
+{
+  test = true
+  install = false
+}
+
+for t: cxx{**.test...}
+{
+  d = $directory($t)
+  n = $name($t)...
+
+  ./: $d/exe{$n}: $t $d/{hxx ixx txx}{+$n} $d/testscript{+$n}
+  $d/exe{$n}: libue{iw4x-launcher-u}: bin.whole = false
+}
 
 # Version header generation.
 #

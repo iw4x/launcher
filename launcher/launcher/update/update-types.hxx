@@ -11,12 +11,13 @@ namespace launcher
 {
   // Build2 standard version for launcher releases.
   //
-  // Format: <major>.<minor>.<patch>[-(a|b).<num>[.<snapsn>[.<snapid>]]]
+  // Format: <major>.<minor>.<patch>[-(a|b).<num>[.z|<snapsn>[.<snapid>]]]
   //
   // Examples:
   //   1.1.0                                 - final release
   //   1.2.0-a.1                             - first alpha pre-release
   //   1.2.0-b.2                             - second beta pre-release
+  //   1.2.0-a.1.z                           - alpha development snapshot
   //   1.2.0-a.1.20260201010251.fe4660334ed0 - alpha snapshot
   //
   struct launcher_version
