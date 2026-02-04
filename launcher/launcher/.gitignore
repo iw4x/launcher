@@ -4,6 +4,11 @@ iw4x-launcher
 #
 !pregenerated/launcher
 
+# Unit tests.
+#
+*.test
+!*.test.cxx
+
 # Testscript output directory (can be symlink).
 #
 test-launcher
