@@ -32,6 +32,10 @@
 
 #include <launcher/version.hxx>
 
+#ifdef _WIN32
+#  include <windows.h>
+#endif
+
 // Include miniz last.
 //
 // We do this to picks up any configuration macros (like _FILE_OFFSET_BITS=64)
@@ -1058,6 +1062,38 @@ main (int argc, char* argv[])
 
   try
   {
+    // Change the current working directory to the location of the launcher
+    // executable. This is important because the launcher is often invoked from
+    // a different directory (e.g., via command line), but it needs to operate
+    // relative to its own location, not the shell's working directory.
+    //
+    {
+      error_code ec;
+      fs::path exe;
+
+#ifdef _WIN32
+      // On Windows, use GetModuleFileName.
+      //
+      wchar_t buf[MAX_PATH];
+      if (GetModuleFileNameW (nullptr, buf, MAX_PATH) != 0)
+        exe = fs::path (buf);
+#else
+      // On Linux/Unix, /proc/self/exe is a symlink to the executable.
+      //
+      exe = fs::canonical ("/proc/self/exe", ec);
+#endif
+
+      if (!exe.empty () && !ec)
+      {
+        fs::path dir (exe.parent_path ());
+        fs::current_path (dir, ec);
+
+        if (ec)
+          cerr << "warning: unable to change to launcher directory: "
+               << ec.message () << endl;
+      }
+    }
+
     options opt (argc, argv);
 
     // Handle --version.
