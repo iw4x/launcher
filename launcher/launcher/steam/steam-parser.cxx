@@ -378,7 +378,10 @@ namespace launcher
       // Extract path.
       //
       if (const auto* n = node.find ("path"); n && n->is_string ())
-        lib.path = n->as_string ();
+      {
+        fs::path p (n->as_string ());
+        lib.path = p.lexically_normal ().make_preferred ();
+      }
 
       // Extract label.
       //
