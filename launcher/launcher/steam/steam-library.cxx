@@ -291,12 +291,30 @@ namespace launcher
   // Try to find an installation of Modern Warfare 2 (IW4).
   //
   // Querying Steam app manifest is the most reliable way to find installed
-  // games, but it does not always provide a valid install path. In those cases,
-  // we fall back to locating the installation directory by name.
+  // games. The manifest contains the exact installation directory name. If
+  // the manifest lookup fails, we fall back to scanning library folders by
+  // common directory names.
   //
   asio::awaitable<optional<fs::path>> steam_library_manager::
-  find_app (uint32_t /*appid*/)
+  find_app (uint32_t appid)
   {
+    // First, try the manifest approach which is more reliable.
+    //
+    // The manifest file (appmanifest_<appid>.acf) contains the "installdir"
+    // field with the exact folder name under steamapps/common/.
+    //
+    auto manifest (co_await load_app_manifest (appid));
+
+    if (manifest && !manifest->fullpath.empty ())
+    {
+      fs::path p (manifest->fullpath.lexically_normal ().make_preferred ());
+
+      if (fs::exists (p) && fs::is_directory (p))
+        co_return p;
+    }
+
+    // Fallback: scan library folders by known directory names.
+    //
     auto libs (co_await load_libraries ());
 
     // The common directory names used by MW2.
@@ -309,7 +327,9 @@ namespace launcher
     {
       for (const char* name : names)
       {
-        fs::path p (lib.path / "steamapps" / "common" / name);
+        fs::path p ((lib.path / "steamapps" / "common" / name)
+                      .lexically_normal ()
+                      .make_preferred ());
 
         if (fs::exists (p) && fs::is_directory (p))
           co_return p;
@@ -335,9 +355,9 @@ namespace launcher
           // Resolve the full installation path.
           //
           if (!m.installdir.empty ())
-          {
-            m.fullpath = lib.path / "steamapps" / "common" / m.installdir;
-          }
+            m.fullpath = (lib.path / "steamapps" / "common" / m.installdir)
+                           .lexically_normal ()
+                           .make_preferred ();
 
           co_return m;
         }
@@ -360,7 +380,9 @@ namespace launcher
 
     for (const auto& lib : libs)
     {
-      fs::path apps_dir (lib.path / "steamapps");
+      fs::path apps_dir ((lib.path / "steamapps")
+                           .lexically_normal ()
+                           .make_preferred ());
 
       if (!fs::exists (apps_dir) || !fs::is_directory (apps_dir))
         continue;
@@ -396,7 +418,9 @@ namespace launcher
 
             if (!m.installdir.empty ())
             {
-              fs::path p (lib.path / "steamapps" / "common" / m.installdir);
+              fs::path p ((lib.path / "steamapps" / "common" / m.installdir)
+                            .lexically_normal ()
+                            .make_preferred ());
 
               if (fs::exists (p))
                 result[id] = p;
@@ -416,12 +440,14 @@ namespace launcher
   bool steam_library_manager::
   validate_library_path (const fs::path& p)
   {
-    if (!fs::exists (p) || !fs::is_directory (p))
+    fs::path np (p.lexically_normal ().make_preferred ());
+
+    if (!fs::exists (np) || !fs::is_directory (np))
       return false;
 
     // A valid Steam library must contain a 'steamapps' subdirectory.
     //
-    fs::path steamapps (p / "steamapps");
+    fs::path steamapps (np / "steamapps");
     if (!fs::exists (steamapps) || !fs::is_directory (steamapps))
       return false;
 
@@ -431,7 +457,9 @@ namespace launcher
   optional<fs::path> steam_library_manager::
   find_app_manifest_file (const steam_library& lib, uint32_t appid)
   {
-    fs::path apps_dir (lib.path / "steamapps");
+    fs::path apps_dir ((lib.path / "steamapps")
+                         .lexically_normal ()
+                         .make_preferred ());
 
     if (!fs::exists (apps_dir) || !fs::is_directory (apps_dir))
       return nullopt;
