@@ -859,16 +859,35 @@ namespace launcher
     void
     handle_rate_limit_progress (const string& msg, uint64_t rem)
     {
+      // The progress UI might not have been started yet (e.g., rate limit hit
+      // during initial metadata fetch, before any downloads). Ensure the
+      // render loop is running so the dialog is actually visible.
+      //
+      if (!progress_.running ())
+      {
+        progress_.start ();
+        rate_limit_started_progress_ = true;
+      }
+
       string s (
         msg + "\n\nTime remaining: " + std::to_string (rem) + " seconds");
 
       progress_.show_dialog ("Rate Limit", s);
 
-      // If the countdown has finished, we can dismiss the dialog and
-      // carry on.
+      // If the countdown has finished, we can dismiss the dialog and carry on
+      // unless we started the progress UI just for this dialog, in which case
+      // we must tear it down so it doesn't interfere with the normal flow.
       //
       if (rem == 0)
+      {
         progress_.hide_dialog ();
+
+        if (rate_limit_started_progress_)
+        {
+          asio::co_spawn (ioc_, progress_.stop (), asio::detached);
+          rate_limit_started_progress_ = false;
+        }
+      }
     }
 
     asio::io_context& ioc_;
@@ -878,6 +897,7 @@ namespace launcher
     download_coordinator downloads_;
     progress_coordinator progress_;
     cache_coordinator cache_;
+    bool rate_limit_started_progress_ {false};
   };
 
   // Resolve MW2 installation root via Steam.
@@ -981,6 +1001,40 @@ namespace launcher
     // attempt the restart immediately after installation.
     //
     uc->set_auto_restart (only);
+
+    // Wire up rate limit progress callback on the discovery layer's GitHub API
+    // so the user sees a countdown if GitHub throttles.
+    //
+    bool rl_started_ui (false);
+
+    uc->discovery ().set_progress_callback (
+      [pc, &io, &rl_started_ui] (const string& message, uint64_t rem)
+    {
+      if (pc == nullptr)
+        return;
+
+      if (!pc->running ())
+      {
+        pc->start ();
+        rl_started_ui = true;
+      }
+
+      string s (message + "\n\nTime remaining: " + std::to_string (rem) +
+                " seconds");
+
+      pc->show_dialog ("Rate Limit", s);
+
+      if (rem == 0)
+      {
+        pc->hide_dialog ();
+
+        if (rl_started_ui)
+        {
+          asio::co_spawn (io, pc->stop (), asio::detached);
+          rl_started_ui = false;
+        }
+      }
+    });
 
     try
     {
