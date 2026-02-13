@@ -121,11 +121,6 @@ namespace launcher
     asio::awaitable<update_status>
     check_for_updates ();
 
-    // Check for updates and install if available.
-    //
-    asio::awaitable<update_status>
-    check_and_update ();
-
     // Install a specific update (from update_info).
     //
     asio::awaitable<update_result>
