@@ -1,4 +1,6 @@
 #include <stdexcept>
+#include <algorithm>
+#include <cctype>
 
 namespace launcher
 {
@@ -39,11 +41,53 @@ namespace launcher
 
     response_type resp (co_await perform_request (host, target, verb, headers, request.body));
 
-    // If the response indicates rate limiting, wait and retry once.
+    // If we hit a wall, we might need to retry. This is tricky because there
+    // are two types of limits: the standard quota (X-RateLimit-*) and the
+    // secondary "abuse" limits which just return 403/429 without standard
+    // headers.
     //
-    if (resp.is_rate_limited () && resp.rate_limit && resp.rate_limit->is_exceeded ())
+    if (resp.is_rate_limited ())
     {
-      co_await handle_rate_limit (*resp.rate_limit);
+      if (resp.rate_limit && resp.rate_limit->is_exceeded ())
+      {
+        co_await handle_rate_limit (*resp.rate_limit);
+      }
+      else
+      {
+        // We are flying blind without the standard headers. Synthesize a
+        // limit.
+        //
+        github_rate_limit rl;
+        rl.remaining = 0;
+
+        // See if they gave us a hint on when to come back. If the header is
+        // missing or contains garbage, assume 60 seconds is enough for them
+        // to cool off.
+        //
+        std::uint64_t d (60);
+        auto i (resp.headers.find ("retry-after"));
+
+        if (i != resp.headers.end ())
+        {
+          try
+          {
+            d = std::stoull (i->second);
+          }
+          catch (...)
+          {
+          }
+        }
+
+        auto t (std::chrono::system_clock::now ());
+        auto ts (static_cast<std::uint64_t> (
+                   std::chrono::duration_cast<std::chrono::seconds> (
+                     t.time_since_epoch ()).count ()));
+
+        rl.reset = ts + d;
+
+        co_await handle_rate_limit (rl);
+      }
+
       resp = co_await perform_request (host, target, verb, headers, request.body);
     }
 
