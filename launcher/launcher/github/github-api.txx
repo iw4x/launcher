@@ -108,7 +108,18 @@ namespace launcher
       resp.body = res.body ();
 
       for (const auto& field : res)
-        resp.headers[std::string (field.name_string ())] = std::string (field.value ());
+      {
+        std::string n (field.name_string ());
+        std::transform (n.begin (),
+                        n.end (),
+                        n.begin (),
+                        [] (unsigned char c)
+        {
+          return std::tolower (c);
+        });
+
+        resp.headers[std::move (n)] = std::string (field.value ());
+      }
 
       // Extract rate limit information from response headers.
       //

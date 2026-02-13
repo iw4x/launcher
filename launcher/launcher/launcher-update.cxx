@@ -138,54 +138,6 @@ namespace launcher
     }
   }
 
-  asio::awaitable<update_status> update_coordinator::
-  check_and_update ()
-  {
-    auto s (co_await check_for_updates ());
-
-    if (s == update_status::up_to_date)
-      co_return s;
-
-    if (s == update_status::check_failed)
-    {
-      if (!headless_)
-        cerr << "warning: failed to check for launcher updates" << endl;
-      co_return s;
-    }
-
-    // Inform the user. Even in headless mode, if an update is found, we want
-    // to log it to stdout so logs capture the state transition.
-    //
-    cout << "launcher update available: " << last_update_info_.version
-         << " (current: " << current_version_ << ")" << endl;
-
-    if (!headless_ && !last_update_info_.body.empty ())
-      cout << "Release notes:\n" << last_update_info_.body << "\n" << endl;
-
-    auto r (co_await install_update (last_update_info_));
-
-    if (!r.success)
-    {
-      cerr << "error: update failed: " << r.error_message << endl;
-      state_ = update_state::failed;
-      report_completion (update_status::check_failed, r.error_message);
-      co_return update_status::check_failed;
-    }
-
-    // Try to restart into the new version. If this fails, we are in a
-    // partially valid state (new binary on disk, old binary running). The
-    // user will have to manually restart, but the data is safe so we don't
-    // hard fail.
-    //
-    if (restart ())
-      co_return update_status::update_available;
-
-    cerr << "warning: failed to restart launcher automatically" << endl;
-    cout << "please restart the launcher manually." << endl;
-
-    co_return update_status::update_available;
-  }
-
   asio::awaitable<update_result> update_coordinator::
   install_update (const info_type& i)
   {
