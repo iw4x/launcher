@@ -19,8 +19,10 @@ namespace launcher
     inline constexpr quill::LogLevel
       compiled_minimum_level (quill::LogLevel::TraceL3);
 #else
+    // TraceL3 for beta, change on release
+    //
     inline constexpr quill::LogLevel
-      compiled_minimum_level (quill::LogLevel::Debug);
+      compiled_minimum_level (quill::LogLevel::TraceL3);
 #endif
   }
 }
