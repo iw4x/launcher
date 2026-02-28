@@ -11,6 +11,7 @@ namespace launcher
   basic_cache_database<T>::
   basic_cache_database (const fs::path& d)
   {
+    launcher::log::trace_l2 (categories::cache{}, "constructing basic_cache_database");
     init (d);
   }
 
@@ -18,46 +19,61 @@ namespace launcher
   basic_cache_database<T>::
   ~basic_cache_database ()
   {
+    launcher::log::trace_l2 (categories::cache{}, "destroying basic_cache_database");
   }
 
   template <typename T>
   void basic_cache_database<T>::
   init (const fs::path& d)
   {
+    launcher::log::trace_l1 (categories::cache{}, "initializing cache database at root: {}", d.string ());
+
     // We stick the cache database into the standard cache directory layout.
     //
     fs::path c (d / traits_type::dir_name);
 
     if (!fs::exists (c))
     {
+      launcher::log::trace_l2 (categories::cache{}, "cache directory {} does not exist, creating it", c.string ());
       std::error_code ec;
       fs::create_directories (c, ec);
 
       if (ec)
+      {
+        launcher::log::error (categories::cache{}, "failed to create cache directory: {}", ec.message ());
         throw std::runtime_error (
           "failed to create cache directory: " + c.string () +
           ": " + ec.message ());
+      }
     }
 
     path_ = c / traits_type::db_name;
+    launcher::log::debug (categories::cache{}, "resolved database path to: {}", path_.string ());
 
     // Check if the file exists before we open the DB so we know if
     // we need to bootstrap the schema.
     //
     bool create (!fs::exists (path_));
+    if (create)
+      launcher::log::info (categories::cache{}, "database file missing, will bootstrap schema");
 
     // Open with create flag (default for sqlite::database).
     //
+    launcher::log::trace_l2 (categories::cache{}, "opening sqlite database");
     db_ = std::make_unique<database_type> (
       path_.string (),
       SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE);
 
     // Tweak the engine before doing anything else.
     //
+    launcher::log::trace_l2 (categories::cache{}, "applying database pragmas");
     pragmas ();
 
     if (create || traits_type::auto_create)
+    {
+      launcher::log::trace_l2 (categories::cache{}, "checking/creating database schema");
       schema ();
+    }
   }
 
   template <typename T>
@@ -85,6 +101,10 @@ namespace launcher
           exists = true;
         sqlite3_finalize (s);
       }
+      else
+      {
+        launcher::log::error (categories::cache{}, "sqlite3_prepare_v2 failed during schema check");
+      }
 
       t.commit ();
     }
@@ -94,9 +114,14 @@ namespace launcher
     //
     if (!exists)
     {
+      launcher::log::info (categories::cache{}, "tables missing, telling ODB to create schema");
       odb::transaction t (db_->begin ());
       odb::schema_catalog::create_schema (*db_);
       t.commit ();
+    }
+    else
+    {
+      launcher::log::trace_l3 (categories::cache{}, "database schema already exists");
     }
   }
 
@@ -117,11 +142,15 @@ namespace launcher
     // though currently we lock the whole thing.
     //
     if (traits_type::wal)
+    {
+      launcher::log::trace_l3 (categories::cache{}, "enabling WAL mode");
       sqlite3_exec (h, "PRAGMA journal_mode=WAL", nullptr, nullptr, nullptr);
+    }
 
     // We prioritize performance. If someting corrupt, we just rebuild the
     // cache.
     //
+    launcher::log::trace_l3 (categories::cache{}, "disabling synchronous mode and foreign keys, enabling exclusive locking and memory temp_store");
     sqlite3_exec (h, "PRAGMA synchronous=OFF", nullptr, nullptr, nullptr);
     sqlite3_exec (h, "PRAGMA foreign_keys=OFF", nullptr, nullptr, nullptr);
     sqlite3_exec (h, "PRAGMA locking_mode=EXCLUSIVE", nullptr, nullptr, nullptr);
@@ -132,9 +161,15 @@ namespace launcher
   std::optional<cached_file> basic_cache_database<T>::
   find (const string_type& p) const
   {
+    launcher::log::trace_l3 (categories::cache{}, "querying database for path: {}", p);
     odb::transaction t (db_->begin ());
     std::shared_ptr<cached_file> f (db_->template find<cached_file> (p));
     t.commit ();
+
+    if (f)
+      launcher::log::trace_l3 (categories::cache{}, "file found in database: {}", p);
+    else
+      launcher::log::trace_l3 (categories::cache{}, "file not found in database: {}", p);
 
     return f ? std::optional<cached_file> (*f) : std::nullopt;
   }
@@ -143,6 +178,7 @@ namespace launcher
   void basic_cache_database<T>::
   store (const cached_file& f)
   {
+    launcher::log::trace_l3 (categories::cache{}, "storing file in database: {}", f.path ());
     odb::transaction t (db_->begin ());
 
     // We can't strictly use persist() because it might already exist, and we
@@ -153,6 +189,7 @@ namespace launcher
 
     if (e)
     {
+      launcher::log::trace_l3 (categories::cache{}, "updating existing entry for: {}", f.path ());
       e->set_mtime (f.mtime ());
       e->set_version (f.version ());
       e->set_size (f.size ());
@@ -160,7 +197,10 @@ namespace launcher
       db_->update (*e);
     }
     else
+    {
+      launcher::log::trace_l3 (categories::cache{}, "persisting new entry for: {}", f.path ());
       db_->persist (f);
+    }
 
     t.commit ();
   }
@@ -172,6 +212,7 @@ namespace launcher
     if (fs.empty ())
       return;
 
+    launcher::log::trace_l2 (categories::cache{}, "batch storing {} files in database", fs.size ());
     odb::transaction t (db_->begin ());
 
     // Batch update to minimize transaction overhead.
@@ -194,12 +235,14 @@ namespace launcher
     }
 
     t.commit ();
+    launcher::log::trace_l2 (categories::cache{}, "batch store complete");
   }
 
   template <typename T>
   void basic_cache_database<T>::
   erase (const string_type& p)
   {
+    launcher::log::trace_l2 (categories::cache{}, "erasing file from database: {}", p);
     odb::transaction t (db_->begin ());
     db_->template erase<cached_file> (p);
     t.commit ();
@@ -212,6 +255,7 @@ namespace launcher
     if (ps.empty ())
       return;
 
+    launcher::log::trace_l2 (categories::cache{}, "batch erasing {} files from database", ps.size ());
     odb::transaction t (db_->begin ());
 
     for (const auto& p : ps)
@@ -224,6 +268,7 @@ namespace launcher
   void basic_cache_database<T>::
   erase (component_type c)
   {
+    launcher::log::info (categories::cache{}, "erasing all files for component {} from database", static_cast<int> (c));
     using query = odb::query<cached_file>;
 
     odb::transaction t (db_->begin ());
@@ -235,6 +280,7 @@ namespace launcher
   std::vector<cached_file> basic_cache_database<T>::
   files () const
   {
+    launcher::log::trace_l2 (categories::cache{}, "querying all cached files");
     std::vector<cached_file> r;
 
     odb::transaction t (db_->begin ());
@@ -244,6 +290,7 @@ namespace launcher
       r.push_back (f);
 
     t.commit ();
+    launcher::log::trace_l3 (categories::cache{}, "query returned {} files", r.size ());
     return r;
   }
 
@@ -251,6 +298,7 @@ namespace launcher
   std::vector<cached_file> basic_cache_database<T>::
   files (component_type c) const
   {
+    launcher::log::trace_l2 (categories::cache{}, "querying all cached files for component {}", static_cast<int> (c));
     using query = odb::query<cached_file>;
 
     std::vector<cached_file> r;
@@ -263,6 +311,7 @@ namespace launcher
       r.push_back (f);
 
     t.commit ();
+    launcher::log::trace_l3 (categories::cache{}, "query returned {} files", r.size ());
     return r;
   }
 
@@ -270,6 +319,7 @@ namespace launcher
   std::vector<cached_file> basic_cache_database<T>::
   files (const string_type& v) const
   {
+    launcher::log::trace_l2 (categories::cache{}, "querying all cached files for version {}", v);
     using query = odb::query<cached_file>;
 
     std::vector<cached_file> r;
@@ -282,6 +332,7 @@ namespace launcher
       r.push_back (f);
 
     t.commit ();
+    launcher::log::trace_l3 (categories::cache{}, "query returned {} files", r.size ());
     return r;
   }
 
@@ -297,6 +348,7 @@ namespace launcher
       ++n;
 
     t.commit ();
+    launcher::log::trace_l3 (categories::cache{}, "counted {} total cached files", n);
     return n;
   }
 
@@ -316,6 +368,7 @@ namespace launcher
       ++n;
 
     t.commit ();
+    launcher::log::trace_l3 (categories::cache{}, "counted {} cached files for component {}", n, static_cast<int> (c));
     return n;
   }
 
@@ -323,10 +376,16 @@ namespace launcher
   std::optional<component_version> basic_cache_database<T>::
   version (component_type c) const
   {
+    launcher::log::trace_l3 (categories::cache{}, "querying version for component {}", static_cast<int> (c));
     odb::transaction t (db_->begin ());
     std::shared_ptr<component_version> v (
       db_->template find<component_version> (c));
     t.commit ();
+
+    if (v)
+      launcher::log::trace_l3 (categories::cache{}, "component version found: {}", v->tag ());
+    else
+      launcher::log::trace_l3 (categories::cache{}, "component version not found");
 
     return v ? std::optional<component_version> (*v) : std::nullopt;
   }
@@ -335,6 +394,7 @@ namespace launcher
   void basic_cache_database<T>::
   version (component_type c, const string_type& tag)
   {
+    launcher::log::info (categories::cache{}, "updating version for component {} to {}", static_cast<int> (c), tag);
     odb::transaction t (db_->begin ());
 
     std::shared_ptr<component_version> e (
@@ -359,6 +419,7 @@ namespace launcher
   void basic_cache_database<T>::
   erase_version (component_type c)
   {
+    launcher::log::info (categories::cache{}, "erasing version for component {}", static_cast<int> (c));
     odb::transaction t (db_->begin ());
     db_->template erase<component_version> (c);
     t.commit ();
@@ -368,6 +429,7 @@ namespace launcher
   std::vector<component_version> basic_cache_database<T>::
   versions () const
   {
+    launcher::log::trace_l2 (categories::cache{}, "querying all component versions");
     std::vector<component_version> r;
 
     odb::transaction t (db_->begin ());
@@ -378,6 +440,7 @@ namespace launcher
       r.push_back (v);
 
     t.commit ();
+    launcher::log::trace_l3 (categories::cache{}, "query returned {} component versions", r.size ());
     return r;
   }
 
@@ -386,6 +449,7 @@ namespace launcher
   void basic_cache_database<T>::
   transact (F&& f)
   {
+    launcher::log::trace_l3 (categories::cache{}, "executing generic transaction");
     odb::transaction t (db_->begin ());
     f ();
     t.commit ();
@@ -396,6 +460,7 @@ namespace launcher
   auto basic_cache_database<T>::
   transact_r (F&& f) -> decltype (f ())
   {
+    launcher::log::trace_l3 (categories::cache{}, "executing generic transaction with return value");
     odb::transaction t (db_->begin ());
     auto r (f ());
     t.commit ();
@@ -406,6 +471,7 @@ namespace launcher
   void basic_cache_database<T>::
   vacuum ()
   {
+    launcher::log::info (categories::cache{}, "vacuuming cache database");
     // VACUUM can't run inside a transaction.
     //
     db_->execute ("VACUUM");
@@ -415,6 +481,7 @@ namespace launcher
   bool basic_cache_database<T>::
   check () const
   {
+    launcher::log::trace_l1 (categories::cache{}, "running PRAGMA integrity_check");
     odb::transaction t (db_->begin ());
     bool ok (true);
 
@@ -432,9 +499,21 @@ namespace launcher
           reinterpret_cast<const char*> (sqlite3_column_text (s, 0)));
 
         if (r == nullptr || std::string (r) != "ok")
+        {
+          launcher::log::error (categories::cache{}, "integrity check failed, result: {}", r ? r : "null");
           ok = false;
+        }
+        else
+        {
+          launcher::log::debug (categories::cache{}, "integrity check passed");
+        }
       }
       sqlite3_finalize (s);
+    }
+    else
+    {
+      launcher::log::error (categories::cache{}, "sqlite3_prepare_v2 failed for integrity_check");
+      ok = false;
     }
 
     t.commit ();
@@ -445,6 +524,7 @@ namespace launcher
   void basic_cache_database<T>::
   clear ()
   {
+    launcher::log::warning (categories::cache{}, "clearing cache database (all files and versions)");
     odb::transaction t (db_->begin ());
 
     db_->template erase_query<cached_file> ();
