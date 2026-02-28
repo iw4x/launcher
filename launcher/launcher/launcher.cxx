@@ -264,6 +264,12 @@ namespace launcher
       launcher::log::trace_l1 (categories::launcher{}, "reconciling artifacts against remote state...");
       co_await reconcile_artifacts (remote);
 
+      if (ctx_.skip_launch)
+      {
+        launcher::log::info (categories::launcher{}, "updates completed, skipping game launch as requested and exiting");
+        co_return 0;
+      }
+
       launcher::log::trace_l1 (categories::launcher{}, "executing payload...");
       co_return co_await execute_payload ();
     }
@@ -862,12 +868,6 @@ namespace launcher
     asio::awaitable<int>
     execute_payload ()
     {
-      if (ctx_.skip_launch)
-      {
-        launcher::log::info (categories::launcher{}, "updates completed, skipping game launch as requested and exiting");
-        co_return 0;
-      }
-
       launcher::log::info (categories::launcher{}, "preparing to execute game payload");
 #ifdef __linux__
       co_return co_await execute_proton ();
