@@ -54,6 +54,64 @@ using namespace boost::asio::experimental::awaitable_operators;
 
 namespace launcher
 {
+  // Prompt the user for a Yes/No answer.
+  //
+  // We strictly require a 'y' or 'n' (case-insensitive) to proceed. While
+  // defaulting on EOF might seem convenient, it's safer to bail out if the
+  // input stream is broken or closed unexpectedly.
+  //
+  static bool
+  confirm_action (const string& prompt, char def = '\0')
+  {
+    launcher::log::trace_l2 (categories::launcher{}, "prompting user for confirmation: {}", prompt);
+
+    string a;
+    do
+    {
+      cout << prompt << ' ';
+
+      // Note: getline() sets the failbit if it fails to extract anything, and
+      // the eofbit if it hits EOF before the delimiter.
+      //
+      getline (cin, a);
+
+      bool f (cin.fail ());
+      bool e (cin.eof ());
+
+      launcher::log::trace_l3 (categories::launcher{}, "user input received: '{}' (fail: {}, eof: {})", a, f, e);
+
+      // If we hit EOF or fail without a newline, force one out so the next
+      // output doesn't get messed up.
+      //
+      if (f || e)
+        cout << endl;
+
+      if (f)
+      {
+        launcher::log::error (categories::launcher{}, "failed to read confirmation from stdin");
+        throw ios_base::failure ("unable to read y/n answer from stdin");
+      }
+
+      if (a.empty () && def != '\0')
+      {
+        // We don't want to treat EOF as the default answer; we want to see an
+        // actual newline from the user to confirm they are present and paying
+        // attention.
+        //
+        if (!e)
+        {
+          a = def;
+          launcher::log::trace_l3 (categories::launcher{}, "empty input, applying default '{}'", def);
+        }
+      }
+    } while (a != "y" && a != "Y" && a != "n" && a != "N");
+
+    bool r (a == "y" || a == "Y");
+    launcher::log::info (categories::launcher{}, "user answered prompt with: {}", r ? "yes" : "no");
+
+    return r;
+  }
+
   // Generate a collision-resistant identifier for filesystem paths.
   //
   // We need to associate metadata (like the "accepted" state) with specific
@@ -977,28 +1035,111 @@ namespace launcher
   asio::awaitable<optional<fs::path>>
   resolve_root (asio::io_context& ctx)
   {
-    launcher::log::trace_l1 (categories::launcher{}, "resolving installation root via steam");
+    launcher::log::trace_l1 (categories::launcher{}, "resolving installation root");
+
+    // First check if we have a path saved from a previous --path override.
+    // If it's still there on disk, we are done.
+    //
+    fs::path cr (resolve_cache_root ());
+    launcher::log::trace_l3 (categories::launcher{}, "opened global cache database at {}", cr.string ());
+
+    cache_database db (cr);
+
+    string s (path_digest (fs::current_path ()));
+    string c (db.setting_value (setting_keys::inst_path (s)));
+
+    launcher::log::trace_l3 (categories::launcher{}, "checking for previously saved --path override");
+
+    if (!c.empty ())
+    {
+      launcher::log::trace_l2 (categories::launcher{}, "found saved path override in db: {}", c);
+      fs::path p (c);
+      if (fs::exists (p))
+      {
+        launcher::log::info (categories::launcher{}, "using previously saved install path override: {}", p.string ());
+        co_return p;
+      }
+      else
+      {
+        launcher::log::warning (categories::launcher{}, "saved path override does not exist on disk, falling back to steam detection");
+      }
+    }
+
+    // No override, so try to sniff out the Steam install.
+    //
     try
     {
+      launcher::log::trace_l2 (categories::launcher{}, "attempting steam installation detection");
       auto p (co_await get_mw2_default_path (ctx));
 
       if (p && fs::exists (*p))
       {
-        launcher::log::info (categories::launcher{}, "resolved MW2 installation root: {}", p->string ());
-        co_return p;
+        launcher::log::debug (categories::launcher{}, "steam detection found path: {}", p->string ());
+
+        // We found a Steam path, but we don't want to nag the user every
+        // single time if they've already said no.
+        //
+        string d (path_digest (*p));
+        string k (setting_keys::steam_prompt (s, d));
+        string a (db.setting_value (k));
+
+        if (!a.empty ())
+        {
+          launcher::log::trace_l3 (categories::launcher{}, "user previously answered steam prompt with '{}'", a);
+          if (a == "yes")
+          {
+            launcher::log::info (categories::launcher{}, "using steam path based on previous user confirmation");
+            co_return p;
+          }
+        }
+        else
+        {
+          // New path detected. Drop a note to the user and see if they
+          // actually want to use it or stick to the current directory.
+          //
+          launcher::log::info (categories::launcher{}, "new steam path detected, prompting user for confirmation");
+          cout << "Found Steam installation\n"
+              << "  " << p->string () << "\n\n";
+
+          bool ok (confirm_action (
+            "Install IW4x to this directory? [Y/n] (n = use current directory)",
+            'y'
+          ));
+
+          db.setting (k, ok ? "yes" : "no");
+
+          if (ok)
+          {
+            launcher::log::info (categories::launcher{}, "user accepted steam path");
+            co_return p;
+          }
+          else
+          {
+            launcher::log::info (categories::launcher{}, "user declined steam path, falling back to CWD");
+            co_return fs::current_path ();
+          }
+        }
+        // User previously said no, so use the current directory.
+        //
+        launcher::log::info (categories::launcher{}, "user previously declined steam path, using CWD");
+        co_return fs::current_path ();
+      }
+      else
+      {
+        launcher::log::trace_l2 (categories::launcher{}, "steam path detection returned nullopt or path doesn't exist");
       }
     }
     catch (const exception& e)
     {
-      launcher::log::warning (categories::launcher{}, "exception during steam root resolution: {}", e.what ());
       // If something blows up, just fall through to the default.
       //
+      launcher::log::warning (categories::launcher{}, "exception during steam root resolution: {}", e.what ());
     }
 
     // No Steam installation found; use the current directory.
     //
     fs::path cur (fs::current_path ());
-    launcher::log::info (categories::launcher{}, "steam root not found, falling back to current directory: {}", cur.string ());
+    launcher::log::info (categories::launcher{}, "steam root not found or declined, falling back to current directory: {}", cur.string ());
     co_return cur;
   }
 
@@ -1268,6 +1409,21 @@ main (int argc, char* argv[])
     {
       ctx.install_location = fs::path (opt.path ());
       launcher::log::info (categories::launcher{}, "using CLI-specified install location: {}", ctx.install_location.string ());
+
+      // Cache the user-specified path in the database for future runs
+      // without --path.
+      //
+      launcher::log::trace_l2 (categories::launcher{}, "caching user-specified path for future runs");
+      fs::path r (resolve_cache_root ());
+
+      launcher::log::trace_l3 (categories::launcher{}, "opening global cache database at {}", r.string ());
+      cache_database db (r);
+
+      string s (path_digest (fs::current_path ()));
+      launcher::log::debug (categories::launcher{}, "saving path override to database under scope digest: {}", s);
+
+      db.setting (setting_keys::inst_path (s),
+                  ctx.install_location.string ());
     }
 
     // Map the command line options to our context.

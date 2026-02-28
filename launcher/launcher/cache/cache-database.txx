@@ -19,7 +19,6 @@ namespace launcher
   basic_cache_database<T>::
   ~basic_cache_database ()
   {
-    launcher::log::trace_l2 (categories::cache{}, "destroying basic_cache_database");
   }
 
   template <typename T>
@@ -442,6 +441,70 @@ namespace launcher
     t.commit ();
     launcher::log::trace_l3 (categories::cache{}, "query returned {} component versions", r.size ());
     return r;
+  }
+
+  template <typename T>
+  std::optional<user_setting> basic_cache_database<T>::
+  setting (const string_type& k) const
+  {
+    launcher::log::trace_l3 (categories::cache{}, "querying user setting: {}", k);
+    odb::transaction t (db_->begin ());
+    std::shared_ptr<user_setting> s (
+      db_->template find<user_setting> (k));
+    t.commit ();
+
+    if (s)
+      launcher::log::trace_l3 (categories::cache{}, "user setting found: {} = {}", k, s->val ());
+    else
+      launcher::log::trace_l3 (categories::cache{}, "user setting not found: {}", k);
+
+    return s ? std::optional<user_setting> (*s) : std::nullopt;
+  }
+
+  template <typename T>
+  typename basic_cache_database<T>::string_type
+  basic_cache_database<T>::
+  setting_value (const string_type& k) const
+  {
+    launcher::log::trace_l3 (categories::cache{}, "querying user setting value directly: {}", k);
+    auto s (setting (k));
+    return s ? s->val () : string_type {};
+  }
+
+  template <typename T>
+  void basic_cache_database<T>::
+  setting (const string_type& k, const string_type& v)
+  {
+    launcher::log::info (categories::cache{}, "writing user setting: {} = {}", k, v);
+    odb::transaction t (db_->begin ());
+
+    std::shared_ptr<user_setting> e (
+      db_->template find<user_setting> (k));
+
+    if (e)
+    {
+      launcher::log::trace_l3 (categories::cache{}, "updating existing user setting: {}", k);
+      e->val (v);
+      db_->update (*e);
+    }
+    else
+    {
+      launcher::log::trace_l3 (categories::cache{}, "persisting new user setting: {}", k);
+      user_setting s (k, v);
+      db_->persist (s);
+    }
+
+    t.commit ();
+  }
+
+  template <typename T>
+  void basic_cache_database<T>::
+  erase_setting (const string_type& k)
+  {
+    launcher::log::info (categories::cache{}, "erasing user setting: {}", k);
+    odb::transaction t (db_->begin ());
+    db_->template erase<user_setting> (k);
+    t.commit ();
   }
 
   template <typename T>
