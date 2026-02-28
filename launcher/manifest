@@ -1,6 +1,6 @@
 : 1
 name: launcher
-version: 1.1.8-b.9
+version: 1.1.8-b.9.z
 language: c++
 summary: launcher C++ executable
 license: GPL-3.0-or-later ; GNU General Public License v3.0 or later.
