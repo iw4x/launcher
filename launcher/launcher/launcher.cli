@@ -71,5 +71,11 @@ namespace launcher
       "Only check for and apply launcher updates, then exit. Does not update
        game files."
     };
+
+    bool --skip-launch
+    {
+      "Skip launching the game after updating/installing. The launcher will
+       perform all update operations but exit without starting the game."
+    };
   };
 }

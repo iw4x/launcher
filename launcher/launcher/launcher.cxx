@@ -211,6 +211,7 @@ namespace launcher
     size_t         concurrency_limit;
     fs::path       proton_binary;
     vector<string> proton_arguments;
+    bool           skip_launch;
   };
 
   // Aggregates remote state required for synchronization.
@@ -861,6 +862,12 @@ namespace launcher
     asio::awaitable<int>
     execute_payload ()
     {
+      if (ctx_.skip_launch)
+      {
+        launcher::log::info (categories::launcher{}, "updates completed, skipping game launch as requested and exiting");
+        co_return 0;
+      }
+
       launcher::log::info (categories::launcher{}, "preparing to execute game payload");
 #ifdef __linux__
       co_return co_await execute_proton ();
@@ -1439,6 +1446,7 @@ main (int argc, char* argv[])
     // Execution settings.
     //
     ctx.proton_binary = opt.game_exe ();
+    ctx.skip_launch = opt.skip_launch ();
 
     if (opt.game_args_specified ())
       ctx.proton_arguments = opt.game_args ();
