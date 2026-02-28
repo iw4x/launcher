@@ -1294,7 +1294,7 @@ main (int argc, char* argv[])
       // If we applied an update that requires a restart (e.g. replaced the
       // executable) or if the user only asked to update, we are done.
       //
-      if (r || opt.self_update_only ())
+      if (r || opt.self_update_only () || opt.no_self_update())
         return 0;
     }
 
