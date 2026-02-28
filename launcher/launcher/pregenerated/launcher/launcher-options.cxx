@@ -763,7 +763,6 @@ namespace launcher
   options ()
   : help_ (),
     version_ (),
-    wipe_settings_ (),
     build2_metadata_ (),
     path_ (),
     path_specified_ (false),
@@ -787,7 +786,6 @@ namespace launcher
            ::launcher::cli::unknown_mode arg)
   : help_ (),
     version_ (),
-    wipe_settings_ (),
     build2_metadata_ (),
     path_ (),
     path_specified_ (false),
@@ -814,7 +812,6 @@ namespace launcher
            ::launcher::cli::unknown_mode arg)
   : help_ (),
     version_ (),
-    wipe_settings_ (),
     build2_metadata_ (),
     path_ (),
     path_specified_ (false),
@@ -841,7 +838,6 @@ namespace launcher
            ::launcher::cli::unknown_mode arg)
   : help_ (),
     version_ (),
-    wipe_settings_ (),
     build2_metadata_ (),
     path_ (),
     path_specified_ (false),
@@ -870,7 +866,6 @@ namespace launcher
            ::launcher::cli::unknown_mode arg)
   : help_ (),
     version_ (),
-    wipe_settings_ (),
     build2_metadata_ (),
     path_ (),
     path_specified_ (false),
@@ -895,7 +890,6 @@ namespace launcher
            ::launcher::cli::unknown_mode arg)
   : help_ (),
     version_ (),
-    wipe_settings_ (),
     build2_metadata_ (),
     path_ (),
     path_specified_ (false),
@@ -923,8 +917,6 @@ namespace launcher
     os << "--help             Show this help message and exit." << ::std::endl;
 
     os << "--version          Show version information and exit." << ::std::endl;
-
-    os << "--wipe-settings    Clear the global settings cache." << ::std::endl;
 
     os << "--build2-metadata  Print the build2 metadata and exit." << ::std::endl;
 
@@ -961,8 +953,6 @@ namespace launcher
       &::launcher::cli::thunk< options, &options::help_ >;
       _cli_options_map_["--version"] =
       &::launcher::cli::thunk< options, &options::version_ >;
-      _cli_options_map_["--wipe-settings"] =
-      &::launcher::cli::thunk< options, &options::wipe_settings_ >;
       _cli_options_map_["--build2-metadata"] =
       &::launcher::cli::thunk< options, &options::build2_metadata_ >;
       _cli_options_map_["--path"] =

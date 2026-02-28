@@ -51,51 +51,6 @@ using namespace boost::asio::experimental::awaitable_operators;
 
 namespace launcher
 {
-  // Prompt the user for a Yes/No answer.
-  //
-  // We strictly require a 'y' or 'n' (case-insensitive) to proceed. While
-  // defaulting on EOF might seem convenient, it's safer to bail out if the
-  // input stream is broken or closed unexpectedly.
-  //
-  static bool
-  confirm_action (const string& prompt, char def = '\0')
-  {
-    string a;
-    do
-    {
-      cout << prompt << ' ';
-
-      // Note: getline() sets the failbit if it fails to extract anything, and
-      // the eofbit if it hits EOF before the delimiter.
-      //
-      getline (cin, a);
-
-      bool f (cin.fail ());
-      bool e (cin.eof ());
-
-      // If we hit EOF or fail without a newline, force one out so the next
-      // output doesn't get messed up.
-      //
-      if (f || e)
-        cout << endl;
-
-      if (f)
-        throw ios_base::failure ("unable to read y/n answer from stdin");
-
-      if (a.empty () && def != '\0')
-      {
-        // We don't want to treat EOF as the default answer; we want to see an
-        // actual newline from the user to confirm they are present and paying
-        // attention.
-        //
-        if (!e)
-          a = def;
-      }
-    } while (a != "y" && a != "Y" && a != "n" && a != "N");
-
-    return a == "y" || a == "Y";
-  }
-
   // Generate a collision-resistant identifier for filesystem paths.
   //
   // We need to associate metadata (like the "accepted" state) with specific
@@ -905,67 +860,12 @@ namespace launcher
   asio::awaitable<optional<fs::path>>
   resolve_root (asio::io_context& ctx)
   {
-    // First check if we have a path saved from a previous --path override.
-    // If it's still there on disk, we are done.
-    //
-    fs::path cr (resolve_cache_root ());
-
-    cache_database db (cr);
-
-    string s (path_digest (fs::current_path ()));
-    string c (db.setting_value (setting_keys::inst_path (s)));
-
-    if (!c.empty ())
-    {
-      fs::path p (c);
-      if (fs::exists (p))
-        co_return p;
-    }
-
-    // No override, so try to sniff out the Steam install.
-    //
     try
     {
       auto p (co_await get_mw2_default_path (ctx));
 
       if (p && fs::exists (*p))
-      {
-        // We found a Steam path, but we don't want to nag the user every
-        // single time if they've already said no.
-        //
-        string d (path_digest (*p));
-        string k (setting_keys::steam_prompt (s, d));
-        string a (db.setting_value (k));
-
-        if (!a.empty ())
-        {
-          if (a == "yes")
-            co_return p;
-        }
-        else
-        {
-          // New path detected. Drop a note to the user and see if they
-          // actually want to use it or stick to the current directory.
-          //
-          cout << "Found Steam installation\n"
-              << "  " << p->string () << "\n\n";
-
-          bool ok (confirm_action (
-            "Install IW4x to this directory? [Y/n] (n = use current directory)",
-            'y'
-          ));
-
-          db.setting (k, ok ? "yes" : "no");
-
-          if (ok)
-            co_return p;
-          else
-            co_return fs::current_path ();
-        }
-        // User previously said no, so use the current directory.
-        //
-        co_return fs::current_path ();
-      }
+        co_return p;
     }
     catch (const exception&)
     {
@@ -1175,28 +1075,6 @@ main (int argc, char* argv[])
       return 0;
     }
 
-    // Handle --wipe-settings.
-    //
-    // We only wipe the global settings cache. The game file cache (.iw4x in
-    // the install directory) must be deleted manually by the user if needed.
-    //
-    if (opt.wipe_settings ())
-    {
-      fs::path r (resolve_cache_root ());
-
-      if (fs::exists (r))
-      {
-        error_code ec;
-        fs::remove_all (r, ec);
-
-        if (ec)
-        {
-          cerr << "error: unable to wipe settings: " << ec.message () << endl;
-          return 1;
-        }
-      }
-    }
-
     asio::io_context ioc;
     runtime_context ctx;
 
@@ -1232,20 +1110,7 @@ main (int argc, char* argv[])
       ctx.install_location = *heuristic;
     }
     else
-    {
       ctx.install_location = fs::path (opt.path ());
-
-      // Cache the user-specified path in the database for future runs
-      // without --path.
-      //
-      fs::path r (resolve_cache_root ());
-
-      cache_database db (r);
-
-      string s (path_digest (fs::current_path ()));
-      db.setting (setting_keys::inst_path (s),
-                  ctx.install_location.string ());
-    }
 
     // Map the command line options to our context.
     //

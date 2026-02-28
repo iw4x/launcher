@@ -481,9 +481,6 @@ namespace launcher
     version () const;
 
     const bool&
-    wipe_settings () const;
-
-    const bool&
     build2_metadata () const;
 
     const std::string&
@@ -540,7 +537,6 @@ namespace launcher
     public:
     bool help_;
     bool version_;
-    bool wipe_settings_;
     bool build2_metadata_;
     std::string path_;
     bool path_specified_;

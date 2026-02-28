@@ -159,21 +159,6 @@ namespace launcher
     std::vector<component_version>
     versions () const;
 
-    // User settings.
-    //
-
-    std::optional<user_setting>
-    setting (const string_type& key) const;
-
-    string_type
-    setting_value (const string_type& key) const;
-
-    void
-    setting (const string_type& key, const string_type& value);
-
-    void
-    erase_setting (const string_type& key);
-
     // Transaction wrappers.
     //
 
