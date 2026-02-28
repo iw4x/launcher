@@ -9,6 +9,8 @@
 #include <algorithm>
 #include <regex>
 
+#include <launcher/launcher-log.hxx>
+
 using namespace std;
 using namespace std::chrono_literals;
 
@@ -48,30 +50,48 @@ namespace launcher
   bool
   is_steam_deck ()
   {
+    launcher::log::trace_l3 (categories::steam{}, "checking if system is steam deck via /etc/os-release");
     ifstream f ("/etc/os-release");
 
     if (!f.is_open ())
+    {
+      launcher::log::trace_l3 (categories::steam{}, "failed to open /etc/os-release, assuming standard desktop");
       return false;
+    }
 
     for (string l; getline (f, l); )
     {
       // Look for OS ID. SteamOS identifies itself clearly here.
       //
       if (l.find ("ID=") == 0)
-        return (l.find ("steamos") != string::npos);
+      {
+        bool is_deck (l.find ("steamos") != string::npos);
+        if (is_deck)
+          launcher::log::info (categories::steam{}, "steam deck environment (steamos) detected");
+        else
+          launcher::log::trace_l3 (categories::steam{}, "os id is '{}', not steamos", l);
+
+        return is_deck;
+      }
     }
 
+    launcher::log::trace_l3 (categories::steam{}, "no matching OS ID found in /etc/os-release");
     return false;
   }
 
   static bool
   _pgrep_is_steam_running ()
   {
+    launcher::log::trace_l3 (categories::steam{}, "checking if steam is running via pgrep");
+
     bp::ipstream is;
     bp::child c ("pgrep -x steam", bp::std_out > is);
 
     c.wait ();
-    return c.exit_code () == 0;
+    bool running (c.exit_code () == 0);
+
+    launcher::log::trace_l3 (categories::steam{}, "pgrep check finished, steam running: {}", running);
+    return running;
   }
 
   // proton_environment
@@ -80,6 +100,7 @@ namespace launcher
   map<string, string> proton_environment::
   build_env_map () const
   {
+    launcher::log::trace_l2 (categories::steam{}, "building proton environment map");
     map<string, string> env;
 
     // Tell generated logs to use a predictable filename (steam-10190.log).
@@ -93,14 +114,21 @@ namespace launcher
     env["STEAM_COMPAT_DATA_PATH"] = compatdata_path.string ();
     env["STEAM_COMPAT_CLIENT_INSTALL_PATH"] = client_install_path.string ();
 
+    launcher::log::trace_l3 (categories::steam{}, "STEAM_COMPAT_DATA_PATH = {}", env["STEAM_COMPAT_DATA_PATH"]);
+    launcher::log::trace_l3 (categories::steam{}, "STEAM_COMPAT_CLIENT_INSTALL_PATH = {}", env["STEAM_COMPAT_CLIENT_INSTALL_PATH"]);
+
     // If we are on Deck, we need LAA or the 32-bit address space may gets
     // exhausted.
     //
     if (is_steam_deck ())
+    {
+      launcher::log::trace_l3 (categories::steam{}, "applying PROTON_FORCE_LARGE_ADDRESS_AWARE=1 for steam deck");
       env["PROTON_FORCE_LARGE_ADDRESS_AWARE"] = "1";
+    }
 
     if (enable_logging)
     {
+      launcher::log::trace_l3 (categories::steam{}, "enabling proton logging to {}", log_dir.string ());
       env["PROTON_LOG"] = "1";
       env["PROTON_LOG_DIR"] = log_dir.string ();
     }
@@ -115,11 +143,14 @@ namespace launcher
   proton_manager (asio::io_context& ioc)
     : ioc_ (ioc)
   {
+    launcher::log::trace_l2 (categories::steam{}, "initialized proton_manager");
   }
 
   optional<string> proton_manager::
   parse_version (const string& name)
   {
+    launcher::log::trace_l3 (categories::steam{}, "parsing proton version from name: {}", name);
+
     // Valve isn't exactly consistent with naming. We see things like:
     // - "Proton 9.0"
     // - "Proton 8.0-5"
@@ -131,14 +162,22 @@ namespace launcher
     smatch m;
 
     if (regex_search (name, m, re) && m.size () > 1)
-      return m[1].str ();
+    {
+      string v (m[1].str ());
+      launcher::log::trace_l3 (categories::steam{}, "extracted numeric proton version: {}", v);
+      return v;
+    }
 
     // Special case for Experimental, which usually doesn't have a number
     // but is generally "newer" than stable.
     //
     if (name.find ("Experimental") != string::npos)
+    {
+      launcher::log::trace_l3 (categories::steam{}, "detected experimental proton version");
       return string ("experimental");
+    }
 
+    launcher::log::trace_l3 (categories::steam{}, "could not parse version from name: {}", name);
     return nullopt;
   }
 
@@ -169,9 +208,13 @@ namespace launcher
     vector<proton_version> r;
 
     fs::path common (steam_path / "steamapps" / "common");
+    launcher::log::trace_l1 (categories::steam{}, "scanning for proton versions in {}", common.string ());
 
     if (!fs::exists (common))
+    {
+      launcher::log::warning (categories::steam{}, "steamapps/common directory does not exist: {}", common.string ());
       co_return r;
+    }
 
     try
     {
@@ -187,11 +230,16 @@ namespace launcher
         if (name.find ("Proton") != 0)
           continue;
 
+        launcher::log::trace_l3 (categories::steam{}, "probing potential proton directory: {}", name);
+
         // Verify it's actually a Proton install by looking for the script.
         //
         fs::path bin (entry.path () / "proton");
         if (!fs::exists (bin))
+        {
+          launcher::log::trace_l3 (categories::steam{}, "skipping {}, no proton script found at {}", name, bin.string ());
           continue;
+        }
 
         proton_version pv;
         pv.path = entry.path ();
@@ -201,6 +249,7 @@ namespace launcher
         auto v (parse_version (name));
         pv.version = v ? *v : name; // Fallback to full name if parsing fails.
 
+        launcher::log::debug (categories::steam{}, "found valid proton installation: {} (version: {})", pv.name, pv.version);
         r.push_back (move (pv));
       }
     }
@@ -209,26 +258,32 @@ namespace launcher
       // If we can't read the directory (permissions?), just warn and return
       // whatever we found so far.
       //
-      cerr << "warning: failed to scan for Proton: " << e.what () << "\n";
+      launcher::log::error (categories::steam{}, "failed to scan for Proton: {}", e.what ());
     }
 
     // Sort newest/best first.
     //
     sort (r.begin (), r.end (), version_compare);
 
+    launcher::log::info (categories::steam{}, "detected {} valid proton versions", r.size ());
     co_return r;
   }
 
   asio::awaitable<optional<proton_version>> proton_manager::
   find_best_proton (const fs::path& steam_path)
   {
+    launcher::log::trace_l2 (categories::steam{}, "finding best proton version from {}", steam_path.string ());
     auto vs (co_await detect_proton_versions (steam_path));
 
     if (vs.empty ())
+    {
+      launcher::log::warning (categories::steam{}, "no proton versions found");
       co_return nullopt;
+    }
 
     // Since we sorted them, the first one is our best bet.
     //
+    launcher::log::info (categories::steam{}, "selected best proton version: {}", vs.front ().name);
     co_return vs.front ();
   }
 
@@ -238,6 +293,7 @@ namespace launcher
                      uint32_t appid,
                      bool enable_logging)
   {
+    launcher::log::trace_l2 (categories::steam{}, "building base proton environment for appid {}", appid);
     proton_environment env;
 
     env.steam_root = steam_path;
@@ -255,6 +311,7 @@ namespace launcher
     if (enable_logging)
       env.log_dir = fs::current_path () / "proton_logs";
 
+    launcher::log::trace_l3 (categories::steam{}, "proton_bin set to: {}", env.proton_bin.string ());
     return env;
   }
 
@@ -267,17 +324,23 @@ namespace launcher
     auto executor (co_await asio::this_coro::executor);
 
     fs::path f (dir / "steam_appid.txt");
+    launcher::log::trace_l2 (categories::steam{}, "creating steam_appid.txt at {}", f.string ());
 
     try
     {
       ofstream os (f);
       if (!os)
+      {
+        launcher::log::error (categories::steam{}, "failed to open steam_appid.txt for writing");
         throw runtime_error ("failed to create steam_appid.txt");
+      }
 
       os << appid;
+      launcher::log::debug (categories::steam{}, "wrote appid {} to steam_appid.txt", appid);
     }
     catch (const exception& e)
     {
+      launcher::log::error (categories::steam{}, "exception while creating steam_appid.txt: {}", e.what ());
       throw runtime_error (string ("failed to create steam_appid.txt: ") +
                            e.what ());
     }
@@ -288,6 +351,8 @@ namespace launcher
   asio::awaitable<ghost_result> proton_manager::
   run_ghost_process (const proton_environment& e, const fs::path& h)
   {
+    launcher::log::trace_l1 (categories::steam{}, "running proton ghost process to probe steam environment");
+
     auto ex (co_await asio::this_coro::executor);
     asio::steady_timer t (ex);
 
@@ -296,14 +361,13 @@ namespace launcher
     //
     if (!fs::exists (e.compatdata_path))
     {
+      launcher::log::trace_l2 (categories::steam{}, "compatdata directory missing, creating: {}", e.compatdata_path.string ());
       error_code ec;
       fs::create_directories (e.compatdata_path, ec);
 
       if (ec)
       {
-        cerr << "error: failed to create compatdata directory "
-            << e.compatdata_path << ": " << ec.message () << endl;
-
+        launcher::log::error (categories::steam{}, "failed to create compatdata directory {}: {}", e.compatdata_path.string (), ec.message ());
         co_return ghost_result::error;
       }
     }
@@ -319,10 +383,17 @@ namespace launcher
     //
     if (is_steam_deck ())
     {
+      launcher::log::trace_l2 (categories::steam{}, "steam deck detected, bypassing standard ghost process with pgrep fallback");
+
       for (int i (0); i < 3; ++i)
       {
         if (_pgrep_is_steam_running ())
+        {
+          launcher::log::debug (categories::steam{}, "pgrep confirmed steam is running");
           co_return ghost_result::steam_running;
+        }
+
+        launcher::log::warning (categories::steam{}, "steam not detected by pgrep, attempting to kickstart it (attempt {}/3)", i + 1);
 
         // Steam isn't running, so try to kick it. There is a theoretical
         // race here if Steam starts externally between our check and the
@@ -334,7 +405,14 @@ namespace launcher
           bp::child s ("steam");
           s.detach ();
         }
-        catch (...) {}
+        catch (const std::exception& e)
+        {
+          launcher::log::warning (categories::steam{}, "failed to spawn steam child process: {}", e.what ());
+        }
+        catch (...)
+        {
+          launcher::log::warning (categories::steam{}, "unknown exception spawning steam");
+        }
 
         // Give it a moment to spin up.
         //
@@ -342,8 +420,8 @@ namespace launcher
         co_await t.async_wait (asio::use_awaitable);
       }
 
-      cerr << "error: failed to start steam within the timeout period" << endl;
-      cerr << "falling back to wine is not supported on steamdeck" << endl;
+      launcher::log::error (categories::steam{}, "failed to start steam within the timeout period");
+      launcher::log::error (categories::steam{}, "falling back to wine is not supported on steamdeck");
 
       // @@ TODO: We should probably propagate this properly instead of
       // just nuking the process.
@@ -355,11 +433,16 @@ namespace launcher
     //
     try
     {
+      launcher::log::trace_l2 (categories::steam{}, "spawning standard ghost process probe");
+
       bp::environment pe (boost::this_process::environment ());
       auto m (e.build_env_map ());
 
       for (const auto& [k, v] : m)
+      {
+        launcher::log::trace_l3 (categories::steam{}, "ghost env: {}={}", k, v);
         pe[k] = v;
+      }
 
       bp::ipstream o;
       bp::ipstream er;
@@ -372,25 +455,36 @@ namespace launcher
       );
 
       g.wait ();
+      launcher::log::trace_l2 (categories::steam{}, "ghost process exited with code {}", g.exit_code ());
 
       string r;
       getline (o, r);
+
+      launcher::log::trace_l3 (categories::steam{}, "ghost process stdout: {}", r);
 
       // Keep the error output around in the logs so we can actually
       // debug it when the probe fails.
       //
       string l;
       while (getline (er, l))
-        cerr << "ghost process: " << l << "\n";
+      {
+        launcher::log::trace_l3 (categories::steam{}, "ghost process stderr: {}", l);
+      }
 
       if (g.exit_code () == 0 && r == "running")
+      {
+        launcher::log::debug (categories::steam{}, "ghost process confirmed steam is running");
         co_return ghost_result::steam_running;
+      }
       else
+      {
+        launcher::log::warning (categories::steam{}, "ghost process implies steam is not running or failed probe");
         co_return ghost_result::steam_not_running;
+      }
     }
     catch (const exception& ex)
     {
-      cerr << "error: failed to run ghost process: " << ex.what () << "\n";
+      launcher::log::error (categories::steam{}, "failed to run ghost process: {}", ex.what ());
       co_return ghost_result::error;
     }
   }
@@ -400,9 +494,11 @@ namespace launcher
                          const fs::path& x,
                          const vector<string>& as)
   {
+    launcher::log::info (categories::steam{}, "launching game through proton: {}", x.string ());
+
     if (!fs::exists (e.proton_bin))
     {
-      cerr << "error: proton binary not found: " << e.proton_bin << "\n";
+      launcher::log::error (categories::steam{}, "proton binary not found: {}", e.proton_bin.string ());
       co_return false;
     }
 
@@ -410,6 +506,7 @@ namespace launcher
     {
       // Prepare the environment variables.
       //
+      launcher::log::trace_l2 (categories::steam{}, "preparing launch environment");
       bp::environment pe (boost::this_process::environment ());
       auto m (e.build_env_map ());
 
@@ -421,6 +518,8 @@ namespace launcher
 
       if (is_steam_deck ())
       {
+        launcher::log::info (categories::steam{}, "setting up sniper runtime container for steam deck launch");
+
         // On Deck we have to wrap everything in the sniper runtime container.
         // It's a nesting doll situation:
         //
@@ -452,6 +551,7 @@ namespace launcher
       {
         // Standard Proton run.
         //
+        launcher::log::trace_l2 (categories::steam{}, "setting up standard proton launch");
         b = e.proton_bin.string ();
         cs.push_back ("run");
         cs.push_back (x.string ());
@@ -459,8 +559,14 @@ namespace launcher
 
       // Append user arguments.
       //
+      launcher::log::trace_l2 (categories::steam{}, "appending {} user arguments", as.size ());
       for (const auto& a : as)
+      {
+        launcher::log::trace_l3 (categories::steam{}, "arg: {}", a);
         cs.push_back (a);
+      }
+
+      launcher::log::debug (categories::steam{}, "spawning process: {} in working directory: {}", b, x.parent_path ().string ());
 
       // Launch and detach. We don't want the launcher to hang around blocking
       // the terminal while the game is running, nor do we want the game to
@@ -476,11 +582,12 @@ namespace launcher
 
       c.detach ();
 
+      launcher::log::info (categories::steam{}, "launched and detached proton process");
       co_return true;
     }
     catch (const exception& e)
     {
-      cerr << "error: failed to launch through Proton: " << e.what () << "\n";
+      launcher::log::error (categories::steam{}, "failed to launch through Proton: {}", e.what ());
       co_return false;
     }
   }
