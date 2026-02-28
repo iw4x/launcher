@@ -25,6 +25,9 @@
 #include <launcher/launcher-progress.hxx>
 #include <launcher/launcher-steam.hxx>
 #include <launcher/launcher-update.hxx>
+#include <launcher/launcher-log.hxx>
+
+#include <launcher/launcher-log.hxx>
 
 #ifdef __linux__
 #  include <launcher/launcher-steam-proton.hxx>
@@ -60,6 +63,8 @@ namespace launcher
   static bool
   confirm_action (const string& prompt, char def = '\0')
   {
+    launcher::log::trace_l2 (categories::launcher{}, "prompting user for confirmation: {}", prompt);
+
     string a;
     do
     {
@@ -73,6 +78,8 @@ namespace launcher
       bool f (cin.fail ());
       bool e (cin.eof ());
 
+      launcher::log::trace_l3 (categories::launcher{}, "user input received: '{}' (fail: {}, eof: {})", a, f, e);
+
       // If we hit EOF or fail without a newline, force one out so the next
       // output doesn't get messed up.
       //
@@ -80,7 +87,10 @@ namespace launcher
         cout << endl;
 
       if (f)
+      {
+        launcher::log::error (categories::launcher{}, "failed to read confirmation from stdin");
         throw ios_base::failure ("unable to read y/n answer from stdin");
+      }
 
       if (a.empty () && def != '\0')
       {
@@ -89,11 +99,17 @@ namespace launcher
         // attention.
         //
         if (!e)
+        {
           a = def;
+          launcher::log::trace_l3 (categories::launcher{}, "empty input, applying default '{}'", def);
+        }
       }
     } while (a != "y" && a != "Y" && a != "n" && a != "N");
 
-    return a == "y" || a == "Y";
+    bool r (a == "y" || a == "Y");
+    launcher::log::info (categories::launcher{}, "user answered prompt with: {}", r ? "yes" : "no");
+
+    return r;
   }
 
   // Generate a collision-resistant identifier for filesystem paths.
@@ -107,7 +123,9 @@ namespace launcher
   path_digest (const fs::path& p)
   {
     std::hash<string> h;
-    return std::to_string (h (p.string ()));
+    string res (std::to_string (h (p.string ())));
+    launcher::log::trace_l3 (categories::launcher{}, "computed path digest for {}: {}", p.string (), res);
+    return res;
   }
 
   // Determine the directory for user preference and state caching.
@@ -120,6 +138,7 @@ namespace launcher
   static fs::path
   resolve_cache_root (const fs::path& scope = {})
   {
+    launcher::log::trace_l2 (categories::launcher{}, "resolving cache root (scope: {})", scope.string ());
     fs::path d;
 
 #ifdef _WIN32
@@ -151,13 +170,17 @@ namespace launcher
     // conflicts between multiple installs), append its unique key.
     //
     if (!scope.empty ())
+    {
       d /= path_digest (scope);
+      launcher::log::trace_l3 (categories::launcher{}, "appended scope digest to cache root: {}", d.string ());
+    }
 
     error_code ec;
     fs::create_directories (d, ec);
 
     if (ec)
     {
+      launcher::log::warning (categories::launcher{}, "failed to create system cache dir {}: {}, falling back to local directory", d.string (), ec.message ());
       // Fallback: If we can't write to the system location, try a local
       // directory.
       //
@@ -167,8 +190,11 @@ namespace launcher
         d /= path_digest (scope);
 
       fs::create_directories (d, ec);
+      if (ec)
+        launcher::log::error (categories::launcher{}, "failed to create fallback cache dir {}: {}", d.string (), ec.message ());
     }
 
+    launcher::log::debug (categories::launcher{}, "resolved cache root to: {}", d.string ());
     return d;
   }
 
@@ -211,6 +237,8 @@ namespace launcher
         progress_ (ioc_),
         cache_ (ioc_, ctx_.install_location)
     {
+      launcher::log::trace_l2 (categories::launcher{}, "initializing launcher_controller");
+
       github_.set_progress_callback (
         [this] (const string& message, uint64_t seconds_remaining)
       {
@@ -227,9 +255,15 @@ namespace launcher
     asio::awaitable<int>
     run ()
     {
+      launcher::log::info (categories::launcher{}, "starting launcher controller run sequence");
+
+      launcher::log::trace_l1 (categories::launcher{}, "resolving remote state...");
       remote_state remote (co_await resolve_remote_state ());
 
+      launcher::log::trace_l1 (categories::launcher{}, "reconciling artifacts against remote state...");
       co_await reconcile_artifacts (remote);
+
+      launcher::log::trace_l1 (categories::launcher{}, "executing payload...");
       co_return co_await execute_payload ();
     }
 
@@ -246,6 +280,9 @@ namespace launcher
     asio::awaitable<remote_state>
     resolve_remote_state ()
     {
+      launcher::log::trace_l2 (categories::launcher{}, "launching parallel requests for remote state (owner: {}, repo: {}, pre: {})",
+                               ctx_.upstream_owner, ctx_.upstream_repo, ctx_.prerelease);
+
       using namespace asio::experimental;
 
       // Note: The destructuring assignment below is intentionally verbose and
@@ -295,12 +332,33 @@ namespace launcher
             asio::deferred)
         ).async_wait (wait_for_all (), asio::use_awaitable);
 
-      if (ex_c) rethrow_exception (ex_c);
-      if (ex_r) rethrow_exception (ex_r);
+      if (ex_c)
+      {
+        launcher::log::error (categories::launcher{}, "failed to resolve client release state");
+        rethrow_exception (ex_c);
+      }
+
+      if (ex_r)
+      {
+        launcher::log::error (categories::launcher{}, "failed to resolve rawfiles release state");
+        rethrow_exception (ex_r);
+      }
+
 #ifdef __linux__
-      if (ex_h) rethrow_exception (ex_h);
+      if (ex_h)
+      {
+        launcher::log::error (categories::launcher{}, "failed to resolve launcher-steam release state");
+        rethrow_exception (ex_h);
+      }
 #endif
-      if (ex_d) rethrow_exception (ex_d);
+
+      if (ex_d)
+      {
+        launcher::log::error (categories::launcher{}, "failed to resolve dlc manifest");
+        rethrow_exception (ex_d);
+      }
+
+      launcher::log::info (categories::launcher{}, "resolved all remote states");
 
 #ifdef __linux__
       co_return remote_state {move (c), move (r), move (h), move (d)};
@@ -318,6 +376,8 @@ namespace launcher
       using ma = manifest_archive;
       using sv = string_view;
 
+      launcher::log::trace_l2 (categories::launcher{}, "checking top-level cache tags vs remote tags");
+
       // First, check the high-level state. If our tags match the remote tags,
       // we are theoretically up to date, but we must also audit the files on
       // disk in case the user hasn't manually deleted or corrupted something.
@@ -331,8 +391,11 @@ namespace launcher
       bool h_out (false);
     #endif
 
+      launcher::log::debug (categories::launcher{}, "outdated checks - client: {}, rawfiles: {}, helper: {}", c_out, r_out, h_out);
+
       if (!c_out && !r_out && !h_out)
       {
+        launcher::log::trace_l2 (categories::launcher{}, "tags match remote, performing deep audit of local files");
         auto valid ([this] (ct t)
         {
           auto s (cache_.audit (t));
@@ -349,8 +412,18 @@ namespace launcher
     #ifdef __linux__
             && valid (ct::helper)
     #endif
-        ) co_return;
+        )
+        {
+          launcher::log::info (categories::launcher{}, "all components physically valid and up-to-date. skipping reconcile.");
+          co_return;
+        }
+        else
+        {
+          launcher::log::warning (categories::launcher{}, "tags matched but physical audit failed (files missing/modified). forcing reconcile.");
+        }
       }
+
+      launcher::log::trace_l1 (categories::launcher{}, "fetching manifests for client and rawfiles");
 
       // We need to merge the 'raw' assets and 'client' assets into a single
       // operational manifest. To do this, we fetch both simultaneously.
@@ -363,6 +436,8 @@ namespace launcher
 
       manifest m (std::move (d_m));
       manifest raw (std::move (d_r));
+
+      launcher::log::trace_l2 (categories::launcher{}, "manifests fetched. client files: {}, raw files: {}", m.files.size (), raw.files.size ());
 
       // The raw manifest doesn't map 1:1 to the download structure. We index
       // all known hashes from both sources so we can attach integrity data to
@@ -389,6 +464,7 @@ namespace launcher
 
       idx (m);
       idx (raw);
+      launcher::log::trace_l3 (categories::launcher{}, "indexed {} hashes from manifests", hashes.size ());
 
       // We need quick lookups for raw structure to map assets to their
       // internal metadata.
@@ -448,12 +524,14 @@ namespace launcher
       // On Linux, we need the steam helper binaries which live in a
       // separate repo.
       //
+      launcher::log::trace_l3 (categories::launcher{}, "injecting linux steam helper assets");
       inject (r.helper.assets, "steam.exe");
       inject (r.helper.assets, "steam_api64.dll");
     #endif
 
       if (!r.dlc_manifest_json.empty ())
       {
+        launcher::log::trace_l3 (categories::launcher{}, "parsing and injecting dlc manifest assets");
         manifest dlc (r.dlc_manifest_json, manifest_format::dlc);
         m.archives.reserve (m.archives.size () + dlc.files.size ());
 
@@ -476,7 +554,9 @@ namespace launcher
       // Ask the reconciler what actually needs to be done based on the
       // assembled manifest.
       //
+      launcher::log::trace_l2 (categories::launcher{}, "planning reconciliation against local cache...");
       auto plan (cache_.get_reconciler ().plan (m, ct::client, r.client.tag_name));
+      launcher::log::debug (categories::launcher{}, "reconciler produced a plan with {} items", plan.size ());
 
       unordered_map<sv, const manifest_file*> m_files;
       for (const auto& f : m.files)
@@ -496,14 +576,20 @@ namespace launcher
         if (m_files.count (fn))
         {
           if (auto it (c_assets.find (fn)); it != c_assets.end ())
+          {
             item.url = it->second->browser_download_url;
+            launcher::log::trace_l3 (categories::launcher{}, "patched URL for {}: {}", fn, item.url);
+          }
         }
       }
 
       auto sum (cache_.get_reconciler ().summarize (plan));
+      launcher::log::info (categories::launcher{}, "reconcile summary: {} missing, {} stale, {} to download ({} bytes)",
+                           sum.files_missing, sum.files_stale, sum.downloads_required, sum.bytes_to_download);
 
       auto stamp ([this, &r] ()
       {
+        launcher::log::trace_l2 (categories::launcher{}, "stamping cache with updated tags");
         cache_.stamp (ct::client, r.client.tag_name);
         cache_.stamp (ct::rawfiles, r.raw.tag_name);
     #ifdef __linux__
@@ -513,6 +599,7 @@ namespace launcher
 
       if (sum.up_to_date ())
       {
+        launcher::log::info (categories::launcher{}, "plan summary indicates up-to-date. stamping tags and finishing reconcile.");
         stamp ();
         co_return;
       }
@@ -548,6 +635,8 @@ namespace launcher
         req.name = dst.filename ().string ();
         req.expected_size = item.expected_size;
 
+        launcher::log::trace_l3 (categories::launcher{}, "queuing download: {} -> {}", req.urls.front (), dst.string ());
+
         string n (req.name);
         auto t (downloads_.queue_download (std::move (req)));
         auto e (progress_.add_entry (n));
@@ -566,6 +655,7 @@ namespace launcher
       //
       if (download_count > 0)
       {
+        launcher::log::info (categories::launcher{}, "starting {} downloads", download_count);
         progress_.start ();
 
         asio::co_spawn (ioc_, downloads_.execute_all (), asio::detached);
@@ -590,6 +680,9 @@ namespace launcher
           co_await timer.async_wait (asio::use_awaitable);
         }
 
+        launcher::log::debug (categories::launcher{}, "primary download pass finished ({} completed, {} failed)",
+                              downloads_.completed_count (), downloads_.failed_count ());
+
         // Second pass: unconditionally re-check the filesystem.
         //
         // In practice this almost never finds anything, the first pass is
@@ -600,6 +693,7 @@ namespace launcher
         //
         // That is, the real source of truth is the filesystem.
         //
+        launcher::log::trace_l2 (categories::launcher{}, "starting secondary verification pass");
         downloads_.clear ();
         tasks.clear ();
 
@@ -643,6 +737,8 @@ namespace launcher
           rq.name = d.filename ().string ();
           rq.expected_size = p.expected_size;
 
+          launcher::log::warning (categories::launcher{}, "file {} failed verification, requeuing download", rq.name);
+
           string nm (rq.name);
           auto t (downloads_.queue_download (move (rq)));
           auto e (progress_.add_entry (nm + " (verify)"));
@@ -658,6 +754,7 @@ namespace launcher
 
         if (n > 0)
         {
+          launcher::log::info (categories::launcher{}, "re-downloading {} stragglers after verification", n);
           asio::co_spawn (ioc_, downloads_.execute_all (), asio::detached);
 
           while (downloads_.completed_count () + downloads_.failed_count () <
@@ -681,9 +778,14 @@ namespace launcher
 
           if (downloads_.failed_count () > 0)
           {
+            launcher::log::error (categories::launcher{}, "download failed after verification pass. aborting.");
             co_await progress_.stop ();
             throw runtime_error ("download failed after verification pass");
           }
+        }
+        else
+        {
+          launcher::log::debug (categories::launcher{}, "verification pass clean, no stragglers found");
         }
 
         co_await progress_.stop ();
@@ -692,13 +794,17 @@ namespace launcher
       // Post-process downloads (extraction).
       //
       const auto& root (ctx_.install_location);
+      launcher::log::trace_l2 (categories::launcher{}, "post-processing downloaded files (tracking and extracting)");
 
       // Track direct downloads first.
       //
       for (const auto& item : plan)
       {
         if (item.action == reconcile_action::download && fs::exists (item.path))
+        {
+          launcher::log::trace_l3 (categories::launcher{}, "tracking raw download: {}", item.path);
           cache_.track (item.path, item.component, item.version, item.expected_hash);
+        }
       }
 
       unordered_map<string, const ma*> amap;
@@ -722,6 +828,7 @@ namespace launcher
 
         try
         {
+          launcher::log::info (categories::launcher{}, "extracting downloaded archive: {}", p.string ());
           co_await manifest_coordinator::extract_archive (*arch, p, root);
 
           vector<fs::path> extracted;
@@ -733,13 +840,17 @@ namespace launcher
             extracted.push_back (std::move (ep));
           }
 
+          launcher::log::trace_l3 (categories::launcher{}, "tracking {} extracted files from archive", extracted.size ());
           cache_.track (extracted, item.component, item.version);
 
           std::error_code ec;
           fs::remove (p, ec);
+          if (ec)
+            launcher::log::warning (categories::launcher{}, "failed to delete extracted archive {}: {}", p.string (), ec.message ());
         }
         catch (const exception& e)
         {
+          launcher::log::error (categories::launcher{}, "extraction failure for {}: {}", arch->name, e.what ());
           throw runtime_error ("extraction failure: " + arch->name + ": " + e.what ());
         }
       }
@@ -750,6 +861,7 @@ namespace launcher
     asio::awaitable<int>
     execute_payload ()
     {
+      launcher::log::info (categories::launcher{}, "preparing to execute game payload");
 #ifdef __linux__
       co_return co_await execute_proton ();
 #else
@@ -763,6 +875,7 @@ namespace launcher
     {
       if (ctx_.proton_binary.empty ())
       {
+        launcher::log::error (categories::launcher{}, "game binary unspecified");
         cerr << "error: game binary unspecified\n";
         co_return 1;
       }
@@ -770,14 +883,17 @@ namespace launcher
       fs::path binary_path (ctx_.install_location / ctx_.proton_binary);
       if (!fs::exists (binary_path))
       {
+        launcher::log::error (categories::launcher{}, "game binary not found: {}", binary_path.string ());
         cerr << "error: game binary not found: " << binary_path << "\n";
         co_return 1;
       }
 
+      launcher::log::trace_l1 (categories::launcher{}, "initializing proton coordinator for execution");
       proton_coordinator proton (ioc_);
 
       if (!fs::exists (ctx_.install_location / "steam.exe"))
       {
+        launcher::log::error (categories::launcher{}, "runtime dependency missing: steam.exe");
         cerr << "error: runtime dependency missing: steam.exe\n";
         co_return 1;
       }
@@ -786,8 +902,12 @@ namespace launcher
       //
       fs::path steam_root;
       if (const char* home = getenv ("HOME"))
+      {
         steam_root = fs::path (home) / ".steam" / "steam";
+        launcher::log::trace_l3 (categories::launcher{}, "detected steam root via HOME: {}", steam_root.string ());
+      }
 
+      launcher::log::info (categories::launcher{}, "launching {} via proton", binary_path.string ());
       bool success (co_await proton.complete_launch (steam_root,
                                                      binary_path,
                                                      10190,
@@ -795,10 +915,12 @@ namespace launcher
 
       if (!success)
       {
+        launcher::log::error (categories::launcher{}, "proton execution failed");
         cerr << "error: execution failed\n";
         co_return 1;
       }
 
+      launcher::log::info (categories::launcher{}, "proton execution initiated");
       co_return 0;
     }
 #endif
@@ -821,6 +943,7 @@ namespace launcher
     {
       if (ctx_.proton_binary.empty ())
       {
+        launcher::log::error (categories::launcher{}, "game binary unspecified");
         cerr << "error: game binary unspecified\n";
         co_return 1;
       }
@@ -828,12 +951,14 @@ namespace launcher
       fs::path binary_path (ctx_.install_location / ctx_.proton_binary);
       if (!fs::exists (binary_path))
       {
+        launcher::log::error (categories::launcher{}, "game binary not found: {}", binary_path.string ());
         cerr << "error: game binary not found: " << binary_path << "\n";
         co_return 1;
       }
 
       try
       {
+        launcher::log::info (categories::launcher{}, "launching native game process: {}", binary_path.string ());
         namespace bp = boost::process;
         bp::child game (
           binary_path.string (),
@@ -842,9 +967,11 @@ namespace launcher
         );
 
         game.detach ();
+        launcher::log::info (categories::launcher{}, "native game process detached");
       }
       catch (const exception& e)
       {
+        launcher::log::error (categories::launcher{}, "failed to launch game: {}", e.what ());
         cerr << "error: failed to launch game: " << e.what () << "\n";
         co_return 1;
       }
@@ -859,6 +986,8 @@ namespace launcher
     void
     handle_rate_limit_progress (const string& msg, uint64_t rem)
     {
+      launcher::log::trace_l3 (categories::launcher{}, "rate limit progress: {} ({}s remaining)", msg, rem);
+
       // The progress UI might not have been started yet (e.g., rate limit hit
       // during initial metadata fetch, before any downloads). Ensure the
       // render loop is running so the dialog is actually visible.
@@ -880,6 +1009,7 @@ namespace launcher
       //
       if (rem == 0)
       {
+        launcher::log::info (categories::launcher{}, "rate limit cleared, resuming operations");
         progress_.hide_dialog ();
 
         if (rate_limit_started_progress_)
@@ -905,31 +1035,47 @@ namespace launcher
   asio::awaitable<optional<fs::path>>
   resolve_root (asio::io_context& ctx)
   {
+    launcher::log::trace_l1 (categories::launcher{}, "resolving installation root");
+
     // First check if we have a path saved from a previous --path override.
     // If it's still there on disk, we are done.
     //
     fs::path cr (resolve_cache_root ());
+    launcher::log::trace_l3 (categories::launcher{}, "opened global cache database at {}", cr.string ());
 
     cache_database db (cr);
 
     string s (path_digest (fs::current_path ()));
     string c (db.setting_value (setting_keys::inst_path (s)));
 
+    launcher::log::trace_l3 (categories::launcher{}, "checking for previously saved --path override");
+
     if (!c.empty ())
     {
+      launcher::log::trace_l2 (categories::launcher{}, "found saved path override in db: {}", c);
       fs::path p (c);
       if (fs::exists (p))
+      {
+        launcher::log::info (categories::launcher{}, "using previously saved install path override: {}", p.string ());
         co_return p;
+      }
+      else
+      {
+        launcher::log::warning (categories::launcher{}, "saved path override does not exist on disk, falling back to steam detection");
+      }
     }
 
     // No override, so try to sniff out the Steam install.
     //
     try
     {
+      launcher::log::trace_l2 (categories::launcher{}, "attempting steam installation detection");
       auto p (co_await get_mw2_default_path (ctx));
 
       if (p && fs::exists (*p))
       {
+        launcher::log::debug (categories::launcher{}, "steam detection found path: {}", p->string ());
+
         // We found a Steam path, but we don't want to nag the user every
         // single time if they've already said no.
         //
@@ -939,14 +1085,19 @@ namespace launcher
 
         if (!a.empty ())
         {
+          launcher::log::trace_l3 (categories::launcher{}, "user previously answered steam prompt with '{}'", a);
           if (a == "yes")
+          {
+            launcher::log::info (categories::launcher{}, "using steam path based on previous user confirmation");
             co_return p;
+          }
         }
         else
         {
           // New path detected. Drop a note to the user and see if they
           // actually want to use it or stick to the current directory.
           //
+          launcher::log::info (categories::launcher{}, "new steam path detected, prompting user for confirmation");
           cout << "Found Steam installation\n"
               << "  " << p->string () << "\n\n";
 
@@ -958,24 +1109,38 @@ namespace launcher
           db.setting (k, ok ? "yes" : "no");
 
           if (ok)
+          {
+            launcher::log::info (categories::launcher{}, "user accepted steam path");
             co_return p;
+          }
           else
+          {
+            launcher::log::info (categories::launcher{}, "user declined steam path, falling back to CWD");
             co_return fs::current_path ();
+          }
         }
         // User previously said no, so use the current directory.
         //
+        launcher::log::info (categories::launcher{}, "user previously declined steam path, using CWD");
         co_return fs::current_path ();
       }
+      else
+      {
+        launcher::log::trace_l2 (categories::launcher{}, "steam path detection returned nullopt or path doesn't exist");
+      }
     }
-    catch (const exception&)
+    catch (const exception& e)
     {
       // If something blows up, just fall through to the default.
       //
+      launcher::log::warning (categories::launcher{}, "exception during steam root resolution: {}", e.what ());
     }
 
     // No Steam installation found; use the current directory.
     //
-    co_return fs::current_path ();
+    fs::path cur (fs::current_path ());
+    launcher::log::info (categories::launcher{}, "steam root not found or declined, falling back to current directory: {}", cur.string ());
+    co_return cur;
   }
 
   // Check for and optionally install launcher updates.
@@ -994,6 +1159,7 @@ namespace launcher
                      bool only,
                      progress_coordinator* pc = nullptr)
   {
+    launcher::log::info (categories::launcher{}, "checking for launcher updates (prerelease: {}, update_only: {})", pre, only);
     auto uc (make_update_coordinator (io));
     uc->set_include_prerelease (pre);
 
@@ -1048,6 +1214,7 @@ namespace launcher
       //
       if (s == update_status::check_failed && only)
       {
+        launcher::log::error (categories::launcher{}, "strict update requested but check failed");
         cerr << "error: failed to check for launcher updates" << endl;
         co_return false;
       }
@@ -1055,10 +1222,14 @@ namespace launcher
       // No update available, nothing to do.
       //
       if (s == update_status::up_to_date)
+      {
+        launcher::log::info (categories::launcher{}, "launcher is up to date");
         co_return false;
+      }
 
       // An update is available. Now we can start the UI if requested.
       //
+      launcher::log::info (categories::launcher{}, "launcher update available, proceeding with installation");
       if (pc != nullptr)
       {
         uc->set_progress_coordinator (pc);
@@ -1079,6 +1250,7 @@ namespace launcher
 
       if (!r.success)
       {
+        launcher::log::error (categories::launcher{}, "update failed to install: {}", r.error_message);
         cerr << "error: update failed: " << r.error_message << endl;
         co_return false;
       }
@@ -1086,8 +1258,12 @@ namespace launcher
       // Try to restart into the new version.
       //
       if (uc->restart ())
+      {
+        launcher::log::info (categories::launcher{}, "restarting into new launcher version");
         co_return true;
+      }
 
+      launcher::log::warning (categories::launcher{}, "update successful but auto-restart failed");
       cerr << "warning: failed to restart launcher automatically" << endl;
       cout << "please restart the launcher manually." << endl;
 
@@ -1099,9 +1275,15 @@ namespace launcher
       // otherwise just warn and move on.
       //
       if (only)
+      {
+        launcher::log::error (categories::launcher{}, "strict update failed with exception: {}", e.what ());
         cerr << "error: update failed: " << e.what () << endl;
+      }
       else
+      {
+        launcher::log::warning (categories::launcher{}, "update check failed with exception: {}", e.what ());
         cerr << "warning: update check failed: " << e.what () << endl;
+      }
 
       co_return false;
     }
@@ -1113,6 +1295,10 @@ main (int argc, char* argv[])
 {
   using namespace std;
   using namespace launcher;
+
+  active_logger = new logger;
+
+  launcher::log::info (categories::launcher{}, "launcher {} starting up", HELLO_VERSION_ID);
 
   try
   {
@@ -1143,11 +1329,19 @@ main (int argc, char* argv[])
         fs::current_path (dir, ec);
 
         if (ec)
+        {
+          launcher::log::warning (categories::launcher{}, "unable to change working directory: {}", ec.message ());
           cerr << "warning: unable to change to launcher directory: "
                << ec.message () << endl;
+        }
+        else
+        {
+          launcher::log::trace_l2 (categories::launcher{}, "changed working directory to: {}", dir.string ());
+        }
       }
     }
 
+    launcher::log::trace_l3 (categories::launcher{}, "parsing command line options");
     options opt (argc, argv);
 
     // Handle --version.
@@ -1175,28 +1369,6 @@ main (int argc, char* argv[])
       return 0;
     }
 
-    // Handle --wipe-settings.
-    //
-    // We only wipe the global settings cache. The game file cache (.iw4x in
-    // the install directory) must be deleted manually by the user if needed.
-    //
-    if (opt.wipe_settings ())
-    {
-      fs::path r (resolve_cache_root ());
-
-      if (fs::exists (r))
-      {
-        error_code ec;
-        fs::remove_all (r, ec);
-
-        if (ec)
-        {
-          cerr << "error: unable to wipe settings: " << ec.message () << endl;
-          return 1;
-        }
-      }
-    }
-
     asio::io_context ioc;
     runtime_context ctx;
 
@@ -1204,6 +1376,7 @@ main (int argc, char* argv[])
     //
     if (!opt.path_specified ())
     {
+      launcher::log::trace_l2 (categories::launcher{}, "path not specified on CLI, attempting heuristic resolution");
       optional<fs::path> heuristic;
 
       asio::co_spawn (
@@ -1226,6 +1399,7 @@ main (int argc, char* argv[])
       {
         // User cancelled or no Steam installation found.
         //
+        launcher::log::error (categories::launcher{}, "failed to resolve installation path");
         return 1;
       }
 
@@ -1234,15 +1408,20 @@ main (int argc, char* argv[])
     else
     {
       ctx.install_location = fs::path (opt.path ());
+      launcher::log::info (categories::launcher{}, "using CLI-specified install location: {}", ctx.install_location.string ());
 
       // Cache the user-specified path in the database for future runs
       // without --path.
       //
+      launcher::log::trace_l2 (categories::launcher{}, "caching user-specified path for future runs");
       fs::path r (resolve_cache_root ());
 
+      launcher::log::trace_l3 (categories::launcher{}, "opening global cache database at {}", r.string ());
       cache_database db (r);
 
       string s (path_digest (fs::current_path ()));
+      launcher::log::debug (categories::launcher{}, "saving path override to database under scope digest: {}", s);
+
       db.setting (setting_keys::inst_path (s),
                   ctx.install_location.string ());
     }
@@ -1253,6 +1432,9 @@ main (int argc, char* argv[])
     ctx.upstream_repo = "iw4x-client";
     ctx.prerelease = opt.prerelease ();
     ctx.concurrency_limit = opt.jobs ();
+
+    launcher::log::debug (categories::launcher{}, "runtime context configured (repo: {}/{}, pre: {}, jobs: {})",
+                          ctx.upstream_owner, ctx.upstream_repo, ctx.prerelease, ctx.concurrency_limit);
 
     // Execution settings.
     //
@@ -1294,8 +1476,11 @@ main (int argc, char* argv[])
       // If we applied an update that requires a restart (e.g. replaced the
       // executable) or if the user only asked to update, we are done.
       //
-      if (r || opt.self_update_only () || opt.no_self_update())
+      if (r || opt.self_update_only ())
+      {
+        launcher::log::info (categories::launcher{}, "self update completed or requested exit, terminating current process");
         return 0;
+      }
     }
 
     // Control Loop.
@@ -1314,6 +1499,7 @@ main (int argc, char* argv[])
           try { rethrow_exception (ex); }
           catch (const exception& e)
           {
+            launcher::log::error (categories::launcher{}, "unhandled exception in controller: {}", e.what ());
             cerr << "error: " << e.what () << "\n";
             exit_code = 1;
           }
@@ -1322,15 +1508,19 @@ main (int argc, char* argv[])
       });
 
     ioc.run ();
+
+    launcher::log::info (categories::launcher{}, "launcher exiting with code {}", exit_code);
     return exit_code;
   }
   catch (const cli::exception& ex)
   {
+    launcher::log::error (categories::launcher{}, "CLI exception caught in main: {}", ex.what ());
     cerr << "error: " << ex.what () << "\n";
     return 1;
   }
   catch (const exception& ex)
   {
+    launcher::log::error (categories::launcher{}, "exception caught in main: {}", ex.what ());
     cerr << "error: " << ex.what () << "\n";
     return 1;
   }

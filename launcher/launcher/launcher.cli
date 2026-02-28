@@ -16,11 +16,6 @@ namespace launcher
       "Show version information and exit."
     };
 
-    bool --wipe-settings
-    {
-      "Clear the global settings cache."
-    };
-
     // build2 metadata export protocol.
     //
     bool --build2-metadata

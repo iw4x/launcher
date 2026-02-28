@@ -5,6 +5,7 @@ namespace launcher
   basic_reconciler<T>::
   database () noexcept
   {
+    launcher::log::trace_l3 (categories::cache{}, "accessing mutable database reference");
     return db_;
   }
 
@@ -13,6 +14,7 @@ namespace launcher
   basic_reconciler<T>::
   database () const noexcept
   {
+    launcher::log::trace_l3 (categories::cache{}, "accessing const database reference");
     return db_;
   }
 
@@ -20,6 +22,7 @@ namespace launcher
   const fs::path& basic_reconciler<T>::
   root () const noexcept
   {
+    launcher::log::trace_l3 (categories::cache{}, "accessing root path: {}", root_.string ());
     return root_;
   }
 }

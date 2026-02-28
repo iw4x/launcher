@@ -13,6 +13,7 @@
 #include <launcher/cache/cache-types.hxx>
 
 #include <launcher/manifest/manifest.hxx>
+#include <launcher/launcher-log.hxx>
 
 namespace launcher
 {

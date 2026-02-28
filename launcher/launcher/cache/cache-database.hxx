@@ -14,6 +14,8 @@
 #include <odb/schema-catalog.hxx>
 #include <odb/sqlite/database.hxx>
 
+#include <launcher/launcher-log.hxx>
+
 namespace launcher
 {
   namespace fs = std::filesystem;

@@ -22,6 +22,8 @@ import libs += libftxui%lib{ftxui-screen}
 import libs += libodb%lib{odb}
 import libs += libodb-sqlite%lib{odb-sqlite}
 
+import libs += libquill%lib{quill}
+
 # HACK:
 #
 # We have a conflict between libue integration and our directory-anchored
@@ -92,6 +94,9 @@ hxx{version}: in{version} $src_root/manifest
 # Build options.
 #
 cc.poptions =+ "-I$out_root" "-I$src_root"
+
+if ($develop)
+  cxx.coptions =+ "-DLAUNCHER_DEVELOP"
 
 # On Windows, we need the advanced API library for registry access (used
 # for Steam path detection).

@@ -11,6 +11,8 @@
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
 
+#include <launcher/launcher-log.hxx>
+
 using namespace std;
 
 namespace launcher
@@ -140,7 +142,10 @@ namespace launcher
     skip_whitespace (s);
 
     if (s.current >= s.end)
+    {
+      launcher::log::error (categories::steam{}, "unexpected end of input at line {}, column {}", s.line, s.column);
       throw runtime_error ("unexpected end of input");
+    }
 
     bool quoted (*s.current == '"');
 
@@ -236,8 +241,12 @@ namespace launcher
       auto obj (parse_object (s));
 
       if (next_char (s) != '}')
+      {
+        launcher::log::error (categories::steam{}, "expected '}}' at line {}, column {}", s.line, s.column);
         throw runtime_error ("expected '}' at line " + std::to_string (s.line));
+      }
 
+      launcher::log::trace_l3 (categories::steam{}, "parsed vdf object pair, key: '{}'", key);
       return {move (key), vdf_node (move (obj))};
     }
     else
@@ -245,6 +254,7 @@ namespace launcher
       // It's a simple string value.
       //
       string val (parse_string (s));
+      launcher::log::trace_l3 (categories::steam{}, "parsed vdf string pair, key: '{}', val: '{}'", key, val);
       return {move (key), vdf_node (move (val))};
     }
   }
@@ -277,6 +287,7 @@ namespace launcher
   vdf_node vdf_parser::
   parse (const string& str)
   {
+    launcher::log::trace_l2 (categories::steam{}, "starting vdf string parse (length: {} bytes)", str.size ());
     parser_state s (str);
 
     // VDF files typically have a single root key, but sometimes (like ACFs)
@@ -285,12 +296,16 @@ namespace launcher
     char first (peek_char (s));
 
     if (first == '\0')
+    {
+      launcher::log::warning (categories::steam{}, "vdf string is empty or contains only whitespace");
       return vdf_node (map<string, vdf_node> {});
+    }
 
     if (first == '{')
     {
       // Direct object (no root key).
       //
+      launcher::log::trace_l3 (categories::steam{}, "vdf root is a direct object");
       next_char (s); // Consume '{'.
       auto obj (parse_object (s));
       return vdf_node (move (obj));
@@ -299,6 +314,7 @@ namespace launcher
     {
       // Parse as a single root pair.
       //
+      launcher::log::trace_l3 (categories::steam{}, "vdf root is a single pair");
       auto [key, val] = parse_pair (s);
       map<string, vdf_node> root;
       root.emplace (move (key), move (val));
@@ -309,9 +325,13 @@ namespace launcher
   vdf_node vdf_parser::
   parse_file (const fs::path& f)
   {
+    launcher::log::trace_l2 (categories::steam{}, "parsing vdf file: {}", f.string ());
     ifstream ifs (f, ios::binary);
     if (!ifs)
+    {
+      launcher::log::error (categories::steam{}, "failed to open vdf file for parsing: {}", f.string ());
       throw runtime_error ("failed to open file: " + f.string ());
+    }
 
     return parse_stream (ifs);
   }
@@ -352,25 +372,35 @@ namespace launcher
   asio::awaitable<vector<steam_library>>
   parse_library_folders (asio::io_context& ioc, const fs::path& f)
   {
-    vdf_node root (co_await vdf_parser::parse_file_async (ioc, f));
+    launcher::log::trace_l1 (categories::steam{}, "parsing library folders from: {}", f.string ());
 
+    vdf_node root (co_await vdf_parser::parse_file_async (ioc, f));
     vector<steam_library> libraries;
 
     // The structure is typically: "libraryfolders" -> { "0": {...}, "1": {...} }
     //
     const auto* lib_obj (root.get_object ("libraryfolders"));
     if (lib_obj == nullptr)
+    {
+      launcher::log::warning (categories::steam{}, "no 'libraryfolders' object found in vdf: {}", f.string ());
       co_return libraries;
+    }
 
     for (const auto& [key, node] : *lib_obj)
     {
       // Skip non-numeric keys (metadata fields like "contentstatsid").
       //
       if (key.empty () || !std::isdigit (static_cast<unsigned char> (key[0])))
+      {
+        launcher::log::trace_l3 (categories::steam{}, "skipping non-numeric libraryfolders key: {}", key);
         continue;
+      }
 
       if (!node.is_object ())
+      {
+        launcher::log::warning (categories::steam{}, "libraryfolder entry '{}' is not an object", key);
         continue;
+      }
 
       const auto& data (node.as_object ());
       steam_library lib;
@@ -381,12 +411,16 @@ namespace launcher
       {
         fs::path p (n->as_string ());
         lib.path = p.lexically_normal ().make_preferred ();
+        launcher::log::trace_l3 (categories::steam{}, "extracted library path: {}", lib.path.string ());
       }
 
       // Extract label.
       //
       if (const auto* n = node.find ("label"); n && n->is_string ())
+      {
         lib.label = n->as_string ();
+        launcher::log::trace_l3 (categories::steam{}, "extracted library label: {}", lib.label);
+      }
 
       // Extract contentid.
       //
@@ -396,7 +430,10 @@ namespace launcher
         {
           lib.contentid = std::stoull (n->as_string ());
         }
-        catch (...) {}
+        catch (const std::exception& e)
+        {
+          launcher::log::warning (categories::steam{}, "failed to parse contentid for library '{}': {}", key, e.what ());
+        }
       }
 
       // Extract totalsize.
@@ -407,7 +444,10 @@ namespace launcher
         {
           lib.totalsize = std::stoull (n->as_string ());
         }
-        catch (...) {}
+        catch (const std::exception& e)
+        {
+          launcher::log::warning (categories::steam{}, "failed to parse totalsize for library '{}': {}", key, e.what ());
+        }
       }
 
       // Extract apps mapping.
@@ -419,12 +459,16 @@ namespace launcher
           if (val.is_string ())
             lib.apps[appid] = val.as_string ();
         }
+        launcher::log::trace_l3 (categories::steam{}, "extracted {} apps for library '{}'", lib.apps.size (), key);
       }
 
       if (!lib.path.empty ())
         libraries.push_back (move (lib));
+      else
+        launcher::log::warning (categories::steam{}, "library entry '{}' has an empty path, skipping", key);
     }
 
+    launcher::log::info (categories::steam{}, "parsed {} library folders from vdf", libraries.size ());
     co_return libraries;
   }
 
@@ -435,19 +479,23 @@ namespace launcher
   asio::awaitable<steam_app_manifest>
   parse_app_manifest (asio::io_context& ioc, const fs::path& f)
   {
-    vdf_node root (co_await vdf_parser::parse_file_async (ioc, f));
+    launcher::log::trace_l2 (categories::steam{}, "parsing app manifest from: {}", f.string ());
 
+    vdf_node root (co_await vdf_parser::parse_file_async (ioc, f));
     steam_app_manifest m;
 
     // The structure is rooted under "AppState".
     //
     const auto* state (root.get_object ("AppState"));
     if (state == nullptr)
+    {
+      launcher::log::warning (categories::steam{}, "no 'AppState' object found in app manifest: {}", f.string ());
       co_return m;
+    }
 
     // Helper to safely extract integer fields.
     //
-    auto get_uint = [&state] (const string& k, auto& dest)
+    auto get_uint = [&state, &f] (const string& k, auto& dest)
     {
       if (const auto n = state->find (k); n != state->end () && n->second.is_string ())
       {
@@ -458,7 +506,10 @@ namespace launcher
           else
             dest = std::stoul (n->second.as_string ());
         }
-        catch (...) {}
+        catch (const std::exception& e)
+        {
+          launcher::log::warning (categories::steam{}, "failed to parse uint field '{}' in manifest {}: {}", k, f.string (), e.what ());
+        }
       }
     };
 
@@ -466,9 +517,16 @@ namespace launcher
     get_uint ("SizeOnDisk", m.size_on_disk);
     get_uint ("buildid", m.buildid);
 
-    m.name = vdf_node (state->at ("AppState")).get_string ("name", "");
-    m.installdir = vdf_node (state->at ("AppState")).get_string ("installdir", "");
-    m.last_updated = vdf_node (state->at ("AppState")).get_string ("LastUpdated", "");
+    try
+    {
+      m.name = vdf_node (state->at ("AppState")).get_string ("name", "");
+      m.installdir = vdf_node (state->at ("AppState")).get_string ("installdir", "");
+      m.last_updated = vdf_node (state->at ("AppState")).get_string ("LastUpdated", "");
+    }
+    catch (const std::exception& e)
+    {
+      launcher::log::trace_l3 (categories::steam{}, "exception caught accessing 'AppState' nested map fields: {}", e.what ());
+    }
 
     // Direct lookups on the map for strings are a bit verbose, so we just
     // iterate to grab everything else as metadata.
@@ -479,12 +537,14 @@ namespace launcher
         m.metadata[key] = value.as_string ();
     }
 
+    launcher::log::debug (categories::steam{}, "parsed app manifest: appid={}, name='{}', installdir='{}'", m.appid, m.name, m.installdir);
     co_return m;
   }
 
   asio::awaitable<vdf_node>
   parse_config_vdf (asio::io_context& ioc, const fs::path& f)
   {
+    launcher::log::trace_l2 (categories::steam{}, "parsing config vdf from: {}", f.string ());
     co_return co_await vdf_parser::parse_file_async (ioc, f);
   }
 }

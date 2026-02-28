@@ -3,6 +3,8 @@
 #include <cctype>
 #include <sstream>
 
+#include <launcher/launcher-log.hxx>
+
 using namespace std;
 
 namespace launcher
@@ -101,26 +103,46 @@ namespace launcher
   optional<launcher_version>
   parse_launcher_version (const std::string& s)
   {
+    launcher::log::trace_l3 (categories::update{}, "attempting to parse version string: {}", s);
+
     if (s.empty ())
+    {
+      launcher::log::trace_l3 (categories::update{}, "version string is empty");
       return nullopt;
+    }
 
     size_t p (0);
 
     // Be lenient with the 'v' prefix (e.g., git tags).
     //
     if (s[p] == 'v' || s[p] == 'V')
+    {
+      launcher::log::trace_l3 (categories::update{}, "skipped 'v' prefix in version string");
       ++p;
+    }
 
     // We expect the standard triad (X.Y.Z).
     //
     auto mj (parse_u64 (s, p));
-    if (!mj || !parse_c (s, p, '.')) return nullopt;
+    if (!mj || !parse_c (s, p, '.'))
+    {
+      launcher::log::trace_l3 (categories::update{}, "failed to parse major version");
+      return nullopt;
+    }
 
     auto mi (parse_u64 (s, p));
-    if (!mi || !parse_c (s, p, '.')) return nullopt;
+    if (!mi || !parse_c (s, p, '.'))
+    {
+      launcher::log::trace_l3 (categories::update{}, "failed to parse minor version");
+      return nullopt;
+    }
 
     auto pa (parse_u64 (s, p));
-    if (!pa) return nullopt;
+    if (!pa)
+    {
+      launcher::log::trace_l3 (categories::update{}, "failed to parse patch version");
+      return nullopt;
+    }
 
     launcher_version v;
     v.major = static_cast<uint32_t> (*mj);
@@ -130,32 +152,53 @@ namespace launcher
     // If we hit the end, it's a final release.
     //
     if (p >= s.size ())
+    {
+      launcher::log::trace_l3 (categories::update{}, "parsed release version: {}.{}.{}", v.major, v.minor, v.patch);
       return v;
+    }
 
     if (!parse_c (s, p, '-'))
-      return v;
+    {
+      launcher::log::trace_l3 (categories::update{}, "unexpected character after patch version");
+      return v; // Return what we have so far
+    }
 
     // Parse pre-release type. We only support alpha (a) and beta (b).
     //
     if (p >= s.size ()) return nullopt;
 
     char t (s[p]); // Type.
-    if (t != 'a' && t != 'b') return nullopt;
+    if (t != 'a' && t != 'b')
+    {
+      launcher::log::trace_l3 (categories::update{}, "unsupported pre-release type: {}", t);
+      return nullopt;
+    }
     ++p;
 
-    if (!parse_c (s, p, '.')) return nullopt;
+    if (!parse_c (s, p, '.'))
+    {
+      launcher::log::trace_l3 (categories::update{}, "expected '.' after pre-release type");
+      return nullopt;
+    }
 
     // Map the pre-release number into our linearized space.
     //
     auto pn (parse_u64 (s, p));
-    if (!pn || *pn > 499) return nullopt;
+    if (!pn || *pn > 499)
+    {
+      launcher::log::trace_l3 (categories::update{}, "invalid or out-of-range pre-release number");
+      return nullopt;
+    }
 
     v.pre_release = static_cast<uint16_t> (t == 'b' ? *pn + 500 : *pn);
 
     // Check for snapshot suffix.
     //
     if (p >= s.size () || !parse_c (s, p, '.'))
+    {
+      launcher::log::trace_l3 (categories::update{}, "parsed pre-release version: {}", v.string ());
       return v;
+    }
 
     // Build2 uses ".z" as a development snapshot placeholder (e.g.,
     // "1.2.0-a.1.z"). Treat it as a minimal snapshot indicator so the version
@@ -165,13 +208,18 @@ namespace launcher
     {
       ++p;
       v.snapshot_sn = 1; // any non-zero value to mark it as a snapshot
+      launcher::log::trace_l3 (categories::update{}, "parsed build2 placeholder '.z' snapshot version: {}", v.string ());
       return v;
     }
 
     // Parse snapshot sequence (YYYYMMDDhhmmss).
     //
     auto sn (parse_u64 (s, p));
-    if (!sn) return nullopt;
+    if (!sn)
+    {
+      launcher::log::trace_l3 (categories::update{}, "failed to parse snapshot sequence number");
+      return nullopt;
+    }
 
     v.snapshot_sn = *sn;
 
@@ -187,6 +235,7 @@ namespace launcher
       v.snapshot_id = s.substr (p, e - p);
     }
 
+    launcher::log::trace_l3 (categories::update{}, "parsed full snapshot version: {}", v.string ());
     return v;
   }
 

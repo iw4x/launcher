@@ -40,6 +40,7 @@ namespace launcher
       root_ (r),
       strat_ (traits::def_strat)
   {
+    launcher::log::trace_l2 (categories::cache{}, "initialized basic_reconciler with root: {}", root_.string ());
   }
 
   template <typename T>
@@ -47,6 +48,7 @@ namespace launcher
   mode (strategy s)
   {
     strat_ = s;
+    launcher::log::trace_l2 (categories::cache{}, "reconciler strategy changed to {}", static_cast<int> (s));
   }
 
   template <typename T>
@@ -82,7 +84,10 @@ namespace launcher
     // operation, which bypasses this check.
     //
     auto v (db_.version (c));
-    return !v || v->tag () != tag;
+    bool is_outdated (!v || v->tag () != tag);
+
+    launcher::log::debug (categories::cache{}, "component {} outdated check vs '{}': {}", static_cast<int> (c), tag, is_outdated);
+    return is_outdated;
   }
 
   template <typename T>
@@ -113,7 +118,13 @@ namespace launcher
     str_type k (key (p));
     auto f (db_.find (k));
 
-    return f ? stat (p, *f) : file_state::unknown;
+    if (!f)
+    {
+      launcher::log::trace_l3 (categories::cache{}, "stat missing db record for {}, returning unknown", p.string ());
+      return file_state::unknown;
+    }
+
+    return stat (p, *f);
   }
 
   template <typename T>
@@ -130,9 +141,19 @@ namespace launcher
     // Note that we delegate the more expensive validity checks (comparing
     // hash or mtime) to the match() function below.
     //
-    if (!exists_quiet (p)) return file_state::missing;
-    if (!match (p, f))     return file_state::stale;
+    if (!exists_quiet (p))
+    {
+      launcher::log::trace_l3 (categories::cache{}, "stat: file missing from disk: {}", p.string ());
+      return file_state::missing;
+    }
 
+    if (!match (p, f))
+    {
+      launcher::log::trace_l3 (categories::cache{}, "stat: file metadata stale: {}", p.string ());
+      return file_state::stale;
+    }
+
+    launcher::log::trace_l3 (categories::cache{}, "stat: file valid: {}", p.string ());
     return file_state::valid;
   }
 
@@ -141,6 +162,8 @@ namespace launcher
   basic_reconciler<T>::
   audit (component_type c) const
   {
+    launcher::log::info (categories::cache{}, "starting heavy audit for component {}", static_cast<int> (c));
+
     // Note that this is the "slow path". That is, We retrieve everything we
     // *think* we have from the database and rigorously verify it against the
     // physical disk.
@@ -158,6 +181,7 @@ namespace launcher
       r.emplace_back (f, stat (p, f));
     }
 
+    launcher::log::debug (categories::cache{}, "audit complete for component {}, checked {} files", static_cast<int> (c), r.size ());
     return r;
   }
 
@@ -204,6 +228,8 @@ namespace launcher
     //
     unsigned int n (std::thread::hardware_concurrency ());
     if (n == 0) n = 4;
+
+    launcher::log::trace_l2 (categories::cache{}, "spinning up thread pool with {} workers for {} hash tasks", n, ts.size ());
 
     asio::thread_pool pool (n);
     std::atomic<std::size_t> d (0); // Completed count.
@@ -256,11 +282,13 @@ namespace launcher
         {
           // We don't abort on error, just assume the file is broken.
           //
+          launcher::log::warning (categories::cache{}, "exception during parallel hash for {}: {}", t.p.string (), e.what ());
           t.match = false;
           t.error = e.what ();
         }
         catch (...)
         {
+          launcher::log::warning (categories::cache{}, "unknown exception during parallel hash for {}", t.p.string ());
           t.match = false;
           t.error = "unknown exception during hashing";
         }
@@ -276,6 +304,7 @@ namespace launcher
     // Wait for the pool to drain.
     l.wait ();
     pool.join ();
+    launcher::log::trace_l2 (categories::cache{}, "all hash tasks completed");
   }
 
   template <typename T>
@@ -283,6 +312,7 @@ namespace launcher
   basic_reconciler<T>::
   plan (const manifest& m, component_type c, const str_type& v)
   {
+    launcher::log::trace_l1 (categories::cache{}, "generating reconcile plan for component {} (target version {})", static_cast<int> (c), v);
     std::vector<reconcile_item> r;
 
     // The order of planning operations is significant.
@@ -306,6 +336,7 @@ namespace launcher
               std::make_move_iterator (fs.begin ()),
               std::make_move_iterator (fs.end ()));
 
+    launcher::log::info (categories::cache{}, "reconcile plan generated with {} items", r.size ());
     return r;
   }
 
@@ -316,6 +347,7 @@ namespace launcher
                  component_type c,
                  const str_type& v)
   {
+    launcher::log::trace_l2 (categories::cache{}, "planning {} archives", as.size ());
     std::vector<reconcile_item> r;
 
     // Reconciliation of archives is non-trivial compared to simple files. We
@@ -378,6 +410,7 @@ namespace launcher
       //
       if (a.url.empty ())
       {
+        launcher::log::trace_l3 (categories::cache{}, "skipping archive {} (no URL provided)", a.name);
         s.skip = true;
         continue;
       }
@@ -405,7 +438,10 @@ namespace launcher
           if (cached)
           {
             if (stat (p, *cached) != file_state::valid)
+            {
+              launcher::log::trace_l3 (categories::cache{}, "exploded archive {} inner file stale: {}", a.name, p.string ());
               s.links_ok = false;
+            }
           }
           else if (exists_quiet (p) && !f.hash.value.empty ())
           {
@@ -415,6 +451,7 @@ namespace launcher
           {
             // Missing from both DB and disk.
             //
+            launcher::log::trace_l3 (categories::cache{}, "exploded archive {} inner file missing: {}", a.name, p.string ());
             s.links_ok = false;
           }
         }
@@ -433,7 +470,10 @@ namespace launcher
           // binary-diff archives.
           //
           if (cached->version () != v || stat (p, *cached) != file_state::valid)
+          {
+            launcher::log::trace_l3 (categories::cache{}, "blob archive {} version mismatch or stale", a.name);
             s.dl = true;
+          }
 
           s.skip = !s.dl;
         }
@@ -446,6 +486,7 @@ namespace launcher
         }
         else
         {
+          launcher::log::trace_l3 (categories::cache{}, "blob archive {} missing from disk/db", a.name);
           s.dl = true;
         }
       }
@@ -479,9 +520,15 @@ namespace launcher
         // archive that owns this file is marked as broken.
         //
         if (t.match)
+        {
+          launcher::log::trace_l3 (categories::cache{}, "adopting existing file into db: {}", l.k);
           db_.store (cached_file (l.k, t.mtime, v, c, t.size, l.h));
+        }
         else
+        {
+          launcher::log::trace_l3 (categories::cache{}, "hash mismatch for {}, invalidating parent archive", l.p.string ());
           ss[l.i].links_ok = false;
+        }
       }
 
       for (const auto& f : fs)
@@ -491,6 +538,7 @@ namespace launcher
 
         if (t.match)
         {
+          launcher::log::trace_l3 (categories::cache{}, "adopting existing blob archive into db: {}", f.k);
           db_.store (cached_file (f.k, t.mtime, v, c, t.size, f.h));
           s.skip = true;
         }
@@ -528,6 +576,8 @@ namespace launcher
         ri.expected_size = a.size;
         ri.component = c;
         ri.version = v;
+
+        launcher::log::trace_l3 (categories::cache{}, "archive item added to reconcile plan: {}", ri.path);
         r.push_back (std::move (ri));
       }
     }
@@ -542,6 +592,7 @@ namespace launcher
               component_type c,
               const str_type& v)
   {
+    launcher::log::trace_l2 (categories::cache{}, "planning {} standalone files", fs.size ());
     std::vector<reconcile_item> r;
     std::size_t i (0);
 
@@ -575,6 +626,7 @@ namespace launcher
         //
         if (!exists_quiet (p))
         {
+          launcher::log::trace_l3 (categories::cache{}, "file {} missing from disk and db", f.path);
           dl = true;
         }
         else if (!f.hash.value.empty ())
@@ -590,6 +642,7 @@ namespace launcher
           {
             if (verify_blake3 (p, f.hash.value))
             {
+              launcher::log::trace_l3 (categories::cache{}, "file {} matches expected hash, adopting to db", f.path);
               // Match found. Store in DB and skip download.
               //
               db_.store (cached_file (k,
@@ -601,6 +654,7 @@ namespace launcher
             }
             else
             {
+              launcher::log::trace_l3 (categories::cache{}, "file {} hash mismatch on adoption attempt", f.path);
               dl = true;
             }
           }
@@ -609,6 +663,7 @@ namespace launcher
             // If we can't read/verify (e.g., locked file), we force a
             // redownload.
             //
+            launcher::log::warning (categories::cache{}, "exception during hash verification for {}", f.path);
             dl = true;
           }
         }
@@ -622,9 +677,15 @@ namespace launcher
         // Known to DB. Check validity.
         //
         if (cached->version () != v)
+        {
+          launcher::log::trace_l3 (categories::cache{}, "file {} version mismatch (cache: {}, target: {})", f.path, cached->version (), v);
           dl = true;
+        }
         else if (stat (p, *cached) != file_state::valid)
+        {
+          launcher::log::trace_l3 (categories::cache{}, "file {} state is invalid/stale", f.path);
           dl = true;
+        }
       }
 
       if (dl && f.asset_name)
@@ -637,6 +698,8 @@ namespace launcher
         ri.component = c;
         ri.version = v;
         r.push_back (std::move (ri));
+
+        launcher::log::trace_l3 (categories::cache{}, "file item added to reconcile plan: {}", ri.path);
       }
     }
 
@@ -647,6 +710,7 @@ namespace launcher
   reconcile_summary basic_reconciler<T>::
   summarize (const std::vector<reconcile_item>& items) const
   {
+    launcher::log::trace_l3 (categories::cache{}, "generating summary for {} items", items.size ());
     reconcile_summary s;
 
     // Simple aggregation for reporting purposes.
@@ -679,10 +743,15 @@ namespace launcher
     // extraction failed, the file won't exist, and we shouldn't record a lie
     // in the DB.
     //
-    if (!exists_quiet (p)) return;
+    if (!exists_quiet (p))
+    {
+      launcher::log::warning (categories::cache{}, "attempted to track non-existent file: {}", p.string ());
+      return;
+    }
 
     try
     {
+      launcher::log::trace_l3 (categories::cache{}, "tracking file: {}", p.string ());
       db_.store (cached_file (key (p),
                               get_file_mtime (p),
                               v,
@@ -690,12 +759,17 @@ namespace launcher
                               fs::file_size (p),
                               h));
     }
-    catch (...)
+    catch (const std::exception& e)
     {
+      launcher::log::warning (categories::cache{}, "exception tracking file {}: {}", p.string (), e.what ());
       // If the DB write fails (disk full, lock), failing the whole launcher
       // process is user-hostile, so instead let's allow incomplete cache as
       // it will self-heal on next run via the "exists but unknown" path
       //
+    }
+    catch (...)
+    {
+      launcher::log::warning (categories::cache{}, "unknown exception tracking file {}", p.string ());
     }
   }
 
@@ -705,6 +779,7 @@ namespace launcher
          component_type c,
          const str_type& v)
   {
+    launcher::log::trace_l2 (categories::cache{}, "batch tracking {} files", ps.size ());
     // Batch for large archive where updating sqlite row-by-row would be too
     // slow due to transaction overhead.
     //
@@ -730,13 +805,17 @@ namespace launcher
     }
 
     if (!es.empty ())
+    {
+      launcher::log::trace_l3 (categories::cache{}, "storing {} stat'd files to db", es.size ());
       db_.store (es);
+    }
   }
 
   template <typename T>
   void basic_reconciler<T>::
   stamp (component_type c, const str_type& tag)
   {
+    launcher::log::info (categories::cache{}, "stamping component {} with version tag {}", static_cast<int> (c), tag);
     db_.version (c, tag);
   }
 
@@ -744,6 +823,7 @@ namespace launcher
   void basic_reconciler<T>::
   forget (const fs::path& p)
   {
+    launcher::log::trace_l3 (categories::cache{}, "forgetting file from db: {}", p.string ());
     db_.erase (key (p));
   }
 
@@ -752,6 +832,8 @@ namespace launcher
   basic_reconciler<T>::
   clean (const manifest& m, component_type c)
   {
+    launcher::log::info (categories::cache{}, "cleaning orphaned files for component {}", static_cast<int> (c));
+
     // Our goal here is to identify "orphans": entries that we currently track
     // in the database but which are no longer referenced by the version of
     // the manifest we are processing. This usually happens during an upgrade
@@ -814,6 +896,8 @@ namespace launcher
         orphans.push_back (f.path ());
     }
 
+    launcher::log::debug (categories::cache{}, "found {} orphaned database entries", orphans.size ());
+
     // Commit the cleanup.
     //
     // We only remove the records from the DB here. We do not physically
@@ -823,7 +907,10 @@ namespace launcher
     // it to the garbage collector to pick it up later if needed.
     //
     if (traits::auto_prune && !orphans.empty ())
+    {
+      launcher::log::trace_l2 (categories::cache{}, "auto-pruning orphans from db");
       db_.erase (orphans);
+    }
 
     return orphans;
   }
@@ -859,7 +946,9 @@ namespace launcher
     // If canonicalization fails (e.g., permission error on parent directory),
     // we fallback to the raw string path.
     //
-    return ec ? p.string () : can.string ();
+    str_type res (ec ? p.string () : can.string ());
+    launcher::log::trace_l3 (categories::cache{}, "generated key for path {}: {}", p.string (), res);
+    return res;
   }
 
   template <typename T>
@@ -875,11 +964,16 @@ namespace launcher
   {
     try
     {
+      launcher::log::trace_l3 (categories::cache{}, "matching file {} (expected mtime: {}, size: {})", p.string (), f.mtime (), f.size ());
+
       // Mtime is our primary optimization. If the timestamp hasn't changed,
       // we assume the content hasn't changed.
       //
       if (get_file_mtime (p) != f.mtime ())
+      {
+        launcher::log::trace_l3 (categories::cache{}, "mtime mismatch for {}", p.string ());
         return false;
+      }
 
       // In 'paranoid' (mixed) or 'repair' (hash) modes, we dig deeper.
       //
@@ -890,16 +984,27 @@ namespace launcher
       if (strat_ == strategy::mixed || strat_ == strategy::hash)
       {
         if (fs::file_size (p) != f.size ())
+        {
+          launcher::log::trace_l3 (categories::cache{}, "size mismatch for {}", p.string ());
           return false;
+        }
       }
 
+      launcher::log::trace_l3 (categories::cache{}, "match found for {}", p.string ());
       return true;
     }
-    catch (...)
+    catch (const std::exception& e)
     {
+      launcher::log::warning (categories::cache{}, "exception during match for {}: {}", p.string (), e.what ());
+
       // If we cannot access metadata (permissions, file locked), we must
       // assume the file is invalid to trigger a safe recovery path.
       //
+      return false;
+    }
+    catch (...)
+    {
+      launcher::log::warning (categories::cache{}, "unknown exception during match for {}", p.string ());
       return false;
     }
   }
