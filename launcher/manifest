@@ -18,3 +18,4 @@ depends: libftxui >= 4.1.1
 depends: libminiz >= 3.0.2
 depends: libodb >= 2.5.0
 depends: libodb-sqlite >= 2.5.0
+depends: libquill >= 10.1.0

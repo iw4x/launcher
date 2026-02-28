@@ -25,6 +25,7 @@
 #include <launcher/launcher-progress.hxx>
 #include <launcher/launcher-steam.hxx>
 #include <launcher/launcher-update.hxx>
+#include <launcher/launcher-log.hxx>
 
 #ifdef __linux__
 #  include <launcher/launcher-steam-proton.hxx>
@@ -1013,6 +1014,9 @@ main (int argc, char* argv[])
 {
   using namespace std;
   using namespace launcher;
+
+
+  active_logger = new logger;
 
   try
   {
