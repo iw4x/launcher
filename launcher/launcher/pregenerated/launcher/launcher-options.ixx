@@ -364,6 +364,12 @@ namespace launcher
   {
     return this->self_update_only_;
   }
+
+  inline const bool& options::
+  skip_launch () const
+  {
+    return this->skip_launch_;
+  }
 }
 
 // Begin epilogue.
