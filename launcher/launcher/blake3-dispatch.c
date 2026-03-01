@@ -2,6 +2,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#define BLAKE3_USE_NEON 0
 #include "blake3-impl.h"
 
 #define BLAKE3_NO_AVX2
