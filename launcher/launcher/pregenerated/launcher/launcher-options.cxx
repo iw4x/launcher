@@ -774,7 +774,8 @@ namespace launcher
     game_args_ (),
     game_args_specified_ (false),
     no_self_update_ (),
-    self_update_only_ ()
+    self_update_only_ (),
+    skip_launch_ ()
   {
   }
 
@@ -797,7 +798,8 @@ namespace launcher
     game_args_ (),
     game_args_specified_ (false),
     no_self_update_ (),
-    self_update_only_ ()
+    self_update_only_ (),
+    skip_launch_ ()
   {
     ::launcher::cli::argv_scanner s (argc, argv, erase);
     _parse (s, opt, arg);
@@ -823,7 +825,8 @@ namespace launcher
     game_args_ (),
     game_args_specified_ (false),
     no_self_update_ (),
-    self_update_only_ ()
+    self_update_only_ (),
+    skip_launch_ ()
   {
     ::launcher::cli::argv_scanner s (start, argc, argv, erase);
     _parse (s, opt, arg);
@@ -849,7 +852,8 @@ namespace launcher
     game_args_ (),
     game_args_specified_ (false),
     no_self_update_ (),
-    self_update_only_ ()
+    self_update_only_ (),
+    skip_launch_ ()
   {
     ::launcher::cli::argv_scanner s (argc, argv, erase);
     _parse (s, opt, arg);
@@ -877,7 +881,8 @@ namespace launcher
     game_args_ (),
     game_args_specified_ (false),
     no_self_update_ (),
-    self_update_only_ ()
+    self_update_only_ (),
+    skip_launch_ ()
   {
     ::launcher::cli::argv_scanner s (start, argc, argv, erase);
     _parse (s, opt, arg);
@@ -901,7 +906,8 @@ namespace launcher
     game_args_ (),
     game_args_specified_ (false),
     no_self_update_ (),
-    self_update_only_ ()
+    self_update_only_ (),
+    skip_launch_ ()
   {
     _parse (s, opt, arg);
   }
@@ -933,6 +939,8 @@ namespace launcher
     os << "--no-self-update   Skip the automatic launcher self-update check." << ::std::endl;
 
     os << "--self-update-only Only check for and apply launcher updates, then exit." << ::std::endl;
+
+    os << "--skip-launch      Skip launching the game after updating/installing." << ::std::endl;
 
     p = ::launcher::cli::usage_para::option;
 
@@ -976,6 +984,8 @@ namespace launcher
       &::launcher::cli::thunk< options, &options::no_self_update_ >;
       _cli_options_map_["--self-update-only"] =
       &::launcher::cli::thunk< options, &options::self_update_only_ >;
+      _cli_options_map_["--skip-launch"] =
+      &::launcher::cli::thunk< options, &options::skip_launch_ >;
     }
   };
 

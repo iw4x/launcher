@@ -516,6 +516,9 @@ namespace launcher
     const bool&
     self_update_only () const;
 
+    const bool&
+    skip_launch () const;
+
     // Print usage information.
     //
     static ::launcher::cli::usage_para
@@ -549,6 +552,7 @@ namespace launcher
     bool game_args_specified_;
     bool no_self_update_;
     bool self_update_only_;
+    bool skip_launch_;
   };
 }
 
