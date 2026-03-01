@@ -19,3 +19,11 @@ depends: libminiz >= 3.0.2
 depends: libodb >= 2.5.0
 depends: libodb-sqlite >= 2.5.0
 depends: libquill >= 10.1.0
+
+# CI configuration.
+#
+
+builds: default experimental ; Only modern compilers are supported.
+builds: -clang
+builds: -macos
+builds: -freebsd
