@@ -2,6 +2,7 @@
 #include <boost/asio/use_awaitable.hpp>
 #include <boost/json/parse.hpp>
 #include <boost/json/serialize.hpp>
+#include <boost/json/value_to.hpp>
 
 #include <stdexcept>
 #include <algorithm>
