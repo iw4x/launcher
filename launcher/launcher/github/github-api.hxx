@@ -171,7 +171,7 @@ namespace launcher
     static std::string
     api_version ()
     {
-      return "2022-11-28";
+      return "2026-03-10";
     }
   };
 
