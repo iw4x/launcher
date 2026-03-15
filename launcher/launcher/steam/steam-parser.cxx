@@ -519,9 +519,14 @@ namespace launcher
 
     try
     {
-      m.name = vdf_node (state->at ("AppState")).get_string ("name", "");
-      m.installdir = vdf_node (state->at ("AppState")).get_string ("installdir", "");
-      m.last_updated = vdf_node (state->at ("AppState")).get_string ("LastUpdated", "");
+      const vdf_node* sn (root.find ("AppState"));
+
+      if (sn != nullptr)
+      {
+        m.name = sn->get_string ("name", "");
+        m.installdir = sn->get_string ("installdir", "");
+        m.last_updated = sn->get_string ("LastUpdated", "");
+      }
     }
     catch (const std::exception& e)
     {
