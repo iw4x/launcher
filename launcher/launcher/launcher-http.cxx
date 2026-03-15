@@ -19,7 +19,7 @@ namespace launcher
   static json::value
   parse_json (const string& s)
   {
-    error_code e;
+    boost::system::error_code e;
     json::value v (json::parse (s, e));
 
     if (e)
@@ -51,20 +51,14 @@ namespace launcher
     return o.str ();
   }
 
-  http_coordinator::
-  http_coordinator (asio::io_context& i)
+  http_coordinator::http_coordinator (asio::io_context& i)
     : ioc_ (i),
-      client_ (make_unique<client_type> (i))
-  {
-  }
+      client_ (make_unique<client_type> (i)) {}
 
-  http_coordinator::
-  http_coordinator (asio::io_context& i,
-                    const http_client_traits<>& t)
+  http_coordinator::http_coordinator (asio::io_context& i,
+                                      const http_client_traits& t)
     : ioc_ (i),
-      client_ (make_unique<client_type> (i, t))
-  {
-  }
+      client_ (make_unique<client_type> (i, t)) {}
 
   asio::awaitable<string> http_coordinator::
   get (const string& u)
@@ -119,7 +113,7 @@ namespace launcher
   {
     if (t.has_parent_path ())
     {
-      error_code e;
+      std::error_code e;
       fs::create_directories (t.parent_path (), e);
 
       if (e)
@@ -133,9 +127,9 @@ namespace launcher
 
     if (cb)
     {
-      acb = [cb] (uint64_t d, uint64_t t)
+      acb = [cb] (uint64_t d, uint64_t tot)
       {
-        cb (d, t);
+        cb (d, tot);
       };
     }
 

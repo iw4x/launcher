@@ -10,6 +10,7 @@
 #include <optional>
 #include <vector>
 #include <regex>
+#include <functional>
 
 namespace launcher
 {
@@ -18,7 +19,7 @@ namespace launcher
   class github_coordinator
   {
   public:
-    using api_type = github_api<>;
+    using api_type = github_api;
     using release_type = github_release;
     using asset_type = github_asset;
     using repository_type = github_repository;

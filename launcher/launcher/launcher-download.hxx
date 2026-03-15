@@ -19,7 +19,7 @@ namespace launcher
   {
   public:
     using manager_type = download_manager;
-    using task_type = typename manager_type::task_type;
+    using task_type = download_task;
     using request_type = download_request;
     using response_type = download_response;
 

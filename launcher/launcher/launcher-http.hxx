@@ -4,11 +4,11 @@
 
 #include <boost/asio.hpp>
 
-#include <memory>
-#include <string>
 #include <filesystem>
-#include <optional>
 #include <functional>
+#include <memory>
+#include <optional>
+#include <string>
 
 namespace launcher
 {
@@ -32,12 +32,10 @@ namespace launcher
     //
     explicit
     http_coordinator (asio::io_context& ioc);
-
-    http_coordinator (asio::io_context& ioc,
-                      const http_client_traits<>& traits);
+    http_coordinator (asio::io_context& ioc, const http_client_traits& traits);
 
     http_coordinator (const http_coordinator&) = delete;
-    http_coordinator& operator= (const http_coordinator&) = delete;
+    http_coordinator& operator = (const http_coordinator&) = delete;
 
     // GET request returning body as string.
     //

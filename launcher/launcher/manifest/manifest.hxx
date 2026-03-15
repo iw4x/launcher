@@ -23,20 +23,17 @@ namespace launcher
 
   // Hash value with algorithm type.
   //
-  template <typename S = std::string>
-  struct basic_hash
+  struct hash
   {
-    using string_type = S;
-
     hash_algorithm algorithm;
-    string_type value;
+    std::string value;
 
-    basic_hash () : algorithm (hash_algorithm::blake3) {}
+    hash () : algorithm (hash_algorithm::blake3) {}
 
-    basic_hash (hash_algorithm a, string_type v)
+    hash (hash_algorithm a, std::string v)
       : algorithm (a), value (std::move (v)) {}
 
-    explicit basic_hash (string_type v)
+    explicit hash (std::string v)
       : algorithm (hash_algorithm::blake3), value (std::move (v)) {}
 
     bool
@@ -47,38 +44,37 @@ namespace launcher
 
     // String representation.
     //
-    string_type
+    std::string
     string () const;
 
     // Verify hash against data.
     //
-    template <typename Buffer>
     bool
-    verify (const Buffer&) const;
+    verify (const std::string& data) const;
+
+    bool
+    verify (const std::vector<char>& data) const;
   };
 
   // File entry in a manifest.
   //
-  template <typename S = std::string, typename H = basic_hash<S>>
-  struct basic_manifest_file
+  struct manifest_file
   {
-    using string_type = S;
-    using hash_type = H;
     using size_type = std::uint64_t;
 
-    hash_type hash;
+    launcher::hash hash;
     size_type size;
-    string_type path;
-    std::optional<string_type> asset_name;
-    std::optional<string_type> archive_name;
+    std::string path;
+    std::optional<std::string> asset_name;
+    std::optional<std::string> archive_name;
 
-    basic_manifest_file () : size (0) {}
+    manifest_file () : size (0) {}
 
-    basic_manifest_file (hash_type h,
-                         size_type s,
-                         string_type p,
-                         std::optional<string_type> a = std::nullopt,
-                         std::optional<string_type> ar = std::nullopt)
+    manifest_file (launcher::hash h,
+                   size_type s,
+                   std::string p,
+                   std::optional<std::string> a = std::nullopt,
+                   std::optional<std::string> ar = std::nullopt)
       : hash (std::move (h)),
         size (s),
         path (std::move (p)),
@@ -94,29 +90,25 @@ namespace launcher
 
   // Archive entry in a manifest.
   //
-  template <typename S = std::string, typename H = basic_hash<S>>
-  struct basic_manifest_archive
+  struct manifest_archive
   {
-    using string_type = S;
-    using hash_type = H;
     using size_type = std::uint64_t;
-    using file_type = basic_manifest_file<S, H>;
 
-    hash_type hash;
+    launcher::hash hash;
     size_type size;
-    string_type name;
-    string_type url;
+    std::string name;
+    std::string url;
     compression_type compression;
-    std::vector<file_type> files;
+    std::vector<manifest_file> files;
 
-    basic_manifest_archive ()
+    manifest_archive ()
       : size (0), compression (compression_type::none) {}
 
-    basic_manifest_archive (hash_type h,
-                            size_type s,
-                            string_type n,
-                            string_type u = string_type (),
-                            compression_type c = compression_type::none)
+    manifest_archive (launcher::hash h,
+                      size_type s,
+                      std::string n,
+                      std::string u = std::string (),
+                      compression_type c = compression_type::none)
       : hash (std::move (h)),
         size (s),
         name (std::move (n)),
@@ -130,93 +122,35 @@ namespace launcher
     }
   };
 
-  // Manifest traits for customization.
-  //
-  template <typename F, // Format type
-            typename S = std::string,
-            typename H = basic_hash<S>>
-  struct manifest_traits
-  {
-    using format_type = F;
-    using string_type = S;
-    using hash_type = H;
-    using file_type = basic_manifest_file<S, H>;
-    using archive_type = basic_manifest_archive<S, H>;
-
-    // Parse format from string representation.
-    //
-    static std::optional<format_type>
-    translate_format (const string_type& /* url     */,
-                      const string_type& /* content */,
-                      manifest_format&   /* kind    */)
-    {
-      return std::nullopt;
-    }
-
-    // Translate format to string representation.
-    //
-    static string_type
-    translate_format (const format_type&,
-                      manifest_format /* kind */)
-    {
-      return string_type ();
-    }
-
-    // Validate file entry.
-    //
-    static bool
-    validate_file (const file_type&)
-    {
-      return true;
-    }
-
-    // Validate archive entry.
-    //
-    static bool
-    validate_archive (const archive_type&)
-    {
-      return true;
-    }
-  };
-
   // Main manifest class.
   //
-  template <typename F, // Format type
-            typename T = manifest_traits<F>>
-  class basic_manifest
+  class manifest
   {
   public:
-    using traits_type = T;
-    using format_type = typename traits_type::format_type;
-    using string_type = typename traits_type::string_type;
-    using hash_type = typename traits_type::hash_type;
-    using file_type = typename traits_type::file_type;
-    using archive_type = typename traits_type::archive_type;
-
-    format_type format;
+    manifest_format format;
     manifest_format kind;
-    std::vector<archive_type> archives;
-    std::vector<file_type> files;
+    std::vector<manifest_archive> archives;
+    std::vector<manifest_file> files;
 
     // Constructors.
     //
-    basic_manifest () : kind (manifest_format::update) {}
+    manifest () : kind (manifest_format::update) {}
 
     explicit
-    basic_manifest (format_type f, manifest_format k = manifest_format::update)
-      : format (std::move (f)), kind (k) {}
+    manifest (manifest_format f, manifest_format k = manifest_format::update)
+      : format (f), kind (k) {}
 
     // Parse from JSON string.
     //
     explicit
-    basic_manifest (const string_type& json_str,
-                    manifest_format k = manifest_format::update);
+    manifest (const std::string& json_str,
+              manifest_format k = manifest_format::update);
 
     // Parse from JSON value.
     //
     explicit
-    basic_manifest (const json::value& jv,
-                    manifest_format k = manifest_format::update);
+    manifest (const json::value& jv,
+              manifest_format k = manifest_format::update);
 
     // Empty check.
     //
@@ -228,7 +162,7 @@ namespace launcher
 
     // Serialize to JSON string.
     //
-    string_type
+    std::string
     string () const;
 
     // Serialize to JSON value.
@@ -248,8 +182,8 @@ namespace launcher
 
     // Async parse from JSON string with coroutine.
     //
-    static asio::awaitable<basic_manifest>
-    parse_async (const string_type& json_str,
+    static asio::awaitable<manifest>
+    parse_async (const std::string& json_str,
                  manifest_format k = manifest_format::update);
 
     // Async validate with coroutine.
@@ -271,33 +205,22 @@ namespace launcher
     serialize_dlc () const;
   };
 
-  // Type aliases for common instantiations.
-  //
-  using hash = basic_hash<std::string>;
-  using manifest_file = basic_manifest_file<std::string>;
-  using manifest_archive = basic_manifest_archive<std::string>;
-  using manifest = basic_manifest<manifest_format>;
-
   // Comparison operators.
   //
-  template <typename S>
   inline bool
-  operator== (const basic_hash<S>& x, const basic_hash<S>& y) noexcept
+  operator== (const hash& x, const hash& y) noexcept
   {
     return x.algorithm == y.algorithm && x.value == y.value;
   }
 
-  template <typename S>
   inline bool
-  operator!= (const basic_hash<S>& x, const basic_hash<S>& y) noexcept
+  operator!= (const hash& x, const hash& y) noexcept
   {
     return !(x == y);
   }
 
-  template <typename S, typename H>
   inline bool
-  operator== (const basic_manifest_file<S, H>& x,
-              const basic_manifest_file<S, H>& y) noexcept
+  operator== (const manifest_file& x, const manifest_file& y) noexcept
   {
     return x.hash == y.hash &&
            x.size == y.size &&
@@ -306,18 +229,14 @@ namespace launcher
            x.archive_name == y.archive_name;
   }
 
-  template <typename S, typename H>
   inline bool
-  operator!= (const basic_manifest_file<S, H>& x,
-              const basic_manifest_file<S, H>& y) noexcept
+  operator!= (const manifest_file& x, const manifest_file& y) noexcept
   {
     return !(x == y);
   }
 
-  template <typename S, typename H>
   inline bool
-  operator== (const basic_manifest_archive<S, H>& x,
-              const basic_manifest_archive<S, H>& y) noexcept
+  operator== (const manifest_archive& x, const manifest_archive& y) noexcept
   {
     return x.hash == y.hash &&
            x.size == y.size &&
@@ -326,18 +245,14 @@ namespace launcher
            x.compression == y.compression;
   }
 
-  template <typename S, typename H>
   inline bool
-  operator!= (const basic_manifest_archive<S, H>& x,
-              const basic_manifest_archive<S, H>& y) noexcept
+  operator!= (const manifest_archive& x, const manifest_archive& y) noexcept
   {
     return !(x == y);
   }
 
-  template <typename F, typename T>
   inline bool
-  operator== (const basic_manifest<F, T>& x,
-              const basic_manifest<F, T>& y) noexcept
+  operator== (const manifest& x, const manifest& y) noexcept
   {
     return x.format == y.format &&
            x.kind == y.kind &&
@@ -345,32 +260,23 @@ namespace launcher
            x.files == y.files;
   }
 
-  template <typename F, typename T>
   inline bool
-  operator!= (const basic_manifest<F, T>& x,
-              const basic_manifest<F, T>& y) noexcept
+  operator!= (const manifest& x, const manifest& y) noexcept
   {
     return !(x == y);
   }
 
   // Stream output.
   //
-  template <typename S>
-  inline auto
-  operator<< (std::basic_ostream<typename S::value_type>& o,
-              const basic_hash<S>& h) -> decltype (o)
+  inline std::ostream&
+  operator<< (std::ostream& o, const hash& h)
   {
     return o << h.string ();
   }
 
-  template <typename F, typename T>
-  inline auto
-  operator<< (std::basic_ostream<typename T::string_type::value_type>& o,
-              const basic_manifest<F, T>& m) -> decltype (o)
+  inline std::ostream&
+  operator<< (std::ostream& o, const manifest& m)
   {
     return o << m.string ();
   }
 }
-
-#include <launcher/manifest/manifest.ixx>
-#include <launcher/manifest/manifest.txx>

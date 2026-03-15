@@ -24,7 +24,7 @@ namespace launcher
   class update_discovery
   {
   public:
-    using api_type = github_api<>;
+    using api_type = github_api;
     using release_type = github_release;
     using asset_type = github_asset;
 

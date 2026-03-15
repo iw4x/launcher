@@ -14,32 +14,24 @@ namespace launcher
 {
   namespace fs = std::filesystem;
 
-  // We need to categorize the state of a file on disk relative to what we
-  // expect from our cache to decide how to reconcile it.
+  // File state as discovered on disk. Note that we don't differentiate between
+  // corrupted and missing at this stage. Unknown files are mostly left over
+  // from interrupted updates or manual meddling.
   //
   enum class file_state
   {
-    valid,    // Mtime matches our cache.
-    stale,    // File exists but mtime is different.
-    missing,  // File is gone.
-    unknown   // We have never seen this file before. ඞ
+    valid,   // Mtime matches our cache.
+    stale,   // File exists but mtime is different.
+    missing, // File is gone entirely.
+    unknown  // We have never seen this file before.
   };
 
-  inline std::ostream&
-  operator<< (std::ostream& os, file_state s)
-  {
-    switch (s)
-    {
-      case file_state::valid:   return os << "valid";
-      case file_state::stale:   return os << "stale";
-      case file_state::missing: return os << "missing";
-      case file_state::unknown: return os << "unknown";
-    }
-    return os;
-  }
+  std::ostream&
+  operator<< (std::ostream& o, file_state s);
 
-  // Distinct components have different update rules. For instance, we might
-  // enforce stricter checks on the client binaries than on bulk DLC assets.
+  // Logical component groupings. We use these to perform partial verifications
+  // or to skip checking massive rawfiles when we are just updating the launcher
+  // itself.
   //
   enum class component_type
   {
@@ -50,21 +42,12 @@ namespace launcher
     launcher  // Our own executable.
   };
 
-  inline std::ostream&
-  operator<< (std::ostream& os, component_type c)
-  {
-    switch (c)
-    {
-      case component_type::client:   return os << "client";
-      case component_type::rawfiles: return os << "rawfiles";
-      case component_type::dlc:      return os << "dlc";
-      case component_type::helper:   return os << "helper";
-      case component_type::launcher: return os << "launcher";
-    }
-    return os;
-  }
+  std::ostream&
+  operator<< (std::ostream& o, component_type c);
 
-  // The decision on what to do with a file after we've inspected its state.
+  // Action to take on a specific file during reconciliation. Note that the
+  // verify action implies we will hash the file first. If the hash mismatches,
+  // the action seamlessly demotes to download.
   //
   enum class reconcile_action
   {
@@ -74,23 +57,10 @@ namespace launcher
     remove    // It shouldn't be here.
   };
 
-  inline std::ostream&
-  operator<< (std::ostream& os, reconcile_action a)
-  {
-    switch (a)
-    {
-      case reconcile_action::none:     return os << "none";
-      case reconcile_action::download: return os << "download";
-      case reconcile_action::verify:   return os << "verify";
-      case reconcile_action::remove:   return os << "remove";
-    }
-    return os;
-  }
+  std::ostream&
+  operator<< (std::ostream& o, reconcile_action a);
 
-  // Metadata to persist to the database.
-  //
-  // We rely on mtime for the fast path (similar to build systems). If the
-  // mtime matches, we assume the file is the one we verified previously.
+  // Persistent metadata for files we have downloaded.
   //
   #pragma db object table("cached_files")
   class cached_file
@@ -99,13 +69,13 @@ namespace launcher
     cached_file () = default;
 
     cached_file (std::string p,
-                 std::int64_t mt,
+                 std::int64_t t,
                  std::string v,
                  component_type c,
                  std::uint64_t s = 0,
-                 std::string h = "")
+                 std::string h = std::string ())
       : path_ (std::move (p)),
-        mtime_ (mt),
+        mtime_ (t),
         version_ (std::move (v)),
         component_ (c),
         size_ (s),
@@ -113,8 +83,6 @@ namespace launcher
     {
     }
 
-    // Accessors.
-    //
     const std::string&
     path () const noexcept { return path_; }
 
@@ -133,10 +101,8 @@ namespace launcher
     const std::string&
     hash () const noexcept { return hash_; }
 
-    // Mutators.
-    //
     void
-    set_mtime (std::int64_t mt) { mtime_ = mt; }
+    set_mtime (std::int64_t t) { mtime_ = t; }
 
     void
     set_version (std::string v) { version_ = std::move (v); }
@@ -163,16 +129,13 @@ namespace launcher
     component_type component_;
 
     std::uint64_t size_;
-
-    // BLAKE3 hex string. Kept empty until we actually verify the file.
-    //
     std::string hash_;
   };
 
-  // We track the currently installed version tag for each component group.
-  //
-  // That is, we want to detect an update (e.g., "v1" -> "v2") without
-  // scanning every single file first.
+  // Tracks the currently installed version tag for each component. Note that a
+  // component might technically be out of sync with this tag if a download was
+  // interrupted. This is why we rely on individual file hashes for the actual
+  // reconciliation.
   //
   #pragma db object table("component_versions")
   class component_version
@@ -216,11 +179,8 @@ namespace launcher
     std::int64_t installed_at_;
   };
 
-  // Persist user preferences (e.g., install paths, Steam prompt decisions).
-  //
-  // We use a simple key-value store approach here. While it's slightly less
-  // structured than individual columns, it allows us to add new settings
-  // without migrating the schema every time we add a toggle.
+  // Generic key-value store. We keep it untyped here since the higher layers
+  // know how to parse strings into bools or paths.
   //
   #pragma db object table("user_settings")
   class user_setting
@@ -228,8 +188,6 @@ namespace launcher
   public:
     user_setting () = default;
 
-    // Use direct initialization for efficiency.
-    //
     user_setting (std::string k, std::string v)
       : key_ (std::move (k)),
         val_ (std::move (v))
@@ -250,42 +208,25 @@ namespace launcher
 
     #pragma db id
     std::string key_;
-
-    // Shorten to val_ to keep the implementation lines compact.
-    //
     std::string val_;
   };
 
-  // Map logical setting names to their database keys.
-  //
-  // Note that settings that need to be scoped per-installation (to support
-  // multiple MW2 installations each with their own launcher) take a scope
-  // parameter which is typically the digest of the launcher's current
-  // directory.
-  //
   namespace setting_keys
   {
-    // Format as "install_path.<scope>".
+    // We avoid hardcoding strings all over the launcher. Keeping them here
+    // means we can eventually wire this up to a proper config migration system
+    // if keys change between versions.
     //
-    inline std::string
-    inst_path (const std::string& s)
-    {
-      return "install_path." + s;
-    }
+    std::string
+    inst_path (const std::string& s);
 
-    // Format as "steam_prompt.<scope>.<digest>".
-    //
-    inline std::string
-    steam_prompt (const std::string& s, const std::string& d)
-    {
-      return "steam_prompt." + s + "." + d;
-    }
+    std::string
+    steam_prompt (const std::string& s, const std::string& d);
   }
 
-  // Refer to the legacy cache implementation for context.
-  //
-
-  // A transient unit of work for the reconciler.
+  // Record of what we need to do to a given file. Note that we default to the
+  // client component here. It is the most common case and saves us from
+  // sprinkling explicit initializers in the discovery loop.
   //
   struct reconcile_item
   {
@@ -328,7 +269,7 @@ namespace launcher
     }
   };
 
-  // High-level stats to show the user what's happening.
+  // Aggregated totals used primarily by the UI to render progress and status.
   //
   struct reconcile_summary
   {
@@ -352,50 +293,30 @@ namespace launcher
     bool
     up_to_date () const noexcept
     {
+      // We consider the state fully synchronized only if there is nothing to
+      // fetch and we don't have dangling references or stale files.
+      //
       return downloads_required == 0 &&
              files_stale == 0 &&
              files_missing == 0;
     }
   };
 
-  // Get the modification time.
+  // Return mtime as seconds since epoch. We use int64_t instead of std::time_t
+  // to guarantee a 64-bit width regardless of the platform.
   //
-  // We use the raw file_time_type representation because converting to
-  // system_clock is messy and not strictly portable across C++ standard
-  // libraries. As long as we are consistent in how we read it, the raw value
-  // is fine.
-  //
-  inline std::int64_t
-  get_file_mtime (const fs::path& p)
-  {
-    auto t (fs::last_write_time (p));
-    return t.time_since_epoch ().count ();
-  }
+  std::int64_t
+  get_file_mtime (const fs::path& p);
 
-  // Simple epoch wrapper.
-  //
-  inline std::int64_t
-  current_timestamp ()
-  {
-    auto now (std::chrono::system_clock::now ());
-    auto e (now.time_since_epoch ());
-    return std::chrono::duration_cast<std::chrono::seconds> (e).count ();
-  }
+  std::int64_t
+  current_timestamp ();
 
-  // Compute the BLAKE3 hash. Returns empty string on failure.
+  // Blake3 is fast enough that we can usually compute it for the entire file in
+  // one go.
   //
   std::string
   compute_blake3 (const fs::path& p);
 
-  // Check if the file on disk matches the expected hash.
-  //
-  inline bool
-  verify_blake3 (const fs::path& p, const std::string& h)
-  {
-    if (h.empty ())
-      return false;
-
-    std::string a (compute_blake3 (p));
-    return !a.empty () && a == h;
-  }
+  bool
+  verify_blake3 (const fs::path& p, const std::string& h);
 }

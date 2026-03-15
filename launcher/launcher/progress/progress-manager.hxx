@@ -12,54 +12,27 @@
 #include <string>
 #include <functional>
 #include <unordered_map>
+#include <atomic>
 
 namespace launcher
 {
   namespace asio = boost::asio;
 
-  // Manager traits for customization.
-  //
-  template <typename S = std::string>
-  struct progress_manager_traits
-  {
-    using string_type = S;
-    using executor_type = asio::any_io_executor;
-
-    // Update interval in milliseconds.
-    //
-    static constexpr int update_interval_ms = 100;
-
-    // Render interval in milliseconds.
-    //
-    static constexpr int render_interval_ms = 50;
-  };
-
-  // Managed progress item (lock-free).
-  //
-  template <typename T = progress_manager_traits<>>
-  class basic_progress_entry
+  class progress_entry
   {
   public:
-    using traits_type = T;
-    using string_type = typename traits_type::string_type;
-    using tracker_type =
-      basic_progress_tracker<progress_tracker_traits<string_type>>;
-
-    basic_progress_entry (string_type label)
+    explicit
+    progress_entry (std::string label)
       : label_ (std::move (label))
     {
     }
 
-    // Get label.
-    //
-    const string_type&
+    const std::string&
     label () const noexcept
     {
       return label_;
     }
 
-    // Get metrics (lock-free).
-    //
     progress_metrics&
     metrics () noexcept
     {
@@ -72,22 +45,18 @@ namespace launcher
       return metrics_;
     }
 
-    // Get tracker (for speed calculations).
-    //
-    tracker_type&
+    progress_tracker&
     tracker () noexcept
     {
       return tracker_;
     }
 
-    const tracker_type&
+    const progress_tracker&
     tracker () const noexcept
     {
       return tracker_;
     }
 
-    // Create snapshot (lock-free read).
-    //
     progress_snapshot
     snapshot () const
     {
@@ -95,85 +64,52 @@ namespace launcher
     }
 
   private:
-    string_type label_;
+    std::string label_;
     progress_metrics metrics_;
-    tracker_type tracker_;
+    progress_tracker tracker_;
   };
 
-  // Async progress manager using Boost.ASIO (lock-free, non-blocking).
-  //
-  template <typename T = progress_manager_traits<>>
-  class basic_progress_manager
+  class progress_manager
   {
   public:
-    using traits_type = T;
-    using string_type = typename traits_type::string_type;
-    using executor_type = typename traits_type::executor_type;
-    using entry_type = basic_progress_entry<traits_type>;
-    using renderer_type =
-      basic_progress_renderer<progress_renderer_traits<string_type>>;
-    using context_type = basic_progress_render_context<string_type>;
+    static constexpr int update_interval_ms = 100;
+    static constexpr int render_interval_ms = 50;
 
     explicit
-    basic_progress_manager (asio::io_context& ioc);
+    progress_manager (asio::io_context& ioc);
 
-    ~basic_progress_manager ();
+    ~progress_manager ();
 
-    // Non-copyable, non-movable.
-    //
-    basic_progress_manager (const basic_progress_manager&) = delete;
-    basic_progress_manager& operator= (const basic_progress_manager&) = delete;
+    progress_manager (const progress_manager&) = delete;
+    progress_manager& operator= (const progress_manager&) = delete;
 
-    basic_progress_manager (basic_progress_manager&&) = delete;
-    basic_progress_manager& operator= (basic_progress_manager&&) = delete;
+    progress_manager (progress_manager&&) = delete;
+    progress_manager& operator= (progress_manager&&) = delete;
 
-    // Start manager (non-blocking, starts async operations).
-    //
+    void start ();
+    asio::awaitable<void> stop ();
+
+    std::shared_ptr<progress_entry>
+    add_entry (std::string label);
+
     void
-    start ();
+    remove_entry (std::shared_ptr<progress_entry> entry);
 
-    // Stop manager (stops async operations, waits for completion).
-    //
-    asio::awaitable<void>
-    stop ();
-
-    // Add progress entry (returns shared pointer for updates).
-    //
-    std::shared_ptr<entry_type>
-    add_entry (string_type label);
-
-    // Remove progress entry.
-    //
     void
-    remove_entry (std::shared_ptr<entry_type> entry);
+    add_log (std::string message);
 
-    // Add log message.
-    //
     void
-    add_log (string_type message);
+    show_dialog (std::string title, std::string message);
 
-    // Show dialog (modal overlay).
-    //
-    // Dims the main progress view and displays a centered dialog box.
-    //
-    void
-    show_dialog (string_type title, string_type message);
-
-    // Hide dialog.
-    //
     void
     hide_dialog ();
 
-    // Get IO context.
-    //
     asio::io_context&
     io_context () noexcept
     {
       return ioc_;
     }
 
-    // Check if running.
-    //
     bool
     running () const noexcept
     {
@@ -181,64 +117,35 @@ namespace launcher
     }
 
   private:
-    // Async update loop (coroutine).
-    //
-    asio::awaitable<void>
-    update_loop ();
-
-    // Async render loop (coroutine).
-    //
-    asio::awaitable<void>
-    render_loop ();
-
-    // Collect render context (lock-free).
-    //
-    context_type
-    collect_context ();
+    asio::awaitable<void> update_loop ();
+    asio::awaitable<void> render_loop ();
+    progress_render_context collect_context ();
 
     asio::io_context& ioc_;
     asio::steady_timer update_timer_;
     asio::steady_timer render_timer_;
 
-    renderer_type renderer_;
+    progress_renderer renderer_;
 
     std::atomic<bool> running_ {false};
 
-    // Entries (double-buffered for lock-free render).
-    //
-    asio::strand<executor_type> strand_;
-    std::vector<std::shared_ptr<entry_type>> entries_buffers_[2];
+    asio::strand<asio::any_io_executor> strand_;
+    std::vector<std::shared_ptr<progress_entry>> entries_buffers_[2];
     std::atomic<int> entries_buffer_ {0};
     bool entries_dirty_ {false};
 
-    // Overall metrics (lock-free).
-    //
     progress_metrics overall_metrics_;
+    progress_tracker overall_tracker_;
 
-    // Overall tracker (for speed calculations).
-    //
-    basic_progress_tracker<progress_tracker_traits<string_type>> overall_tracker_;
-
-    // Cumulative bytes from completed/removed items.
-    //
     std::atomic<std::uint64_t> cumulative_completed_bytes_ {0};
     std::atomic<std::uint64_t> cumulative_total_bytes_ {0};
 
-    // Log messages (double-buffered, lock-free read).
-    //
-    std::vector<string_type> log_buffers_[2];
+    std::vector<std::string> log_buffers_[2];
     std::atomic<int> log_buffer_ {0};
 
-    // Dialog state (lock-free).
-    //
     std::atomic<bool> dialog_visible_ {false};
-    string_type dialog_title_;
-    string_type dialog_message_;
-    asio::strand<executor_type> dialog_strand_;
+    std::string dialog_title_;
+    std::string dialog_message_;
+    asio::strand<asio::any_io_executor> dialog_strand_;
   };
-
-  using progress_entry = basic_progress_entry<>;
-  using progress_manager = basic_progress_manager<>;
 }
-
-#include <launcher/progress/progress-manager.txx>

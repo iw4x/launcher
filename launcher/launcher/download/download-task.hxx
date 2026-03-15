@@ -12,68 +12,35 @@
 
 namespace launcher
 {
-  // Forward declarations.
+  // Default handler type.
   //
-  template <typename H, typename T> class basic_download_task;
+  struct default_download_handler {};
 
-  // Download task traits.
+  // Download task abstraction.
   //
-  template <typename H, typename S = H>
-  struct download_task_traits
-  {
-    using handler_type = H;
-    using string_type = S;
-
-    using request_type  = basic_download_request<string_type>;
-    using response_type = basic_download_response<string_type>;
-
-    // Progress callback type.
-    //
-    using progress_callback = std::function<void (const download_progress&)>;
-
-    // State change callback type.
-    //
-    using state_callback = std::function<void (download_state, download_state)>;
-  };
-
-  // Basic download task abstraction.
-  //
-  template <typename H, typename T = download_task_traits<H>>
-  class basic_download_task
+  class download_task
   {
   public:
-    using traits_type = T;
-    using handler_type = typename traits_type::handler_type;
-    using string_type = typename traits_type::string_type;
-    using request_type = typename traits_type::request_type;
-    using response_type = typename traits_type::response_type;
-    using progress_callback = typename traits_type::progress_callback;
-    using state_callback = typename traits_type::state_callback;
+    using progress_callback = std::function<void (const download_progress&)>;
+    using state_callback = std::function<void (download_state, download_state)>;
 
     // Constructors.
     //
-    basic_download_task () = default;
+    download_task () = default;
 
     explicit
-    basic_download_task (request_type req)
-      : request (std::move (req))
-    {
-    }
+    download_task (download_request req);
 
-    basic_download_task (request_type req, handler_type hdl)
-      : request (std::move (req)),
-        handler (std::move (hdl))
-    {
-    }
+    download_task (download_request req, default_download_handler hdl);
 
     // Request and response.
     //
-    request_type request;
-    response_type response;
+    download_request request;
+    download_response response;
 
     // Handler (customizable per-task behavior).
     //
-    handler_type handler;
+    default_download_handler handler;
 
     // Callbacks.
     //
@@ -94,117 +61,48 @@ namespace launcher
     // State management.
     //
     void
-    set_state (download_state new_state)
-    {
-      download_state old_state (state.exchange (new_state));
-      if (old_state != new_state && on_state_change)
-        on_state_change (old_state, new_state);
-
-      response.state = new_state;
-    }
+    set_state (download_state new_state);
 
     void
-    update_progress (std::uint64_t downloaded, std::uint64_t total = 0)
-    {
-      downloaded_bytes.store (downloaded);
-      if (total > 0)
-        total_bytes.store (total);
-
-      response.progress.downloaded_bytes = downloaded;
-      response.progress.total_bytes = total > 0 ? total : total_bytes.load ();
-
-      if (on_progress)
-        on_progress (response.progress);
-    }
+    update_progress (std::uint64_t downloaded, std::uint64_t total = 0);
 
     void
-    set_error (download_error err)
-    {
-      response.error = std::move (err);
-      set_state (download_state::failed);
-    }
+    set_error (download_error err);
 
     // Status checks.
     //
     bool
-    completed () const
-    {
-      return state.load () == download_state::completed;
-    }
+    completed () const;
 
     bool
-    failed () const
-    {
-      return state.load () == download_state::failed;
-    }
+    failed () const;
 
     bool
-    active () const
-    {
-      download_state st (state.load ());
-      return st == download_state::connecting ||
-             st == download_state::downloading;
-    }
+    active () const;
 
     bool
-    should_cancel () const
-    {
-      return cancel_requested.load ();
-    }
+    should_cancel () const;
 
     bool
-    should_pause () const
-    {
-      return pause_requested.load ();
-    }
+    should_pause () const;
 
     // Control operations.
     //
     void
-    cancel ()
-    {
-      cancel_requested.store (true);
-    }
+    cancel ();
 
     void
-    pause ()
-    {
-      pause_requested.store (true);
-    }
+    pause ();
 
     void
-    resume ()
-    {
-      pause_requested.store (false);
-      if (state.load () == download_state::paused)
-        set_state (download_state::pending);
-    }
+    resume ();
   };
-
-  // Default handler type and task.
-  //
-  struct default_download_handler {};
-
-  using download_task =
-      basic_download_task<default_download_handler>;
 
   // Convenience factory functions.
   //
-  template <typename H, typename T>
-  inline std::shared_ptr<basic_download_task<H, T>>
-  make_download_task (typename basic_download_task<H, T>::request_type req)
-  {
-    return std::make_shared<basic_download_task<H, T>> (std::move (req));
-  }
+  std::shared_ptr<download_task>
+  make_download_task (download_request req);
 
-  template <typename H, typename T>
-  inline std::shared_ptr<basic_download_task<H, T>>
-  make_download_task (typename basic_download_task<H, T>::request_type req,
-                      H hdl)
-  {
-    return std::make_shared<basic_download_task<H, T>> (
-        std::move (req), std::move (hdl));
-  }
+  std::shared_ptr<download_task>
+  make_download_task (download_request req, default_download_handler hdl);
 }
-
-#include <launcher/download/download-task.txx>

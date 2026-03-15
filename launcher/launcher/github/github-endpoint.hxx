@@ -1,8 +1,6 @@
 #pragma once
 
 #include <string>
-#include <sstream>
-#include <optional>
 #include <cstdint>
 
 namespace launcher
@@ -23,140 +21,75 @@ namespace launcher
     // Repository endpoints.
     //
     static std::string
-    repo (const std::string& owner, const std::string& repo)
-    {
-      return build ("/repos/", owner, "/", repo);
-    }
+    repo (const std::string& owner, const std::string& repo);
 
     static std::string
-    repo_releases (const std::string& owner, const std::string& repo)
-    {
-      return build ("/repos/", owner, "/", repo, "/releases");
-    }
+    repo_releases (const std::string& owner, const std::string& repo);
 
     static std::string
-    repo_release_latest (const std::string& owner, const std::string& repo)
-    {
-      return build ("/repos/", owner, "/", repo, "/releases/latest");
-    }
+    repo_release_latest (const std::string& owner, const std::string& repo);
 
     static std::string
     repo_release_tag (const std::string& owner,
                       const std::string& repo,
-                      const std::string& tag)
-    {
-      return build ("/repos/", owner, "/", repo, "/releases/tags/", tag);
-    }
+                      const std::string& tag);
 
     static std::string
     repo_release_id (const std::string& owner,
                      const std::string& repo,
-                     std::uint64_t id)
-    {
-      return build ("/repos/", owner, "/", repo, "/releases/", std::to_string (id));
-    }
+                     std::uint64_t id);
 
     static std::string
-    repo_commits (const std::string& owner, const std::string& repo)
-    {
-      return build ("/repos/", owner, "/", repo, "/commits");
-    }
+    repo_commits (const std::string& owner, const std::string& repo);
 
     static std::string
     repo_commit (const std::string& owner,
                  const std::string& repo,
-                 const std::string& sha)
-    {
-      return build ("/repos/", owner, "/", repo, "/commits/", sha);
-    }
+                 const std::string& sha);
 
     static std::string
-    repo_branches (const std::string& owner, const std::string& repo)
-    {
-      return build ("/repos/", owner, "/", repo, "/branches");
-    }
+    repo_branches (const std::string& owner, const std::string& repo);
 
     static std::string
     repo_branch (const std::string& owner,
                  const std::string& repo,
-                 const std::string& branch)
-    {
-      return build ("/repos/", owner, "/", repo, "/branches/", branch);
-    }
+                 const std::string& branch);
 
     static std::string
-    repo_tags (const std::string& owner, const std::string& repo)
-    {
-      return build ("/repos/", owner, "/", repo, "/tags");
-    }
+    repo_tags (const std::string& owner, const std::string& repo);
 
     static std::string
-    repo_issues (const std::string& owner, const std::string& repo)
-    {
-      return build ("/repos/", owner, "/", repo, "/issues");
-    }
+    repo_issues (const std::string& owner, const std::string& repo);
 
     static std::string
     repo_issue (const std::string& owner,
                 const std::string& repo,
-                std::uint64_t number)
-    {
-      return build ("/repos/", owner, "/", repo, "/issues/", std::to_string (number));
-    }
+                std::uint64_t number);
 
     // User endpoints.
     //
     static std::string
-    user (const std::string& username)
-    {
-      return build ("/users/", username);
-    }
+    user (const std::string& username);
 
     static std::string
-    user_repos (const std::string& username)
-    {
-      return build ("/users/", username, "/repos");
-    }
+    user_repos (const std::string& username);
 
     // Organization endpoints.
     //
     static std::string
-    org (const std::string& org)
-    {
-      return build ("/orgs/", org);
-    }
+    org (const std::string& org);
 
     static std::string
-    org_repos (const std::string& org)
-    {
-      return build ("/orgs/", org, "/repos");
-    }
+    org_repos (const std::string& org);
 
     // Authenticated user endpoints.
     //
     static std::string
-    user_authenticated ()
-    {
-      return build ("/user");
-    }
+    user_authenticated ();
 
     // Rate limit endpoint.
     //
     static std::string
-    rate_limit ()
-    {
-      return build ("/rate_limit");
-    }
-
-  private:
-    template <typename... Args>
-    static std::string
-    build (Args&&... args)
-    {
-      std::ostringstream os;
-      os << api_base;
-      (os << ... << args);
-      return os.str ();
-    }
+    rate_limit ();
   };
 }

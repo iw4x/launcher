@@ -41,14 +41,10 @@ namespace launcher
     ConsoleSinkConfig c;
     c.set_colour_mode (ConsoleSinkConfig::ColourMode::Never);
 
-    RotatingFileSinkConfig r;
-    r.set_rotation_frequency_and_interval ('H', 1);
-    r.set_max_backup_files (24);
-    r.set_rotation_max_file_size (1'000'000'000);
-    r.set_overwrite_rolled_files (true);
+    FileSinkConfig r;
     r.set_filename_append_option (FilenameAppendOption::StartDateTime);
 
-    auto fs (Frontend::create_or_get_sink<RotatingFileSink> ("launcher.log", r));
+    auto fs (Frontend::create_or_get_sink<FileSink> ("launcher.log", r));
 
     PatternFormatterOptions pf (
       "%(time) [%(log_level_short_code)] %(logger:<16) %(caller_function:<32) "

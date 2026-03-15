@@ -1,143 +1,103 @@
 #pragma once
 
+#include <optional>
+#include <ostream>
 #include <string>
 #include <utility>
-#include <ostream>
-#include <optional>
 
 #include <launcher/http/http-types.hxx>
 
 namespace launcher
 {
-  // HTTP request.
-  //
-  template <typename S, typename B = S>
-  class basic_http_request
+  class http_request
   {
   public:
-    using string_type  = S;
-    using body_type    = B;
-    using headers_type = basic_http_headers<string_type>;
+    http_method method;
+    std::string url;
+    http_version version;
+    http_headers headers;
+    std::optional<std::string> body;
 
-    http_method               method;
-    string_type               url;
-    http_version              version;
-    headers_type              headers;
-    std::optional<body_type>  body;
+    http_request () = default;
 
-    // Constructors.
-    //
-    basic_http_request () = default;
+    explicit
+    http_request (http_method m,
+                  std::string u,
+                  http_version v = http_version (1, 1));
 
-    basic_http_request (http_method m,
-                        string_type u,
-                        http_version v = http_version (1, 1))
-      : method (m), url (std::move (u)), version (v) {}
+    explicit
+    http_request (http_method m,
+                  std::string u,
+                  http_headers h,
+                  http_version v = http_version (1, 1));
 
-    basic_http_request (http_method m,
-                        string_type u,
-                        headers_type h,
-                        http_version v = http_version (1, 1))
-      : method (m),
-        url (std::move (u)),
-        version (v),
-        headers (std::move (h)) {}
+    explicit
+    http_request (http_method m,
+                  std::string u,
+                  http_headers h,
+                  std::string b,
+                  http_version v = http_version (1, 1));
 
-    basic_http_request (http_method m,
-                        string_type u,
-                        headers_type h,
-                        body_type b,
-                        http_version v = http_version (1, 1))
-      : method (m),
-        url (std::move (u)),
-        version (v),
-        headers (std::move (h)),
-        body (std::move (b)) {}
-
-    // Get the request target (path component of URL).
-    //
-    string_type
+    std::string
     target () const;
 
-    // Set a header field.
-    //
     void
-    set_header (string_type name, string_type value)
+    set_header (std::string name, std::string value)
     {
       headers.set (std::move (name), std::move (value));
     }
 
-    // Get a header field.
-    //
-    std::optional<string_type>
-    get_header (const string_type& name) const
+    std::optional<std::string>
+    get_header (const std::string& name) const
     {
       return headers.get (name);
     }
 
-    // Check if a header exists.
-    //
     bool
-    has_header (const string_type& name) const
+    has_header (const std::string& name) const
     {
       return headers.contains (name);
     }
 
-    // Set the content type.
-    //
     void
-    set_content_type (string_type ct)
+    set_content_type (std::string ct)
     {
-      set_header (string_type ("Content-Type"), std::move (ct));
+      set_header ("Content-Type", std::move (ct));
     }
 
-    // Set the user agent.
-    //
     void
-    set_user_agent (string_type ua)
+    set_user_agent (std::string ua)
     {
-      set_header (string_type ("User-Agent"), std::move (ua));
+      set_header ("User-Agent", std::move (ua));
     }
 
-    // Set authorization header.
-    //
     void
-    set_authorization (string_type auth)
+    set_authorization (std::string auth)
     {
-      set_header (string_type ("Authorization"), std::move (auth));
+      set_header ("Authorization", std::move (auth));
     }
 
-    // Set bearer token authorization.
-    //
     void
-    set_bearer_token (const string_type& token)
+    set_bearer_token (const std::string& token)
     {
-      set_authorization (string_type ("Bearer ") + token);
+      set_authorization ("Bearer " + token);
     }
 
-    // Set the body.
-    //
     void
-    set_body (body_type b)
+    set_body (std::string b)
     {
       body = std::move (b);
     }
 
-    // Check if request has a body.
-    //
     bool
     has_body () const noexcept
     {
       return body.has_value ();
     }
 
-    // Normalize the request (e.g., add default headers).
-    //
     void
     normalize ();
 
-    // Check if the request is valid.
-    //
     bool
     valid () const noexcept
     {
@@ -151,40 +111,12 @@ namespace launcher
     }
   };
 
-  template <typename S, typename B>
-  inline bool
-  operator== (const basic_http_request<S, B>& x,
-              const basic_http_request<S, B>& y) noexcept
-  {
-    return x.method == y.method &&
-           x.url == y.url &&
-           x.version == y.version &&
-           x.headers == y.headers &&
-           x.body == y.body;
-  }
+  bool
+  operator == (const http_request& x, const http_request& y) noexcept;
 
-  template <typename S, typename B>
-  inline bool
-  operator!= (const basic_http_request<S, B>& x,
-              const basic_http_request<S, B>& y) noexcept
-  {
-    return !(x == y);
-  }
+  bool
+  operator != (const http_request& x, const http_request& y) noexcept;
 
-  template <typename S, typename B>
-  inline auto
-  operator<< (std::basic_ostream<typename S::value_type>& o,
-              const basic_http_request<S, B>& r) -> decltype (o)
-  {
-    o << to_string (r.method) << ' '
-      << r.url.string () << ' '
-      << r.version;
-    return o;
-  }
-
-  // Common typedefs.
-  //
-  using http_request = basic_http_request<std::string, std::string>;
+  std::ostream&
+  operator << (std::ostream& o, const http_request& r);
 }
-
-#include <launcher/http/http-request.ixx>
