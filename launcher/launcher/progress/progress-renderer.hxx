@@ -11,134 +11,71 @@
 #include <vector>
 #include <string>
 #include <functional>
+#include <atomic>
+#include <thread>
 
 namespace launcher
 {
-  // Renderer traits for customization.
-  //
-  template <typename S = std::string>
-  struct progress_renderer_traits
+  struct progress_item
   {
-    using string_type = S;
-
-    // Default bar width for rendering.
-    //
-    static constexpr int default_bar_width = 15;
-
-    // Maximum number of log messages to display.
-    //
-    static constexpr std::size_t max_log_messages = 5;
-
-    // Render a single progress item.
-    //
-    static ftxui::Element
-    render_item (const string_type& label,
-                 const progress_snapshot& snapshot,
-                 int bar_width = default_bar_width);
-
-    // Render a summary line.
-    //
-    static ftxui::Element
-    render_summary (std::size_t completed,
-                    std::size_t total,
-                    const progress_snapshot& overall);
-
-    // Render log messages.
-    //
-    static ftxui::Element
-    render_logs (const std::vector<string_type>& messages);
-
-    // Render status message.
-    //
-    static ftxui::Element
-    render_status (const string_type& status);
-  };
-
-  // Item to render (lock-free snapshot).
-  //
-  template <typename S = std::string>
-  struct basic_progress_item
-  {
-    using string_type = S;
-
-    string_type label;
+    std::string label;
     progress_snapshot snapshot;
 
-    basic_progress_item () = default;
+    progress_item () = default;
 
-    basic_progress_item (string_type lbl, progress_snapshot snap)
+    progress_item (std::string lbl, progress_snapshot snap)
       : label (std::move (lbl)), snapshot (std::move (snap))
     {
     }
   };
 
-  // Rendering context (double-buffered, lock-free read).
-  //
-  template <typename S = std::string>
-  struct basic_progress_render_context
+  struct progress_render_context
   {
-    using string_type = S;
-    using item_type = basic_progress_item<string_type>;
-
-    std::vector<item_type> items;
+    std::vector<progress_item> items;
     progress_snapshot overall;
-    std::vector<string_type> log_messages;
+    std::vector<std::string> log_messages;
     std::size_t completed_count {0};
     std::size_t total_count {0};
 
-    // Dialog state (optional modal overlay).
-    //
     bool dialog_visible {false};
-    string_type dialog_title;
-    string_type dialog_message;
+    std::string dialog_title;
+    std::string dialog_message;
 
-    basic_progress_render_context () = default;
+    progress_render_context () = default;
   };
 
-  // FTXUI-based progress renderer (lock-free, async-safe).
-  //
-  template <typename T = progress_renderer_traits<>>
-  class basic_progress_renderer
+  class progress_renderer
   {
   public:
-    using traits_type = T;
-    using string_type = typename traits_type::string_type;
-    using item_type = basic_progress_item<string_type>;
-    using context_type = basic_progress_render_context<string_type>;
+    static constexpr int default_bar_width = 15;
+    static constexpr std::size_t max_log_messages = 5;
 
-    basic_progress_renderer ();
-    ~basic_progress_renderer ();
+    static ftxui::Element render_item (const std::string& label,
+                                       const progress_snapshot& snapshot,
+                                       int bar_width = default_bar_width);
 
-    // Non-copyable, non-movable (manages screen).
-    //
-    basic_progress_renderer (const basic_progress_renderer&) = delete;
-    basic_progress_renderer& operator= (const basic_progress_renderer&) = delete;
+    static ftxui::Element render_summary (std::size_t completed,
+                                          std::size_t total,
+                                          const progress_snapshot& overall);
 
-    basic_progress_renderer (basic_progress_renderer&&) = delete;
-    basic_progress_renderer& operator= (basic_progress_renderer&&) = delete;
+    static ftxui::Element render_logs (const std::vector<std::string>& messages);
 
-    // Start rendering (non-blocking).
-    //
-    void
-    start ();
+    static ftxui::Element render_status (const std::string& status);
 
-    // Stop rendering.
-    //
-    void
-    stop ();
+    progress_renderer ();
+    ~progress_renderer ();
 
-    // Update render context (lock-free write to inactive buffer).
-    //
-    void
-    update (context_type&& ctx) noexcept;
+    progress_renderer (const progress_renderer&) = delete;
+    progress_renderer& operator= (const progress_renderer&) = delete;
 
-    // Trigger a refresh.
-    //
-    void
-    refresh () noexcept;
+    progress_renderer (progress_renderer&&) = delete;
+    progress_renderer& operator= (progress_renderer&&) = delete;
 
-    // Check if running.
-    //
+    void start ();
+    void stop ();
+    void update (progress_render_context&& ctx) noexcept;
+    void refresh () noexcept;
+
     bool
     running () const noexcept
     {
@@ -146,15 +83,10 @@ namespace launcher
     }
 
   private:
-    // Create FTXUI component for rendering.
-    //
-    ftxui::Component
-    create_component ();
+    ftxui::Component create_component ();
 
-    // Double-buffered context (lock-free).
-    //
-    context_type contexts_[2];
-    std::atomic<int> render_buffer_ {0};  // Active buffer index
+    progress_render_context contexts_[2];
+    std::atomic<int> render_buffer_ {0};
 
     ftxui::ScreenInteractive screen_;
     ftxui::Component component_;
@@ -162,10 +94,4 @@ namespace launcher
     std::atomic<bool> running_ {false};
     std::jthread ui_thread_;
   };
-
-  using progress_item = basic_progress_item<>;
-  using progress_render_context = basic_progress_render_context<>;
-  using progress_renderer = basic_progress_renderer<>;
 }
-
-#include <launcher/progress/progress-renderer.txx>

@@ -2,107 +2,64 @@
 
 #include <string>
 
-#include <boost/json.hpp>
 #include <boost/asio.hpp>
+#include <boost/json.hpp>
 
-#include <launcher/http/http-types.hxx>
+#include <launcher/http/http-client.hxx>
 #include <launcher/http/http-request.hxx>
 #include <launcher/http/http-response.hxx>
-#include <launcher/http/http-client.hxx>
+#include <launcher/http/http-types.hxx>
 
 namespace launcher
 {
-  // JSON HTTP request/response helpers.
-  //
-
-  // Parse JSON from HTTP response body.
-  //
-  template <typename S>
   boost::json::value
-  parse_json (const basic_http_response<S>& response);
+  parse_json (const http_response& response);
 
-  // Create JSON request body from Boost.JSON value.
-  //
-  template <typename S>
-  basic_http_request<S>
+  http_request
   make_json_request (http_method method,
-                     const S& url,
+                     const std::string& url,
                      const boost::json::value& json);
 
-  // JSON HTTP client wrapper.
-  //
-  template <typename T = http_client_traits<>>
-  class basic_json_http_client
+  class json_http_client
   {
   public:
-    using traits_type   = T;
-    using string_type   = typename traits_type::string_type;
-    using client_type   = basic_http_client<traits_type>;
-    using request_type  = typename traits_type::request_type;
-    using response_type = typename traits_type::response_type;
-
-    // Constructors.
-    //
     explicit
-    basic_json_http_client (boost::asio::io_context& ioc)
-      : client_ (ioc) {}
+    json_http_client (boost::asio::io_context& ioc);
 
-    basic_json_http_client (boost::asio::io_context& ioc,
-                            const traits_type& traits)
-      : client_ (ioc, traits) {}
+    json_http_client (boost::asio::io_context& ioc,
+                      const http_client_traits& traits);
 
-    basic_json_http_client (const basic_json_http_client&) = delete;
-    basic_json_http_client& operator= (const basic_json_http_client&) = delete;
+    json_http_client (const json_http_client&) = delete;
+    json_http_client& operator = (const json_http_client&) = delete;
 
-    // Perform JSON GET request.
-    //
     boost::asio::awaitable<boost::json::value>
-    get_json (const string_type& url);
+    get_json (const std::string& url);
 
-    // Perform JSON POST request.
-    //
     boost::asio::awaitable<boost::json::value>
-    post_json (const string_type& url,
-               const boost::json::value& json);
+    post_json (const std::string& url, const boost::json::value& json);
 
-    // Perform JSON PUT request.
-    //
     boost::asio::awaitable<boost::json::value>
-    put_json (const string_type& url,
-              const boost::json::value& json);
+    put_json (const std::string& url, const boost::json::value& json);
 
-    // Perform JSON PATCH request.
-    //
     boost::asio::awaitable<boost::json::value>
-    patch_json (const string_type& url,
-                const boost::json::value& json);
+    patch_json (const std::string& url, const boost::json::value& json);
 
-    // Perform JSON DELETE request (may return JSON response).
-    //
     boost::asio::awaitable<boost::json::value>
-    delete_json (const string_type& url);
+    delete_json (const std::string& url);
 
-    // Get underlying HTTP client.
-    //
-    client_type&
+    http_client&
     client () noexcept
     {
       return client_;
     }
 
-    const client_type&
+    const http_client&
     client () const noexcept
     {
       return client_;
     }
 
   private:
-    client_type client_;
+    http_client client_;
   };
-
-  // Common typedefs.
-  //
-  using json_http_client = basic_json_http_client<>;
 }
-
-#include <launcher/http/http-json.ixx>

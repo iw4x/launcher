@@ -1,50 +1,33 @@
 #pragma once
 
+#include <map>
 #include <string>
 #include <utility>
-#include <optional>
 
-#include <launcher/http/http-types.hxx>
 #include <launcher/http/http-request.hxx>
 #include <launcher/http/http-response.hxx>
+#include <launcher/http/http-types.hxx>
 
 namespace launcher
 {
-  // HTTP API endpoint descriptor.
-  //
-  template <typename S = std::string>
-  class basic_http_endpoint
+  class http_endpoint
   {
   public:
-    using string_type = S;
-
-    string_type base_url;
-    string_type path_pattern;  // Can contain {param} placeholders.
+    std::string base_url;
+    std::string path_pattern;
     http_method default_method;
 
-    // Constructors.
-    //
-    basic_http_endpoint () : default_method (http_method::get) {}
+    http_endpoint ();
 
-    basic_http_endpoint (string_type base,
-                         string_type pattern,
-                         http_method method = http_method::get)
-      : base_url (std::move (base)),
-        path_pattern (std::move (pattern)),
-        default_method (method) {}
+    explicit
+    http_endpoint (std::string base,
+                   std::string pattern,
+                   http_method method = http_method::get);
 
-    // Build a complete URL by replacing path parameters.
-    //
-    // Example: pattern "/users/{id}/posts" with params {"id", "123"}
-    //          becomes "base_url/users/123/posts"
-    //
-    template <typename M>
-    string_type
-    build_url (const M& params) const;
+    std::string
+    build_url (const std::map<std::string, std::string>& params) const;
 
-    // Build URL without parameters.
-    //
-    string_type
+    std::string
     build_url () const;
 
     bool
@@ -54,27 +37,9 @@ namespace launcher
     }
   };
 
-  template <typename S>
-  inline bool
-  operator== (const basic_http_endpoint<S>& x,
-              const basic_http_endpoint<S>& y) noexcept
-  {
-    return x.base_url == y.base_url &&
-           x.path_pattern == y.path_pattern &&
-           x.default_method == y.default_method;
-  }
+  bool
+  operator == (const http_endpoint& x, const http_endpoint& y) noexcept;
 
-  template <typename S>
-  inline bool
-  operator!= (const basic_http_endpoint<S>& x,
-              const basic_http_endpoint<S>& y) noexcept
-  {
-    return !(x == y);
-  }
-
-  // Common typedefs.
-  //
-  using http_endpoint = basic_http_endpoint<std::string>;
+  bool
+  operator != (const http_endpoint& x, const http_endpoint& y) noexcept;
 }
-
-#include <launcher/http/http-endpoint.ixx>

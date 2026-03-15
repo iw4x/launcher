@@ -14,14 +14,11 @@ namespace launcher
 
   // Download request represents a single download operation.
   //
-  template <typename S = std::string>
-  struct basic_download_request
+  struct download_request
   {
-    using string_type = S;
-
     // Source URLs (fallback order).
     //
-    std::vector<string_type> urls;
+    std::vector<std::string> urls;
 
     // Target file path.
     //
@@ -50,50 +47,25 @@ namespace launcher
 
     // Request metadata.
     //
-    string_type name;        // Human-readable name
-    string_type description; // Optional description
+    std::string name;        // Human-readable name
+    std::string description; // Optional description
 
     // Constructors.
     //
-    basic_download_request () = default;
+    download_request () = default;
 
-    basic_download_request (string_type url, fs::path tgt)
-        : urls ({std::move (url)}),
-          target (std::move (tgt))
-    {
-    }
-
-    basic_download_request (std::vector<string_type> us, fs::path tgt)
-      : urls (std::move (us)),
-        target (std::move (tgt))
-    {
-    }
+    download_request (std::string url, fs::path tgt);
+    download_request (std::vector<std::string> us, fs::path tgt);
 
     // Validation.
     //
     bool
-    valid () const
-    {
-      return !urls.empty () && !target.empty ();
-    }
+    valid () const;
   };
 
-  using download_request = basic_download_request<std::string>;
+  bool
+  operator== (const download_request& x, const download_request& y);
 
-  template <typename S>
-  inline bool
-  operator== (const basic_download_request<S>& x,
-              const basic_download_request<S>& y)
-  {
-    return x.urls == y.urls &&
-           x.target == y.target;
-  }
-
-  template <typename S>
-  inline bool
-  operator!= (const basic_download_request<S>& x,
-              const basic_download_request<S>& y)
-  {
-    return !(x == y);
-  }
+  bool
+  operator!= (const download_request& x, const download_request& y);
 }

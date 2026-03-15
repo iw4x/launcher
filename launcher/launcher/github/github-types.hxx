@@ -25,12 +25,10 @@ namespace launcher
     std::string type; // "User" or "Organization"
 
     github_user () = default;
-
-    github_user (std::string l, std::uint64_t i)
-      : login (std::move (l)), id (i) {}
+    github_user (std::string l, std::uint64_t i);
 
     bool
-    empty () const {return login.empty ();}
+    empty () const;
   };
 
   // GitHub repository.
@@ -51,12 +49,10 @@ namespace launcher
     std::string default_branch;
 
     github_repository () = default;
-
-    github_repository (std::string n, std::string fn)
-      : name (std::move (n)), full_name (std::move (fn)) {}
+    github_repository (std::string n, std::string fn);
 
     bool
-    empty () const {return name.empty ();}
+    empty () const;
   };
 
   // GitHub release asset.
@@ -75,12 +71,10 @@ namespace launcher
     std::string url; // API URL
 
     github_asset () = default;
-
-    github_asset (std::string n, std::string u, std::uint64_t s)
-      : name (std::move (n)), browser_download_url (std::move (u)), size (s) {}
+    github_asset (std::string n, std::string u, std::uint64_t s);
 
     bool
-    empty () const {return name.empty ();}
+    empty () const;
   };
 
   // GitHub release.
@@ -105,12 +99,10 @@ namespace launcher
     std::string zipball_url;
 
     github_release () = default;
-
-    github_release (std::string t, std::string n)
-      : tag_name (std::move (t)), name (std::move (n)) {}
+    github_release (std::string t, std::string n);
 
     bool
-    empty () const {return tag_name.empty ();}
+    empty () const;
 
     // Find asset by name or pattern.
     //
@@ -135,12 +127,10 @@ namespace launcher
     std::string html_url;
 
     github_commit () = default;
-
-    github_commit (std::string s, std::string m)
-      : sha (std::move (s)), message (std::move (m)) {}
+    github_commit (std::string s, std::string m);
 
     bool
-    empty () const {return sha.empty ();}
+    empty () const;
   };
 
   // GitHub issue/pull request.
@@ -161,12 +151,10 @@ namespace launcher
     std::string html_url;
 
     github_issue () = default;
-
-    github_issue (std::uint64_t n, std::string t)
-      : number (n), title (std::move (t)) {}
+    github_issue (std::uint64_t n, std::string t);
 
     bool
-    empty () const {return title.empty ();}
+    empty () const;
   };
 
   // GitHub branch.
@@ -180,13 +168,10 @@ namespace launcher
     bool protected_branch;
 
     github_branch () = default;
-
-    explicit
-    github_branch (std::string n)
-      : name (std::move (n)) {}
+    explicit github_branch (std::string n);
 
     bool
-    empty () const {return name.empty ();}
+    empty () const;
   };
 
   // GitHub tag.
@@ -201,56 +186,20 @@ namespace launcher
     std::string tarball_url;
 
     github_tag () = default;
-
-    explicit
-    github_tag (std::string n)
-      : name (std::move (n)) {}
+    explicit github_tag (std::string n);
 
     bool
-    empty () const {return name.empty ();}
+    empty () const;
   };
 
   // Equality operators.
   //
-  inline bool
-  operator== (const github_user& x,
-              const github_user& y) noexcept
-  {
-    return x.login == y.login && x.id == y.id;
-  }
+  bool operator== (const github_user& x, const github_user& y) noexcept;
+  bool operator!= (const github_user& x, const github_user& y) noexcept;
 
-  inline bool
-  operator!= (const github_user& x,
-              const github_user& y) noexcept
-  {
-    return !(x == y);
-  }
+  bool operator== (const github_asset& x, const github_asset& y) noexcept;
+  bool operator!= (const github_asset& x, const github_asset& y) noexcept;
 
-  inline bool
-  operator== (const github_asset& x,
-              const github_asset& y) noexcept
-  {
-    return x.id == y.id && x.name == y.name;
-  }
-
-  inline bool
-  operator!= (const github_asset& x,
-              const github_asset& y) noexcept
-  {
-    return !(x == y);
-  }
-
-  inline bool
-  operator== (const github_release& x,
-              const github_release& y) noexcept
-  {
-    return x.id == y.id && x.tag_name == y.tag_name;
-  }
-
-  inline bool
-  operator!= (const github_release& x,
-              const github_release& y) noexcept
-  {
-    return !(x == y);
-  }
+  bool operator== (const github_release& x, const github_release& y) noexcept;
+  bool operator!= (const github_release& x, const github_release& y) noexcept;
 }

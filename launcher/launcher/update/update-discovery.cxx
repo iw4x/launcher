@@ -225,7 +225,7 @@ namespace launcher
     return ui;
   }
 
-  optional<update_discovery::asset_type> update_discovery::
+  std::optional<update_discovery::asset_type> update_discovery::
   find_platform_asset (const release_type& r) const
   {
     platform_type p (current_platform ());
@@ -278,7 +278,7 @@ namespace launcher
     return nullopt;
   }
 
-  optional<launcher_version> update_discovery::
+  std::optional<launcher_version> update_discovery::
   parse_asset_version (const string& n) const
   {
     launcher::log::trace_l3 (categories::update{}, "attempting to parse version from asset name: {}", n);

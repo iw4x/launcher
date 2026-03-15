@@ -11,13 +11,11 @@
 
 #include <launcher/cache/cache-database.hxx>
 #include <launcher/cache/cache-types.hxx>
-
-#include <launcher/manifest/manifest.hxx>
 #include <launcher/launcher-log.hxx>
+#include <launcher/manifest/manifest.hxx>
 
 namespace launcher
 {
-  namespace asio = boost::asio;
   namespace fs = std::filesystem;
 
   // Reconciliation strictness.
@@ -32,12 +30,16 @@ namespace launcher
     hash   // Verify content hash.
   };
 
-  template <typename D = cache_database,
-            typename S = std::string>
-  struct reconciler_traits
+  // Filesystem versus database versus manifest synchronizer.
+  //
+  // The idea here is to determine the minimum set of actions required to make
+  // the filesystem look like the manifest.
+  //
+  class reconciler
   {
-    using db_type = D;
-    using str_type = S;
+  public:
+    using progress_cb =
+      std::function<void (const std::string& msg, size_t cur, size_t tot)>;
 
     // By default, we trust the filesystem.
     //
@@ -46,40 +48,22 @@ namespace launcher
     // Whether to automatically prune orphaned files.
     //
     static constexpr bool auto_prune = true;
-  };
 
-  // Filesystem vs Database vs Manifest synchronizer.
-  //
-  // The idea here is to determine the minimum set of actions required to make
-  // the filesystem look like the manifest.
-  //
-  template <typename T = reconciler_traits<>>
-  class basic_reconciler
-  {
-  public:
-    using traits = T;
-    using db_type = typename traits::db_type;
-    using str_type = typename traits::str_type;
-
-    using progress_cb =
-      std::function<void (const str_type& msg, size_t cur, size_t tot)>;
-
-    // We borrow the db reference, so it must outlives us. Note that we also
-    // hold onto the root install path for all resolution.
+    // We borrow the database reference, so it must outlive us. Note that we
+    // also hold onto the root install path for all resolutions.
     //
-    basic_reconciler (db_type& db, const fs::path& root);
+    reconciler (cache_database& db, const fs::path& root);
 
-    basic_reconciler (const basic_reconciler&) = delete;
-    basic_reconciler& operator= (const basic_reconciler&) = delete;
+    reconciler (const reconciler&) = delete;
+    reconciler& operator= (const reconciler&) = delete;
 
     // Configuration.
     //
 
-    // We allow hot-swapping the strategy, though usually, this is determined
-    // at startup.
+    // We allow hot-swapping the strategy, though usually this is determined at
+    // startup.
     //
-    // @@: conceptually interesting, but the hot-swap portion may not be worth
-    // keeping.
+    // @@: the hot-swap portion may not be worth keeping.
     //
     void
     mode (strategy s);
@@ -93,19 +77,20 @@ namespace launcher
     // Versioning.
     //
 
-    // Check if the component is stale compared to tag.
+    // Check if the component is stale compared to the tag.
     //
-    // We assume the db is the source of truth for what's currently installed.
-    // If the db says we have version X, and remote is X, we return false
-    // (up-to-date) and assume the user hasn't corrupted files manually.
+    // We assume the database is the source of truth for what is currently
+    // installed. If the database says we have version X, and the remote is X,
+    // we return false (up-to-date) and assume the user hasn't corrupted files
+    // manually.
     //
     bool
-    outdated (component_type c, const str_type& tag) const;
+    outdated (component_type c, const std::string& tag) const;
 
-    // Peek at the db version. Returns nullopt if the component has never
+    // Peek at the database version. Return nullopt if the component has never
     // been installed.
     //
-    std::optional<str_type>
+    std::optional<std::string>
     version (component_type c) const;
 
     // Inspection.
@@ -113,8 +98,8 @@ namespace launcher
 
     // Stat a single file.
     //
-    // If `entry` is provided, we compare the fs state against it using our
-    // current `mode`. If `entry` is missing, we assume the file is untracked
+    // If the entry is provided, we compare the filesystem state against it
+    // using our current mode. If it is missing, we assume the file is untracked
     // or new.
     //
     file_state
@@ -123,9 +108,9 @@ namespace launcher
     file_state
     stat (const fs::path& p, const cached_file& entry) const;
 
-    // Walk the entire db for this component and check every file against the
-    // fs. This is the "heavy" check we run if versions mismatch or if the
-    // user forced a verify.
+    // Walk the entire database for this component and check every file against
+    // the filesystem. This is the heavy check we run if versions mismatch or if
+    // the user forced a verify.
     //
     std::vector<std::pair<cached_file, file_state>>
     audit (component_type c) const;
@@ -133,28 +118,28 @@ namespace launcher
     // Planning.
     //
 
-    // Generate to-do list.
+    // Generate the to-do list.
     //
-    // We iterate over the manifest. For every file or archive, we look it up
-    // in the db and check the fs. If anything is amiss (missing, modified,
-    // wrong version), we add a reconcile item.
+    // We iterate over the manifest. For every file or archive, we look it up in
+    // the database and check the filesystem. If anything is amiss (missing,
+    // modified, wrong version), we add a reconcile item.
     //
     std::vector<reconcile_item>
-    plan (const manifest& m, component_type c, const str_type& v);
+    plan (const manifest& m, component_type c, const std::string& v);
 
-    // Helpers for the planner. We split these out to keep the logic
-    // manageable and to handle the slightly different semantics of archives
-    // (which need extraction) vs standalone files.
+    // Helpers for the planner. We split these out to keep the logic manageable
+    // and to handle the slightly different semantics of archives (which need
+    // extraction) versus standalone files.
     //
     std::vector<reconcile_item>
     plan_archives (const std::vector<manifest_archive>& as,
                    component_type c,
-                   const str_type& v);
+                   const std::string& v);
 
     std::vector<reconcile_item>
     plan_files (const std::vector<manifest_file>& fs,
                 component_type c,
-                const str_type& v);
+                const std::string& v);
 
     reconcile_summary
     summarize (const std::vector<reconcile_item>& items) const;
@@ -162,7 +147,7 @@ namespace launcher
     // Recording.
     //
 
-    // Commit a download to the db.
+    // Commit a download to the database.
     //
     // We do this immediately after download (before extraction) so we don't
     // re-download if the process crashes during extraction.
@@ -170,42 +155,42 @@ namespace launcher
     void
     track (const fs::path& p,
            component_type c,
-           const str_type& v,
-           const str_type& hash = "");
+           const std::string& v,
+           const std::string& hash = "");
 
     // Commit extracted files.
     //
-    // We batch this because an archive might explode into 1000s of files.
-    // touching the db 1000 times is too slow.
+    // We batch this because an archive might explode into thousands of files.
+    // Touching the database that many times is too slow.
     //
     void
     track (const std::vector<fs::path>& ps,
            component_type c,
-           const str_type& v);
+           const std::string& v);
 
     // Finalize the update.
     //
-    // Once the dust settles and all files are essentially correct, we stamp
-    // the component with the new version tag.
+    // Once the dust settles and all files are essentially correct, we stamp the
+    // component with the new version tag.
     //
     void
-    stamp (component_type c, const str_type& tag);
+    stamp (component_type c, const std::string& tag);
 
     void
     forget (const fs::path& p);
 
     // Garbage collection.
     //
-    // Scan the db for files belonging to our component but whom are NO LONGER
-    // in the manifest. Delete them from both.
+    // Scan the database for files belonging to our component but which are no
+    // longer in the manifest. Delete them from both.
     //
-    std::vector<str_type>
+    std::vector<std::string>
     clean (const manifest& m, component_type c);
 
     // Resolution.
     //
 
-    // Anchor the manifest relative path to our `root_`.
+    // Anchor the manifest relative path to our root.
     //
     fs::path
     path (const manifest_file& p) const;
@@ -213,19 +198,19 @@ namespace launcher
     fs::path
     path (const manifest_archive& a) const;
 
-    // Normalize path to a string key for db lookups. We need to be careful
-    // about slashes here to ensure consistency across platforms.
+    // Normalize the path to a string key for database lookups. We need to be
+    // careful about slashes here to ensure consistency across platforms.
     //
-    str_type
+    std::string
     key (const fs::path& p) const;
 
     // Access.
     //
 
-    db_type&
+    cache_database&
     database () noexcept;
 
-    const db_type&
+    const cache_database&
     database () const noexcept;
 
     const fs::path&
@@ -233,24 +218,19 @@ namespace launcher
 
   private:
     void
-    report (const str_type& msg, size_t cur, size_t tot);
+    report (const std::string& msg, size_t cur, size_t tot);
 
     // The actual comparison logic.
     //
-    // If we are in mtime mode, we just check timestamps. If `mixed`, we check
-    // size too. If `hash`, we read the whole file. If...
+    // If we are in mtime mode, we just check timestamps. If mixed, we check
+    // size too. If hash, we read the whole file.
     //
     bool
     match (const fs::path& p, const cached_file& entry) const;
 
-    db_type& db_;
+    cache_database& db_;
     fs::path root_;
     strategy strat_;
     progress_cb cb_;
   };
-
-  using reconciler = basic_reconciler<>;
 }
-
-#include <launcher/cache/cache-reconciler.ixx>
-#include <launcher/cache/cache-reconciler.txx>

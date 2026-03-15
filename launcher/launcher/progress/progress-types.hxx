@@ -8,8 +8,6 @@
 
 namespace launcher
 {
-  // Progress state enumeration.
-  //
   enum class progress_state
   {
     idle,
@@ -19,8 +17,6 @@ namespace launcher
     failed
   };
 
-  // Progress display style (DNF-like, simple, percentage, etc).
-  //
   enum class progress_style
   {
     dnf,        // DNF-style: [=====>      ]
@@ -29,8 +25,6 @@ namespace launcher
     detailed    // Full details with speed/ETA
   };
 
-  // Speed calculation method.
-  //
   enum class speed_calculation
   {
     instant,    // Current speed
@@ -38,13 +32,10 @@ namespace launcher
     ewma        // Exponentially weighted moving average
   };
 
-  // Time units for duration formatting.
-  //
   using duration_type = std::chrono::milliseconds;
   using time_point = std::chrono::steady_clock::time_point;
 
   // Basic progress metrics (lock-free, all atomic).
-  //
   struct progress_metrics
   {
     std::atomic<std::uint64_t> total_bytes {0};
@@ -56,8 +47,6 @@ namespace launcher
 
     progress_metrics () = default;
 
-    // Non-copyable but movable.
-    //
     progress_metrics (const progress_metrics&) = delete;
     progress_metrics& operator= (const progress_metrics&) = delete;
 
@@ -85,8 +74,6 @@ namespace launcher
       return *this;
     }
 
-    // Calculate progress ratio (0.0 - 1.0).
-    //
     float
     progress_ratio () const noexcept
     {
@@ -98,8 +85,6 @@ namespace launcher
       return static_cast<float>(current) / static_cast<float>(total);
     }
 
-    // Calculate ETA in seconds (returns 0 if unknown).
-    //
     int
     eta_seconds () const noexcept
     {
@@ -118,7 +103,6 @@ namespace launcher
   };
 
   // Snapshot of progress metrics (for rendering, non-atomic).
-  //
   struct progress_snapshot
   {
     std::uint64_t total_bytes;
@@ -131,8 +115,6 @@ namespace launcher
 
     progress_snapshot () = default;
 
-    // Construct from metrics.
-    //
     explicit
     progress_snapshot (const progress_metrics& m)
       : total_bytes (m.total_bytes.load (std::memory_order_relaxed)),

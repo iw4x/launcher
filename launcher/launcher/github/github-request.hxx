@@ -29,73 +29,39 @@ namespace launcher
     std::map<std::string, std::string> headers;
     std::map<std::string, std::string> query_params;
 
-    github_request ()
-      : method (method_type::get) {}
-
-    github_request (method_type m, std::string ep)
-      : method (m), endpoint (std::move (ep)) {}
+    github_request ();
+    github_request (method_type m, std::string ep);
 
     // Builder methods.
     //
     github_request&
-    with_token (std::string t)
-    {
-      token = std::move (t);
-      return *this;
-    }
+    with_token (std::string t);
 
     github_request&
-    with_body (std::string b)
-    {
-      body = std::move (b);
-      return *this;
-    }
+    with_body (std::string b);
 
     github_request&
-    with_header (std::string key, std::string value)
-    {
-      headers[std::move (key)] = std::move (value);
-      return *this;
-    }
+    with_header (std::string key, std::string value);
 
     github_request&
-    with_query (std::string key, std::string value)
-    {
-      query_params[std::move (key)] = std::move (value);
-      return *this;
-    }
+    with_query (std::string key, std::string value);
 
     // Common query parameters.
     //
     github_request&
-    with_per_page (std::uint32_t n)
-    {
-      return with_query ("per_page", std::to_string (n));
-    }
+    with_per_page (std::uint32_t n);
 
     github_request&
-    with_page (std::uint32_t n)
-    {
-      return with_query ("page", std::to_string (n));
-    }
+    with_page (std::uint32_t n);
 
     github_request&
-    with_state (const std::string& state) // "open", "closed", "all"
-    {
-      return with_query ("state", state);
-    }
+    with_state (const std::string& state); // "open", "closed", "all"
 
     github_request&
-    with_sort (const std::string& sort) // "created", "updated", "pushed"
-    {
-      return with_query ("sort", sort);
-    }
+    with_sort (const std::string& sort); // "created", "updated", "pushed"
 
     github_request&
-    with_direction (const std::string& dir) // "asc", "desc"
-    {
-      return with_query ("direction", dir);
-    }
+    with_direction (const std::string& dir); // "asc", "desc"
 
     // Build full URL with query parameters.
     //
@@ -105,17 +71,6 @@ namespace launcher
     // Get HTTP method as string.
     //
     std::string
-    method_string () const
-    {
-      switch (method)
-      {
-        case method_type::get:     return "GET";
-        case method_type::post:    return "POST";
-        case method_type::put:     return "PUT";
-        case method_type::patch:   return "PATCH";
-        case method_type::delete_: return "DELETE";
-      }
-      return "GET";
-    }
+    method_string () const;
   };
 }

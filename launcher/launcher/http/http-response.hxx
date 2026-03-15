@@ -1,59 +1,44 @@
 #pragma once
 
+#include <optional>
+#include <ostream>
 #include <string>
 #include <utility>
-#include <ostream>
-#include <optional>
 
 #include <launcher/http/http-types.hxx>
 
 namespace launcher
 {
-  // HTTP response.
-  //
-  template <typename S, typename B = S>
-  class basic_http_response
+  class http_response
   {
   public:
-    using string_type  = S;
-    using body_type    = B;
-    using headers_type = basic_http_headers<string_type>;
+    http_status status;
+    http_version version;
+    std::string reason;
+    http_headers headers;
+    std::optional<std::string> body;
 
-    http_status           status;
-    http_version          version;
-    string_type           reason;  // Status reason phrase.
-    headers_type          headers;
-    std::optional<body_type> body;
+    http_response ();
 
-    // Constructors.
-    //
-    basic_http_response () : status (http_status::ok) {}
+    explicit
+    http_response (http_status s, http_version v = http_version (1, 1));
 
-    basic_http_response (http_status s,
-                         http_version v = http_version (1, 1))
-      : status (s), version (v) {}
+    explicit
+    http_response (http_status s,
+                   std::string r,
+                   http_version v = http_version (1, 1));
 
-    basic_http_response (http_status s,
-                         string_type r,
-                         http_version v = http_version (1, 1))
-      : status (s), version (v), reason (std::move (r)) {}
+    explicit
+    http_response (http_status s,
+                   http_headers h,
+                   http_version v = http_version (1, 1));
 
-    basic_http_response (http_status s,
-                         headers_type h,
-                         http_version v = http_version (1, 1))
-      : status (s), version (v), headers (std::move (h)) {}
+    explicit
+    http_response (http_status s,
+                   http_headers h,
+                   std::string b,
+                   http_version v = http_version (1, 1));
 
-    basic_http_response (http_status s,
-                         headers_type h,
-                         body_type b,
-                         http_version v = http_version (1, 1))
-      : status (s),
-        version (v),
-        headers (std::move (h)),
-        body (std::move (b)) {}
-
-    // Status code checking helpers.
-    //
     bool
     is_informational () const noexcept
     {
@@ -96,69 +81,51 @@ namespace launcher
       return static_cast<std::uint16_t> (status);
     }
 
-    // Set a header field.
-    //
     void
-    set_header (string_type name, string_type value)
+    set_header (std::string name, std::string value)
     {
       headers.set (std::move (name), std::move (value));
     }
 
-    // Get a header field.
-    //
-    std::optional<string_type>
-    get_header (const string_type& name) const
+    std::optional<std::string>
+    get_header (const std::string& name) const
     {
       return headers.get (name);
     }
 
-    // Check if a header exists.
-    //
     bool
-    has_header (const string_type& name) const
+    has_header (const std::string& name) const
     {
       return headers.contains (name);
     }
 
-    // Get content type.
-    //
-    std::optional<string_type>
+    std::optional<std::string>
     content_type () const
     {
-      return get_header (string_type ("Content-Type"));
+      return get_header ("Content-Type");
     }
 
-    // Get content length.
-    //
     std::optional<std::uint64_t>
     content_length () const;
 
-    // Get location (for redirects).
-    //
-    std::optional<string_type>
+    std::optional<std::string>
     location () const
     {
-      return get_header (string_type ("Location"));
+      return get_header ("Location");
     }
 
-    // Set the body.
-    //
     void
-    set_body (body_type b)
+    set_body (std::string b)
     {
       body = std::move (b);
     }
 
-    // Check if response has a body.
-    //
     bool
     has_body () const noexcept
     {
       return body.has_value ();
     }
 
-    // Check if the response is valid.
-    //
     bool
     valid () const noexcept
     {
@@ -172,43 +139,12 @@ namespace launcher
     }
   };
 
-  template <typename S, typename B>
-  inline bool
-  operator== (const basic_http_response<S, B>& x,
-              const basic_http_response<S, B>& y) noexcept
-  {
-    return x.status == y.status &&
-           x.version == y.version &&
-           x.reason == y.reason &&
-           x.headers == y.headers &&
-           x.body == y.body;
-  }
+  bool
+  operator == (const http_response& x, const http_response& y) noexcept;
 
-  template <typename S, typename B>
-  inline bool
-  operator!= (const basic_http_response<S, B>& x,
-              const basic_http_response<S, B>& y) noexcept
-  {
-    return !(x == y);
-  }
+  bool
+  operator != (const http_response& x, const http_response& y) noexcept;
 
-  template <typename S, typename B>
-  inline auto
-  operator<< (std::basic_ostream<typename S::value_type>& o,
-              const basic_http_response<S, B>& r) -> decltype (o)
-  {
-    o << r.version << ' '
-      << static_cast<std::uint16_t> (r.status);
-
-    if (!r.reason.empty ())
-      o << ' ' << r.reason;
-
-    return o;
-  }
-
-  // Common typedefs.
-  //
-  using http_response = basic_http_response<std::string, std::string>;
+  std::ostream&
+  operator << (std::ostream& o, const http_response& r);
 }
-
-#include <launcher/http/http-response.ixx>

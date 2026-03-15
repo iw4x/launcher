@@ -3,6 +3,7 @@
 #include <stdexcept>
 #include <algorithm>
 #include <sstream>
+#include <cctype>
 
 using namespace std;
 
@@ -49,6 +50,12 @@ namespace launcher
     throw invalid_argument ("invalid HTTP method: " + s);
   }
 
+  std::ostream&
+  operator<< (std::ostream& o, http_method m)
+  {
+    return o << to_string (m);
+  }
+
   // http_status
   //
   string
@@ -57,14 +64,12 @@ namespace launcher
     switch (s)
     {
       // 1xx
-      //
       case http_status::continue_:                       return "Continue";
       case http_status::switching_protocols:             return "Switching Protocols";
       case http_status::processing:                      return "Processing";
       case http_status::early_hints:                     return "Early Hints";
 
       // 2xx
-      //
       case http_status::ok:                              return "OK";
       case http_status::created:                         return "Created";
       case http_status::accepted:                        return "Accepted";
@@ -77,7 +82,6 @@ namespace launcher
       case http_status::im_used:                         return "IM Used";
 
       // 3xx
-      //
       case http_status::multiple_choices:                return "Multiple Choices";
       case http_status::moved_permanently:               return "Moved Permanently";
       case http_status::found:                           return "Found";
@@ -88,7 +92,6 @@ namespace launcher
       case http_status::permanent_redirect:              return "Permanent Redirect";
 
       // 4xx
-      //
       case http_status::bad_request:                     return "Bad Request";
       case http_status::unauthorized:                    return "Unauthorized";
       case http_status::payment_required:                return "Payment Required";
@@ -120,7 +123,6 @@ namespace launcher
       case http_status::unavailable_for_legal_reasons:   return "Unavailable For Legal Reasons";
 
       // 5xx
-      //
       case http_status::internal_server_error:           return "Internal Server Error";
       case http_status::not_implemented:                 return "Not Implemented";
       case http_status::bad_gateway:                     return "Bad Gateway";
@@ -133,20 +135,115 @@ namespace launcher
       case http_status::not_extended:                    return "Not Extended";
       case http_status::network_authentication_required: return "Network Authentication Required";
     }
-
     return "Unknown";
+  }
+
+  std::ostream&
+  operator<< (std::ostream& o, http_status s)
+  {
+    return o << static_cast<std::uint16_t> (s);
   }
 
   // http_version
   //
-  string http_version::
-  string () const
+  string
+  http_version::string () const
   {
     ostringstream os;
-
-    os << "HTTP/" << static_cast<unsigned> (major)
-       << '.'     << static_cast<unsigned> (minor);
-
+    os << "HTTP/" << static_cast<unsigned> (major) << '.' << static_cast<unsigned> (minor);
     return os.str ();
+  }
+
+  std::ostream&
+  operator<< (std::ostream& o, const http_version& v)
+  {
+    return o << v.string ();
+  }
+
+  // http_field
+  //
+  http_field::
+  http_field (std::string n, std::string v)
+    : name (std::move (n)), value (std::move (v)) {}
+
+  bool
+  operator== (const http_field& x, const http_field& y) noexcept
+  {
+    return x.name == y.name && x.value == y.value;
+  }
+
+  bool
+  operator!= (const http_field& x, const http_field& y) noexcept
+  {
+    return !(x == y);
+  }
+
+  // http_headers
+  //
+  void http_headers::
+  set (std::string n, std::string v)
+  {
+    remove (n);
+    fields.push_back (http_field (std::move (n), std::move (v)));
+  }
+
+  void http_headers::
+  add (std::string n, std::string v)
+  {
+    fields.push_back (http_field (std::move (n), std::move (v)));
+  }
+
+  std::optional<std::string> http_headers::
+  get (const std::string& n) const
+  {
+    auto match = [&n] (const http_field& f)
+    {
+      if (f.name.size () != n.size ()) return false;
+      for (std::size_t i (0); i < n.size (); ++i)
+      {
+        if (std::tolower (static_cast<unsigned char> (f.name[i])) !=
+            std::tolower (static_cast<unsigned char> (n[i])))
+          return false;
+      }
+      return true;
+    };
+
+    auto i (std::find_if (fields.begin (), fields.end (), match));
+    return i != fields.end () ? std::optional<std::string> (i->value) : std::nullopt;
+  }
+
+  bool http_headers::
+  contains (const std::string& n) const
+  {
+    return get (n).has_value ();
+  }
+
+  void http_headers::
+  remove (const std::string& n)
+  {
+    auto match = [&n] (const http_field& f)
+    {
+      if (f.name.size () != n.size ()) return false;
+      for (std::size_t i (0); i < n.size (); ++i)
+      {
+        if (std::tolower (static_cast<unsigned char> (f.name[i])) !=
+            std::tolower (static_cast<unsigned char> (n[i])))
+          return false;
+      }
+      return true;
+    };
+    fields.erase (std::remove_if (fields.begin (), fields.end (), match), fields.end ());
+  }
+
+  bool
+  operator== (const http_headers& x, const http_headers& y) noexcept
+  {
+    return x.fields == y.fields;
+  }
+
+  bool
+  operator!= (const http_headers& x, const http_headers& y) noexcept
+  {
+    return !(x == y);
   }
 }

@@ -16,39 +16,31 @@ namespace launcher
 
   // Async manifest parser with parallel processing.
   //
-  template <typename F = manifest_format, typename T = manifest_traits<F>>
-  class basic_manifest_parser
+  class manifest_parser
   {
   public:
-    using manifest_type = basic_manifest<F, T>;
-    using string_type = typename T::string_type;
-
     // Parse single manifest asynchronously.
     //
-    static asio::awaitable<manifest_type>
-    parse (const string_type& json_str,
+    static asio::awaitable<manifest>
+    parse (const std::string& json_str,
            manifest_format kind = manifest_format::update);
 
     // Parse multiple manifests in parallel.
     //
-    static asio::awaitable<std::vector<manifest_type>>
-    parse_parallel (const std::vector<string_type>& json_strings,
-                   manifest_format kind = manifest_format::update);
+    static asio::awaitable<std::vector<manifest>>
+    parse_parallel (const std::vector<std::string>& json_strings,
+                    manifest_format kind = manifest_format::update);
 
     // Validate manifest asynchronously.
     //
     static asio::awaitable<bool>
-    validate (const manifest_type& manifest);
+    validate (const manifest& m);
 
     // Validate multiple manifests in parallel.
     //
     static asio::awaitable<std::vector<bool>>
-    validate_parallel (const std::vector<manifest_type>& manifests);
+    validate_parallel (const std::vector<manifest>& manifests);
   };
-
-  // Type alias for common instantiation.
-  //
-  using manifest_parser = basic_manifest_parser<manifest_format>;
 
   // Parse update manifest from JSON string.
   //
@@ -65,5 +57,3 @@ namespace launcher
   asio::awaitable<bool>
   validate_manifest (const manifest& m);
 }
-
-#include <launcher/manifest/manifest-parser.txx>

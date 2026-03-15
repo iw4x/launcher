@@ -3,6 +3,7 @@
 #include <string>
 #include <optional>
 #include <vector>
+#include <functional>
 
 #include <boost/asio.hpp>
 #include <boost/asio/ssl.hpp>
@@ -30,39 +31,15 @@ namespace launcher
     std::uint64_t reset;       // Unix timestamp when the rate limit resets
     std::uint32_t used;        // Number of requests used
 
-    github_rate_limit ()
-      : limit (0), remaining (0), reset (0), used (0) {}
+    github_rate_limit ();
 
     bool
-    is_exceeded () const {return remaining == 0;}
+    is_exceeded () const;
 
     // Calculate seconds until reset.
     //
     std::uint64_t
-    seconds_until_reset () const
-    {
-      // First, let's grab the current time. We are using system_clock here
-      // because the reset member is a wall-clock timestamp.
-      //
-      auto now (std::chrono::system_clock::now ());
-
-      // Now convert this to seconds since the epoch.
-      //
-      auto now_sec (
-        std::chrono::duration_cast<std::chrono::seconds> (
-          now.time_since_epoch ()).count ());
-
-      // The count comes back as a signed type, so we need to cast it to
-      // uint64_t to match our reset variable.
-      //
-      auto n (static_cast<std::uint64_t> (now_sec));
-
-      // Finally, check if we've passed the mark. If the reset time is still
-      // in the future, return the difference. Otherwise, we are already
-      // there, so return 0.
-      //
-      return reset > n ? reset - n : 0;
-    }
+    seconds_until_reset () const;
   };
 
   // GitHub API response.
@@ -76,13 +53,13 @@ namespace launcher
     std::optional<github_rate_limit> rate_limit;
 
     bool
-    success () const {return status_code >= 200 && status_code < 300;}
+    success () const;
 
     bool
-    empty () const {return body.empty ();}
+    empty () const;
 
     bool
-    is_rate_limited () const {return status_code == 403 || status_code == 429;}
+    is_rate_limited () const;
   };
 
   // GitHub API traits for customization.
@@ -161,27 +138,20 @@ namespace launcher
     // Default User-Agent header.
     //
     static std::string
-    user_agent ()
-    {
-      return "iw4x-launcher/1.1";
-    }
+    user_agent ();
 
     // API version header.
     //
     static std::string
-    api_version ()
-    {
-      return "2026-03-10";
-    }
+    api_version ();
   };
 
   // GitHub API client with async/coroutine support.
   //
-  template <typename T = github_api_traits>
   class github_api
   {
   public:
-    using traits_type = T;
+    using traits_type = github_api_traits;
     using request_type = traits_type::request_type;
     using response_type = traits_type::response_type;
     using endpoint_type = traits_type::endpoint_type;
@@ -208,22 +178,15 @@ namespace launcher
     // Set authentication token.
     //
     void
-    set_token (std::string token) {token_ = std::move (token);}
+    set_token (std::string token);
 
     // Set progress callback for rate limit notifications.
-    //
-    // The callback will be invoked when rate limiting occurs, with parameters:
-    // - message: Description of what's happening
-    // - seconds_remaining: Time until rate limit reset (updated each second)
     //
     using progress_callback_type =
       std::function<void (const std::string& message, std::uint64_t seconds_remaining)>;
 
     void
-    set_progress_callback (progress_callback_type callback)
-    {
-      progress_callback_ = std::move (callback);
-    }
+    set_progress_callback (progress_callback_type callback);
 
     // Execute generic request.
     //
@@ -335,5 +298,3 @@ namespace launcher
     handle_rate_limit (const github_rate_limit&);
   };
 }
-
-#include <launcher/github/github-api.txx>

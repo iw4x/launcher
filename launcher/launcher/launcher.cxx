@@ -12,7 +12,6 @@
 #include <boost/asio/detached.hpp>
 #include <boost/asio/experimental/awaitable_operators.hpp>
 #include <boost/asio/experimental/parallel_group.hpp>
-#include <boost/asio/experimental/awaitable_operators.hpp>
 
 #include <boost/process.hpp>
 
@@ -25,8 +24,6 @@
 #include <launcher/launcher-progress.hxx>
 #include <launcher/launcher-steam.hxx>
 #include <launcher/launcher-update.hxx>
-#include <launcher/launcher-log.hxx>
-
 #include <launcher/launcher-log.hxx>
 
 #ifdef __linux__
@@ -450,7 +447,7 @@ namespace launcher
       // all known hashes from both sources so we can attach integrity data to
       // the assets we are about to inject.
       //
-      unordered_map<string, manifest::hash_type> hashes;
+      unordered_map<string, launcher::hash> hashes;
       hashes.reserve (m.files.size () + raw.files.size ());
 
       auto idx ([&hashes] (const manifest& x)
