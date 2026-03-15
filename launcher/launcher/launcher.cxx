@@ -1304,44 +1304,68 @@ main (int argc, char* argv[])
 
   launcher::log::info (categories::launcher{}, "launcher {} starting up", HELLO_VERSION_ID);
 
-  try
+ try
   {
-    // Change the current working directory to the location of the launcher
-    // executable. This is important because the launcher is often invoked from
-    // a different directory (e.g., via command line), but it needs to operate
-    // relative to its own location, not the shell's working directory.
+    // We need to re-anchor the current working directory to the launcher
+    // executable's location. If we are invoked from a random directory via the
+    // command line, we do not want to start resolving relative paths against
+    // the shell's current working directory.
     //
     {
       error_code ec;
-      fs::path exe;
 
-#ifdef _WIN32
-      // On Windows, use GetModuleFileName.
+  #ifdef _WIN32
+      // On Windows, we rely on GetModuleFileNameW to figure out our location.
+      // Note that we cap the buffer at MAX_PATH. While this could theoretically
+      // truncate an extremely long path, for a launcher executable, it is
+      // practically sufficient.
       //
-      wchar_t buf[MAX_PATH];
-      if (GetModuleFileNameW (nullptr, buf, MAX_PATH) != 0)
-        exe = fs::path (buf);
-#else
-      // On Linux/Unix, /proc/self/exe is a symlink to the executable.
+      wchar_t b[MAX_PATH];
+      fs::path e (GetModuleFileNameW (nullptr, b, MAX_PATH) != 0 ? b : L"");
+  #else
+      // On Linux, we ask procfs. Resolving /proc/self/exe is the standard way
+      // to figure out our own physical location on disk.
       //
-      exe = fs::canonical ("/proc/self/exe", ec);
-#endif
+      fs::path e (fs::canonical ("/proc/self/exe", ec));
+  #endif
 
-      if (!exe.empty () && !ec)
+      if (!e.empty () && !ec)
       {
-        fs::path dir (exe.parent_path ());
-        fs::current_path (dir, ec);
+        fs::path d (e.parent_path ());
+        fs::current_path (d, ec);
 
         if (ec)
-        {
-          launcher::log::warning (categories::launcher{}, "unable to change working directory: {}", ec.message ());
-          cerr << "warning: unable to change to launcher directory: "
-               << ec.message () << endl;
-        }
+          launcher::log::warning (
+            categories::launcher {},
+            "unable to change working directory: {}",
+            ec.message ());
         else
-        {
-          launcher::log::trace_l2 (categories::launcher{}, "changed working directory to: {}", dir.string ());
-        }
+          launcher::log::trace_l2 (
+            categories::launcher {},
+            "changed working directory to: {}",
+            d.string ());
+      }
+      else
+      {
+        // We failed to resolve the executable location. Figure out the reason
+        // and log it with the context of the underlying system mechanism, since
+        // this usually means things are about to break.
+        //
+        std::string r (ec ? ec.message ()
+                          : "returned path is empty or truncated");
+
+#ifdef _WIN32
+        const char* m ("GetModuleFileNameW");
+  #else
+        const char* m ("/proc/self/exe");
+  #endif
+
+        launcher::log::error (
+          categories::launcher {},
+          "failed to resolve executable location via {}. "
+          "working directory cannot be changed. details: {}",
+          m,
+          r);
       }
     }
 
