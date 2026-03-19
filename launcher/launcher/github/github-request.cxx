@@ -13,14 +13,16 @@ namespace launcher
   }
 
   github_request::
-  github_request (method_type m, string ep)
-    : method (m), endpoint (move (ep))
+  github_request (method_type m, string e)
+    : method (m), endpoint (move (e))
   {
   }
 
   github_request& github_request::
   with_token (string t)
   {
+    // Stash the token so we can inject it into the authorization header later.
+    //
     token = move (t);
     return *this;
   }
@@ -33,22 +35,27 @@ namespace launcher
   }
 
   github_request& github_request::
-  with_header (string key, string value)
+  with_header (string k, string v)
   {
-    headers[move (key)] = move (value);
+    headers[move (k)] = move (v);
     return *this;
   }
 
   github_request& github_request::
-  with_query (string key, string value)
+  with_query (string k, string v)
   {
-    query_params[move (key)] = move (value);
+    // Just keep it in the map for now. We will construct the actual query
+    // string later when url() is called.
+    //
+    query_params[move (k)] = move (v);
     return *this;
   }
 
   github_request& github_request::
   with_per_page (uint32_t n)
   {
+    // GitHub uses 'per_page' to dictate pagination limits.
+    //
     return with_query ("per_page", to_string (n));
   }
 
@@ -59,21 +66,21 @@ namespace launcher
   }
 
   github_request& github_request::
-  with_state (const string& state)
+  with_state (const string& s)
   {
-    return with_query ("state", state);
+    return with_query ("state", s);
   }
 
   github_request& github_request::
-  with_sort (const string& sort)
+  with_sort (const string& s)
   {
-    return with_query ("sort", sort);
+    return with_query ("sort", s);
   }
 
   github_request& github_request::
-  with_direction (const string& dir)
+  with_direction (const string& d)
   {
-    return with_query ("direction", dir);
+    return with_query ("direction", d);
   }
 
   string github_request::
@@ -82,14 +89,19 @@ namespace launcher
     ostringstream os;
     os << endpoint;
 
+    // Only append the query string if we actually have parameters to send.
+    //
     if (!query_params.empty ())
     {
-      bool first (true);
-      for (const auto& [key, value] : query_params)
+      // keep track of the first parameter to handle the separator
+      //
+      bool f (true);
+
+      for (const auto& [k, v] : query_params)
       {
-        os << (first ? '?' : '&');
-        os << key << '=' << value;
-        first = false;
+        os << (f ? '?' : '&');
+        os << k << '=' << v;
+        f = false;
       }
     }
 
@@ -99,6 +111,9 @@ namespace launcher
   string github_request::
   method_string () const
   {
+    // Map our internal enum to the uppercase string representations that
+    // the underlying HTTP client expects.
+    //
     switch (method)
     {
       case method_type::get:     return "GET";
@@ -107,6 +122,9 @@ namespace launcher
       case method_type::patch:   return "PATCH";
       case method_type::delete_: return "DELETE";
     }
+
+    // Fall back to GET just in case we end up with something unexpected.
+    //
     return "GET";
   }
 }
