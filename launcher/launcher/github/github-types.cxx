@@ -1,7 +1,7 @@
 #include <launcher/github/github-types.hxx>
 
-#include <regex>
 #include <algorithm>
+#include <regex>
 #include <utility>
 
 using namespace std;
@@ -105,32 +105,35 @@ namespace launcher
   }
 
   optional<github_release::asset_type> github_release::
-  find_asset (const string& name) const
+  find_asset (const string& n) const
   {
     auto i (find_if (assets.begin (),
                      assets.end (),
-                     [&name] (const asset_type& a)
+                     [&n] (const asset_type& a)
     {
-      return a.name == name;
+      return a.name == n;
     }));
 
     return i != assets.end () ? optional<asset_type> (*i) : nullopt;
   }
 
   optional<github_release::asset_type> github_release::
-  find_asset_regex (const string& pattern) const
+  find_asset_regex (const string& p) const
   {
-    regex re (pattern);
+    regex re (p);
 
     auto i (find_if (assets.begin (),
-                          assets.end (),
-                          [&re] (const asset_type& a)
+                     assets.end (),
+                     [&re] (const asset_type& a)
     {
       return regex_match (a.name, re);
     }));
 
     return i != assets.end () ? optional<asset_type> (*i) : nullopt;
   }
+
+  // Comparison operators.
+  //
 
   bool
   operator== (const github_user& x, const github_user& y) noexcept

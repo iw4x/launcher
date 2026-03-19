@@ -8,132 +8,153 @@ namespace launcher
 {
   namespace
   {
-    template <typename... Args>
+    // Variadic helper to stitch together the API URL components. We use an
+    // ostringstream here since it handles type conversions, though we might
+    // want to keep an eye on allocation overhead if this gets hot in a tight
+    // loop.
+    //
+    template <typename... A>
     string
-    build_endpoint (Args&&... args)
+    build_endpoint (A&&... a)
     {
       ostringstream os;
       os << github_endpoint::api_base;
-      (os << ... << args);
+      (os << ... << a);
       return os.str ();
     }
   }
 
+  // Repository specific endpoints.
+  //
+  // We assume the owner and repo strings are already properly URL-encoded
+  // before they get here to avoid bad requests.
+  //
+
   string github_endpoint::
-  repo (const string& owner, const string& repo)
+  repo (const string& o, const string& r)
   {
-    return build_endpoint ("/repos/", owner, "/", repo);
+    return build_endpoint ("/repos/", o, "/", r);
   }
 
   string github_endpoint::
-  repo_releases (const string& owner, const string& repo)
+  repo_releases (const string& o, const string& r)
   {
-    return build_endpoint ("/repos/", owner, "/", repo, "/releases");
+    return build_endpoint ("/repos/", o, "/", r, "/releases");
   }
 
   string github_endpoint::
-  repo_release_latest (const string& owner, const string& repo)
+  repo_release_latest (const string& o, const string& r)
   {
-    return build_endpoint ("/repos/", owner, "/", repo, "/releases/latest");
+    // Grab the latest published release. Note that this skips pre-releases and
+    // drafts, which is usually exactly what we want for normal fetching.
+    //
+    return build_endpoint ("/repos/", o, "/", r, "/releases/latest");
   }
 
   string github_endpoint::
-  repo_release_tag (const string& owner,
-                    const string& repo,
-                    const string& tag)
+  repo_release_tag (const string& o, const string& r, const string& t)
   {
-    return build_endpoint ("/repos/", owner, "/", repo, "/releases/tags/", tag);
+    return build_endpoint ("/repos/", o, "/", r, "/releases/tags/", t);
   }
 
   string github_endpoint::
-  repo_release_id (const string& owner,
-                   const string& repo,
-                   uint64_t id)
+  repo_release_id (const string& o, const string& r, uint64_t i)
   {
-    return build_endpoint ("/repos/", owner, "/", repo, "/releases/", to_string (id));
+    return build_endpoint ("/repos/", o, "/", r, "/releases/", to_string (i));
+  }
+
+  // Commits, branches, and tags.
+  //
+
+  string github_endpoint::
+  repo_commits (const string& o, const string& r)
+  {
+    return build_endpoint ("/repos/", o, "/", r, "/commits");
   }
 
   string github_endpoint::
-  repo_commits (const string& owner, const string& repo)
+  repo_commit (const string& o, const string& r, const string& s)
   {
-    return build_endpoint ("/repos/", owner, "/", repo, "/commits");
+    return build_endpoint ("/repos/", o, "/", r, "/commits/", s);
   }
 
   string github_endpoint::
-  repo_commit (const string& owner,
-               const string& repo,
-               const string& sha)
+  repo_branches (const string& o, const string& r)
   {
-    return build_endpoint ("/repos/", owner, "/", repo, "/commits/", sha);
+    return build_endpoint ("/repos/", o, "/", r, "/branches");
   }
 
   string github_endpoint::
-  repo_branches (const string& owner, const string& repo)
+  repo_branch (const string& o, const string& r, const string& b)
   {
-    return build_endpoint ("/repos/", owner, "/", repo, "/branches");
+    return build_endpoint ("/repos/", o, "/", r, "/branches/", b);
   }
 
   string github_endpoint::
-  repo_branch (const string& owner,
-               const string& repo,
-               const string& branch)
+  repo_tags (const string& o, const string& r)
   {
-    return build_endpoint ("/repos/", owner, "/", repo, "/branches/", branch);
+    return build_endpoint ("/repos/", o, "/", r, "/tags");
+  }
+
+  // Issues.
+  //
+
+  string github_endpoint::
+  repo_issues (const string& o, const string& r)
+  {
+    return build_endpoint ("/repos/", o, "/", r, "/issues");
   }
 
   string github_endpoint::
-  repo_tags (const string& owner, const string& repo)
+  repo_issue (const string& o, const string& r, uint64_t n)
   {
-    return build_endpoint ("/repos/", owner, "/", repo, "/tags");
+    return build_endpoint ("/repos/", o, "/", r, "/issues/", to_string (n));
+  }
+
+  // Users and organizations.
+  //
+
+  string github_endpoint::
+  user (const string& u)
+  {
+    return build_endpoint ("/users/", u);
   }
 
   string github_endpoint::
-  repo_issues (const string& owner, const string& repo)
+  user_repos (const string& u)
   {
-    return build_endpoint ("/repos/", owner, "/", repo, "/issues");
+    return build_endpoint ("/users/", u, "/repos");
   }
 
   string github_endpoint::
-  repo_issue (const string& owner,
-              const string& repo,
-              uint64_t number)
+  org (const string& on)
   {
-    return build_endpoint ("/repos/", owner, "/", repo, "/issues/", to_string (number));
+    return build_endpoint ("/orgs/", on);
   }
 
   string github_endpoint::
-  user (const string& username)
+  org_repos (const string& on)
   {
-    return build_endpoint ("/users/", username);
+    return build_endpoint ("/orgs/", on, "/repos");
   }
 
-  string github_endpoint::
-  user_repos (const string& username)
-  {
-    return build_endpoint ("/users/", username, "/repos");
-  }
-
-  string github_endpoint::
-  org (const string& org_name)
-  {
-    return build_endpoint ("/orgs/", org_name);
-  }
-
-  string github_endpoint::
-  org_repos (const string& org_name)
-  {
-    return build_endpoint ("/orgs/", org_name, "/repos");
-  }
+  // Global or authenticated-user specific endpoints.
+  //
 
   string github_endpoint::
   user_authenticated ()
   {
+    // Resolves based on the currently provided authentication token.
+    //
     return build_endpoint ("/user");
   }
 
   string github_endpoint::
   rate_limit ()
   {
+    // Useful to poll before we do a heavy batch of requests to make sure we
+    // don't get arbitrarily throttled by the GitHub API.
+    //
     return build_endpoint ("/rate_limit");
   }
 }
