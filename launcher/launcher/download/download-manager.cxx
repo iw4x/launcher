@@ -12,113 +12,116 @@
 
 #include <launcher/http/http-client.hxx>
 
+using namespace std;
+
 namespace launcher
 {
-  download_manager::download_manager (boost::asio::io_context& ioc,
-                                      std::size_t max_parallel)
-    : ioc_ (ioc),
-      max_parallel_ (max_parallel)
+  download_manager::
+  download_manager (boost::asio::io_context& c,
+                    size_t m)
+    : ioc_ (c),
+      max_parallel_ (m)
   {
   }
 
   void
-  download_manager::set_max_parallel (std::size_t n)
+  download_manager::set_max_parallel (size_t n)
   {
     max_parallel_ = n;
   }
 
-  std::size_t
+  size_t
   download_manager::max_parallel () const
   {
     return max_parallel_;
   }
 
-  std::shared_ptr<launcher::download_task>
-  download_manager::add_task (download_request req)
+  shared_ptr<launcher::download_task>
+  download_manager::add_task (download_request r)
   {
-    auto task (std::make_shared<launcher::download_task> (std::move (req)));
-    tasks_.push_back (task);
-    return task;
+    auto t (make_shared<launcher::download_task> (move (r)));
+    tasks_.push_back (t);
+    return t;
   }
 
-  std::shared_ptr<launcher::download_task>
-  download_manager::add_task (download_request req, default_download_handler hdl)
+  shared_ptr<launcher::download_task>
+  download_manager::add_task (download_request r, default_download_handler h)
   {
-    auto task (std::make_shared<launcher::download_task> (std::move (req), std::move (hdl)));
-    tasks_.push_back (task);
-    return task;
+    auto t (make_shared<launcher::download_task> (move (r), move (h)));
+    tasks_.push_back (t);
+    return t;
   }
 
   void
-  download_manager::add_task (std::shared_ptr<launcher::download_task> task)
+  download_manager::add_task (shared_ptr<launcher::download_task> t)
   {
-    tasks_.push_back (std::move (task));
+    tasks_.push_back (move (t));
   }
 
-  const std::vector<std::shared_ptr<launcher::download_task>>&
+  const vector<shared_ptr<launcher::download_task>>&
   download_manager::tasks () const
   {
     return tasks_;
   }
 
-  std::vector<std::shared_ptr<launcher::download_task>>&
+  vector<shared_ptr<launcher::download_task>>&
   download_manager::tasks ()
   {
     return tasks_;
   }
 
-  std::size_t
+  size_t
   download_manager::total_count () const
   {
     return tasks_.size ();
   }
 
-  std::size_t
+  size_t
   download_manager::completed_count () const
   {
-    std::size_t count (0);
-    for (const auto& task : tasks_)
-      if (task->completed ())
-        ++count;
-    return count;
+    size_t c (0);
+    for (const auto& t : tasks_)
+      if (t->completed ())
+        ++c;
+    return c;
   }
 
-  std::size_t
+  size_t
   download_manager::failed_count () const
   {
-    std::size_t count (0);
-    for (const auto& task : tasks_)
-      if (task->failed ())
-        ++count;
-    return count;
+    size_t c (0);
+    for (const auto& t : tasks_)
+      if (t->failed ())
+        ++c;
+    return c;
   }
 
-  std::size_t
+  size_t
   download_manager::active_count () const
   {
-    std::size_t count (0);
-    for (const auto& task : tasks_)
-      if (task->active ())
-        ++count;
-    return count;
+    size_t c (0);
+    for (const auto& t : tasks_)
+      if (t->active ())
+        ++c;
+    return c;
   }
 
-  std::uint64_t
+  uint64_t
   download_manager::total_bytes () const
   {
-    std::uint64_t total (0);
-    for (const auto& task : tasks_)
-      total += task->total_bytes.load ();
-    return total;
+    uint64_t b (0);
+    for (const auto& t : tasks_)
+      b += t->total_bytes.load ();
+    return b;
   }
 
-  std::uint64_t
+  uint64_t
   download_manager::downloaded_bytes () const
   {
-    std::uint64_t total (0);
-    for (const auto& task : tasks_)
-      total += task->downloaded_bytes.load ();
-    return total;
+    uint64_t b (0);
+    for (const auto& t : tasks_)
+      b += t->downloaded_bytes.load ();
+    return b;
   }
 
   download_progress
@@ -128,36 +131,36 @@ namespace launcher
   }
 
   void
-  download_manager::set_task_completion_callback (completion_callback cb)
+  download_manager::set_task_completion_callback (completion_callback c)
   {
-    on_task_complete_ = std::move (cb);
+    on_task_complete_ = move (c);
   }
 
   void
-  download_manager::set_batch_completion_callback (batch_completion_callback cb)
+  download_manager::set_batch_completion_callback (batch_completion_callback c)
   {
-    on_batch_complete_ = std::move (cb);
+    on_batch_complete_ = move (c);
   }
 
   void
   download_manager::cancel_all ()
   {
-    for (auto& task : tasks_)
-      task->cancel ();
+    for (auto& t : tasks_)
+      t->cancel ();
   }
 
   void
   download_manager::pause_all ()
   {
-    for (auto& task : tasks_)
-      task->pause ();
+    for (auto& t : tasks_)
+      t->pause ();
   }
 
   void
   download_manager::resume_all ()
   {
-    for (auto& task : tasks_)
-      task->resume ();
+    for (auto& t : tasks_)
+      t->resume ();
   }
 
   void
@@ -166,12 +169,14 @@ namespace launcher
     tasks_.clear ();
   }
 
-  std::vector<std::shared_ptr<launcher::download_task>>
+  vector<shared_ptr<launcher::download_task>>
   download_manager::sort_by_priority () const
   {
-    std::vector<std::shared_ptr<launcher::download_task>> r (tasks_);
+    vector<shared_ptr<launcher::download_task>> r (tasks_);
 
-    std::stable_sort (r.begin (), r.end (), [] (const auto& a, const auto& b)
+    // Keep the insertion order stable for tasks that share the same priority.
+    //
+    stable_sort (r.begin (), r.end (), [] (const auto& a, const auto& b)
     {
       return a->request.priority > b->request.priority;
     });
@@ -185,59 +190,66 @@ namespace launcher
     if (tasks_.empty ())
       co_return;
 
-    auto sorted_tasks (sort_by_priority ());
+    auto s (sort_by_priority ());
 
-    std::vector<std::shared_ptr<launcher::download_task>> active_tasks;
-    std::size_t next_task_index (0);
+    vector<shared_ptr<launcher::download_task>> a;
+    size_t i (0);
 
-    while (next_task_index < sorted_tasks.size () &&
-           active_tasks.size () < max_parallel_)
+    // Seed the initial batch of active tasks. We strictly adhere to our
+    // concurrency limit to avoid swamping the io_context right out of the gate.
+    //
+    while (i < s.size () && a.size () < max_parallel_)
     {
-      auto task (sorted_tasks[next_task_index++]);
+      auto t (s[i++]);
 
-      if (task->completed () || task->failed ())
+      if (t->completed () || t->failed ())
         continue;
 
-      active_tasks.push_back (task);
+      a.push_back (t);
 
       boost::asio::co_spawn (
           ioc_,
-          this->download_task (task),
+          this->download_task (t),
           boost::asio::detached);
     }
 
-    while (!active_tasks.empty () || next_task_index < sorted_tasks.size ())
+    // Keep the queue hot until we run out of things to process.
+    //
+    while (!a.empty () || i < s.size ())
     {
-      active_tasks.erase (std::remove_if (active_tasks.begin (),
-                                          active_tasks.end (),
-                                          [this] (const auto& t)
+      // Reap completed or failed tasks from our tracking vector.
+      //
+      a.erase (remove_if (a.begin (), a.end (), [this] (const auto& t)
       {
-        bool done (t->completed () || t->failed ());
+        bool d (t->completed () || t->failed ());
 
-        if (done && on_task_complete_)
+        if (d && on_task_complete_)
           on_task_complete_ (t);
 
-        return done;
-      }), active_tasks.end ());
+        return d;
+      }), a.end ());
 
-      while (next_task_index < sorted_tasks.size () &&
-             active_tasks.size () < max_parallel_)
+      // Top up the active list up to our allowed parallelism.
+      //
+      while (i < s.size () && a.size () < max_parallel_)
       {
-        auto task (sorted_tasks[next_task_index++]);
+        auto t (s[i++]);
 
-        if (task->completed () || task->failed ())
+        if (t->completed () || t->failed ())
           continue;
 
-        active_tasks.push_back (task);
+        a.push_back (t);
 
         boost::asio::co_spawn (
             ioc_,
-            this->download_task (task),
+            this->download_task (t),
             boost::asio::detached);
       }
 
-      boost::asio::steady_timer timer (ioc_, std::chrono::milliseconds (50));
-      co_await timer.async_wait (boost::asio::use_awaitable);
+      // Yield back to the event loop so we aren't pointlessly spinning the CPU.
+      //
+      boost::asio::steady_timer tm (ioc_, chrono::milliseconds (50));
+      co_await tm.async_wait (boost::asio::use_awaitable);
     }
 
     if (on_batch_complete_)
@@ -245,122 +257,139 @@ namespace launcher
   }
 
   boost::asio::awaitable<void>
-  download_manager::download_task (std::shared_ptr<launcher::download_task> task)
+  download_manager::download_task (shared_ptr<launcher::download_task> t)
   {
-    if (!task->request.valid ())
+    if (!t->request.valid ())
     {
-      task->set_error (download_error ("Invalid download request"));
+      t->set_error (download_error ("Invalid download request"));
       co_return;
     }
 
-    task->response.start_time = std::chrono::steady_clock::now ();
+    t->response.start_time = chrono::steady_clock::now ();
 
-    http_client_traits traits;
-    traits.connect_timeout = task->request.connect_timeout * 1000;
-    traits.request_timeout = task->request.transfer_timeout * 1000;
-    traits.follow_redirects = true;
+    // The client traits expect our timeouts in milliseconds.
+    //
+    http_client_traits tr;
+    tr.connect_timeout = t->request.connect_timeout * 1000;
+    tr.request_timeout = t->request.transfer_timeout * 1000;
+    tr.follow_redirects = true;
 
-    http_client client (ioc_, traits);
+    http_client c (ioc_, tr);
 
-    std::optional<std::uint64_t> resume_from;
-    if (task->request.resume && fs::exists (task->request.target))
+    optional<uint64_t> r;
+
+    // Check if we have a partial payload lying around on disk that we can
+    // resume from.
+    //
+    if (t->request.resume && fs::exists (t->request.target))
     {
-      std::error_code ec;
-      std::uint64_t existing_size (fs::file_size (task->request.target, ec));
+      error_code ec;
+      uint64_t s (fs::file_size (t->request.target, ec));
 
-      if (!ec && existing_size > 0)
+      if (!ec && s > 0)
       {
-        resume_from = existing_size;
-        task->update_progress (existing_size,
-                              task->request.expected_size.value_or (0));
+        r = s;
+        t->update_progress (s, t->request.expected_size.value_or (0));
       }
     }
 
-    bool success (false);
-    for (std::size_t i (0); i < task->request.urls.size (); ++i)
+    bool ok (false);
+    for (size_t i (0); i < t->request.urls.size (); ++i)
     {
-      if (task->should_cancel ())
+      if (t->should_cancel ())
       {
-        task->set_error (download_error ("Download cancelled"));
+        t->set_error (download_error ("Download cancelled"));
         break;
       }
 
-      while (task->should_pause ())
+      // Busy-wait if paused. The 100ms interval is arbitrary but responsive
+      // enough without being a drag on the reactor.
+      //
+      while (t->should_pause ())
       {
-        task->set_state (download_state::paused);
-        boost::asio::steady_timer timer (ioc_, std::chrono::milliseconds (100));
-        co_await timer.async_wait (boost::asio::use_awaitable);
+        t->set_state (download_state::paused);
+        boost::asio::steady_timer tm (ioc_, chrono::milliseconds (100));
+        co_await tm.async_wait (boost::asio::use_awaitable);
       }
 
-      const auto& url (task->request.urls[i]);
+      const auto& u (t->request.urls[i]);
 
       try
       {
-        task->set_state (download_state::connecting);
-        task->set_state (download_state::downloading);
+        t->set_state (download_state::connecting);
+        t->set_state (download_state::downloading);
 
-        auto progress_callback ([task, this](std::uint64_t transferred,
-                                              std::uint64_t total)
+        auto cb ([t, this] (uint64_t tx, uint64_t tot)
         {
-          if (task->should_cancel ())
-            throw std::runtime_error ("Download cancelled");
+          if (t->should_cancel ())
+            throw runtime_error ("Download cancelled");
 
-          task->update_progress (transferred, total);
-          task->response.progress.speed_bps = 0; // calculated by caller/ui
+          t->update_progress (tx, tot);
+          t->response.progress.speed_bps = 0;
         });
 
-        std::uint64_t bytes_downloaded (
-          co_await client.download (url,
-                                    task->request.target.string (),
-                                    progress_callback,
-                                    resume_from,
-                                    task->request.rate_limit_bytes_per_second));
+        uint64_t b (
+          co_await c.download (u,
+                               t->request.target.string (),
+                               cb,
+                               r,
+                               t->request.rate_limit_bytes_per_second));
 
-        task->update_progress (bytes_downloaded, bytes_downloaded);
-        task->response.http_status_code = 200;
-        task->response.server_reported_size = bytes_downloaded;
+        t->update_progress (b, b);
+        t->response.http_status_code = 200;
+        t->response.server_reported_size = b;
 
-        task->response.successful_url_index = i;
-        task->set_state (download_state::completed);
-        success = true;
+        t->response.successful_url_index = i;
+        t->set_state (download_state::completed);
+        ok = true;
         break;
       }
-      catch (const std::exception& e)
+      catch (const exception& e)
       {
-        std::string s (e.what ());
+        string m (e.what ());
 
-        if (s.find ("416") != std::string::npos && resume_from)
+        // The server threw a 416 (Requested Range Not Satisfiable). This
+        // usually means our local partial file is completely mangled or we
+        // actually already downloaded the whole thing and got confused trying
+        // to resume. Nuke the file and retry the exact same URL from scratch.
+        //
+        if (m.find ("416") != string::npos && r)
         {
-          std::error_code ec;
-          fs::remove (task->request.target, ec);
-          resume_from = std::nullopt;
+          error_code ec;
+          fs::remove (t->request.target, ec);
+          r = nullopt;
 
-          --i;
+          --i; // keep the index exactly where it is for the retry.
           continue;
         }
 
-        if (i == task->request.urls.size () - 1)
+        // We've exhausted our list of fallback mirrors. Bail out.
+        //
+        if (i == t->request.urls.size () - 1)
         {
-          task->set_error (download_error (
-              std::string ("Download failed: ") + e.what (),
-              url,
+          t->set_error (download_error (
+              string ("Download failed: ") + m,
+              u,
               0));
         }
         else
         {
-          if (task->request.resume && fs::exists (task->request.target))
+          // We have more URLs to try. Check the partial file size again in case
+          // this last failed attempt managed to write some bytes before blowing
+          // up.
+          //
+          if (t->request.resume && fs::exists (t->request.target))
           {
-            std::error_code ec;
-            std::uint64_t existing_size (
-              fs::file_size (task->request.target, ec));
+            error_code ec;
+            uint64_t s (fs::file_size (t->request.target, ec));
 
-            if (!ec && existing_size > 0)
-              resume_from = existing_size;
+            if (!ec && s > 0)
+              r = s;
           }
         }
       }
     }
 
-    task->response.end_time = std::chrono::steady_clock::now ();
+    t->response.end_time = chrono::steady_clock::now ();
   }
 }
