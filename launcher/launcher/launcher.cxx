@@ -492,7 +492,7 @@ namespace launcher
       // them into manifest archives, trying to resolve their hash from the
       // indices we built above.
       //
-      auto inject ([&] (const vector<ga>& assets, const string& filter = "")
+      auto inject ([&] (manifest& target, const vector<ga>& assets, const string& filter = "")
       {
         for (const auto& a : assets)
         {
@@ -517,20 +517,22 @@ namespace launcher
             x.hash = it->second;
           }
 
-          m.archives.push_back (std::move (x));
+          target.archives.push_back (std::move (x));
         }
       });
 
-      m.archives.reserve (m.archives.size () + r.raw.assets.size ());
-      inject (r.raw.assets);
+      manifest m_raw;
+      m_raw.archives.reserve (r.raw.assets.size ());
+      inject (m_raw, r.raw.assets);
 
     #ifdef __linux__
       // On Linux, we need the steam helper binaries which live in a
       // separate repo.
       //
+      manifest m_helper;
       launcher::log::trace_l3 (categories::launcher{}, "injecting linux steam helper assets");
-      inject (r.helper.assets, "steam.exe");
-      inject (r.helper.assets, "steam_api64.dll");
+      inject (m_helper, r.helper.assets, "steam.exe");
+      inject (m_helper, r.helper.assets, "steam_api64.dll");
     #endif
 
       if (!r.dlc_manifest_json.empty ())
@@ -560,6 +562,15 @@ namespace launcher
       //
       launcher::log::trace_l2 (categories::launcher{}, "planning reconciliation against local cache...");
       auto plan (cache_.get_reconciler ().plan (m, ct::client, r.client.tag_name));
+
+      auto plan_raw (cache_.get_reconciler ().plan (m_raw, ct::rawfiles, r.raw.tag_name));
+      plan.insert (plan.end (), std::make_move_iterator (plan_raw.begin ()), std::make_move_iterator (plan_raw.end ()));
+
+    #ifdef __linux__
+      auto plan_helper (cache_.get_reconciler ().plan (m_helper, ct::helper, r.helper.tag_name));
+      plan.insert (plan.end (), std::make_move_iterator (plan_helper.begin ()), std::make_move_iterator (plan_helper.end ()));
+    #endif
+
       launcher::log::debug (categories::launcher{}, "reconciler produced a plan with {} items", plan.size ());
 
       unordered_map<sv, const manifest_file*> m_files;
@@ -704,6 +715,16 @@ namespace launcher
         auto ps (
           cache_.get_reconciler ().plan (m, ct::client, r.client.tag_name));
 
+        auto ps_raw (
+          cache_.get_reconciler ().plan (m_raw, ct::rawfiles, r.raw.tag_name));
+        ps.insert (ps.end (), std::make_move_iterator (ps_raw.begin ()), std::make_move_iterator (ps_raw.end ()));
+
+    #ifdef __linux__
+        auto ps_helper (
+          cache_.get_reconciler ().plan (m_helper, ct::helper, r.helper.tag_name));
+        ps.insert (ps.end (), std::make_move_iterator (ps_helper.begin ()), std::make_move_iterator (ps_helper.end ()));
+    #endif
+
         size_t n (0);
 
         for (auto& p: ps)
@@ -812,8 +833,17 @@ namespace launcher
       }
 
       unordered_map<string, const ma*> amap;
-      for (const auto& a : m.archives)
-        amap[manifest_coordinator::resolve_path (a, root).string ()] = &a;
+      auto add_to_amap = [&] (const manifest& mani)
+      {
+        for (const auto& a : mani.archives)
+          amap[manifest_coordinator::resolve_path (a, root).string ()] = &a;
+      };
+
+      add_to_amap (m);
+      add_to_amap (m_raw);
+    #ifdef __linux__
+      add_to_amap (m_helper);
+    #endif
 
       // Handle archives. If a downloaded item is a zip and appears in our
       // manifest archive list, we extract it and track the contents.
