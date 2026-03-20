@@ -991,12 +991,47 @@ namespace launcher
 
       if (!success)
       {
-        launcher::log::error (categories::launcher{}, "proton execution failed");
-        cerr << "error: execution failed\n" << std::flush;
-        co_return 1;
+        launcher::log::warning (categories::launcher{}, "proton execution failed, attempting fallback to wine");
+        cerr << "warning: proton execution failed, falling back to wine...\n" << std::flush;
+
+        try
+        {
+          namespace bp = boost::process;
+          string wine_exe (bp::search_path ("wine").string ());
+
+          if (wine_exe.empty ())
+          {
+            launcher::log::error (categories::launcher{}, "wine not found in PATH");
+            cerr << "error: wine is not installed or not in PATH\n" << std::flush;
+            co_return 1;
+          }
+
+          vector<string> args;
+          args.push_back (binary_path.string ());
+          args.insert (args.end (), ctx_.proton_arguments.begin (), ctx_.proton_arguments.end ());
+
+          launcher::log::info (categories::launcher{}, "launching via wine: {} {}", wine_exe, binary_path.string ());
+          bp::child game (
+            wine_exe,
+            bp::args (args),
+            bp::start_dir (ctx_.install_location.string ())
+          );
+
+          game.detach ();
+          launcher::log::info (categories::launcher{}, "wine game process detached");
+        }
+        catch (const exception& e)
+        {
+          launcher::log::error (categories::launcher{}, "failed to launch game via wine: {}", e.what ());
+          cerr << "error: failed to launch game via wine: " << e.what () << "\n" << std::flush;
+          co_return 1;
+        }
+      }
+      else
+      {
+        launcher::log::info (categories::launcher{}, "proton execution initiated");
       }
 
-      launcher::log::info (categories::launcher{}, "proton execution initiated");
       co_return 0;
     }
 #endif
