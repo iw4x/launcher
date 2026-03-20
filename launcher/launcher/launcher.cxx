@@ -666,6 +666,81 @@ namespace launcher
         };
       }
 
+      const auto& root (ctx_.install_location);
+
+      auto post_process = [&] (const auto& current_plan) -> asio::awaitable<void>
+      {
+        launcher::log::trace_l2 (categories::launcher{}, "post-processing downloaded files (tracking and extracting)");
+
+        // Track direct downloads first.
+        //
+        for (const auto& item : current_plan)
+        {
+          if (item.action == reconcile_action::download && fs::exists (item.path))
+          {
+            launcher::log::trace_l3 (categories::launcher{}, "tracking raw download: {}", item.path);
+            cache_.track (item.path, item.component, item.version, item.expected_hash);
+          }
+        }
+
+        unordered_map<string, const ma*> amap;
+        auto add_to_amap = [&] (const manifest& mani)
+        {
+          for (const auto& a : mani.archives)
+            amap[manifest_coordinator::resolve_path (a, root).string ()] = &a;
+        };
+
+        add_to_amap (m);
+        add_to_amap (m_raw);
+      #ifdef __linux__
+        add_to_amap (m_helper);
+      #endif
+
+        // Handle archives. If a downloaded item is a zip and appears in our
+        // manifest archive list, we extract it and track the contents.
+        //
+        for (const auto& item : current_plan)
+        {
+          if (item.action != reconcile_action::download) continue;
+
+          fs::path p (item.path);
+          if (p.extension () != ".zip" && p.extension () != ".ZIP") continue;
+
+          auto it (amap.find (p.string ()));
+          if (it == amap.end ()) continue;
+
+          const auto* arch (it->second);
+
+          try
+          {
+            launcher::log::info (categories::launcher{}, "extracting downloaded archive: {}", p.string ());
+            co_await manifest_coordinator::extract_archive (*arch, p, root);
+
+            vector<fs::path> extracted;
+            extracted.reserve (arch->files.size ());
+
+            for (const auto& f : arch->files)
+            {
+              fs::path ep (manifest_coordinator::resolve_path (f, root));
+              extracted.push_back (std::move (ep));
+            }
+
+            launcher::log::trace_l3 (categories::launcher{}, "tracking {} extracted files from archive", extracted.size ());
+            cache_.track (extracted, item.component, item.version);
+
+            std::error_code ec;
+            fs::remove (p, ec);
+            if (ec)
+              launcher::log::warning (categories::launcher{}, "failed to delete extracted archive {}: {}", p.string (), ec.message ());
+          }
+          catch (const exception& e)
+          {
+            launcher::log::error (categories::launcher{}, "extraction failure for {}: {}", arch->name, e.what ());
+            throw runtime_error ("extraction failure: " + arch->name + ": " + e.what ());
+          }
+        }
+      };
+
       // Only show the progress UI if there are actual downloads.
       //
       if (download_count > 0)
@@ -673,30 +748,54 @@ namespace launcher
         launcher::log::info (categories::launcher{}, "starting {} downloads", download_count);
         progress_.start ();
 
-        asio::co_spawn (ioc_, downloads_.execute_all (), asio::detached);
-
-        // Wait for the queue to drain.
-        //
-        asio::steady_timer timer (ioc_);
-        while (downloads_.completed_count () + downloads_.failed_count () <
-              downloads_.total_count ())
+        auto monitor_loop = [&]() -> asio::awaitable<void>
         {
-          std::erase_if (tasks, [&] (const auto& kv)
+          asio::steady_timer timer (ioc_);
+          while (!tasks.empty ())
           {
-            if (kv.first->completed () || kv.first->failed ())
+            std::erase_if (tasks, [&] (const auto& kv)
             {
-              progress_.remove_entry (kv.second);
-              return true;
-            }
-            return false;
-          });
+              if (kv.first->completed () || kv.first->failed ())
+              {
+                kv.first->on_progress = nullptr; // disconnect
+                progress_.remove_entry (kv.second);
+                return true;
+              }
+              return false;
+            });
 
-          timer.expires_after (chrono::milliseconds (25));
-          co_await timer.async_wait (asio::use_awaitable);
-        }
+            if (!tasks.empty ())
+            {
+              timer.expires_after (chrono::milliseconds (25));
+              co_await timer.async_wait (asio::use_awaitable);
+            }
+          }
+        };
+
+        auto [ord, ex_dl, ex_ui] = co_await asio::experimental::make_parallel_group (
+          asio::co_spawn (ioc_, downloads_.execute_all (), asio::deferred),
+          asio::co_spawn (ioc_, monitor_loop (), asio::deferred)
+        ).async_wait (asio::experimental::wait_for_all (), asio::use_awaitable);
+
+        if (ex_dl) std::rethrow_exception (ex_dl);
+        if (ex_ui) std::rethrow_exception (ex_ui);
 
         launcher::log::debug (categories::launcher{}, "primary download pass finished ({} completed, {} failed)",
                               downloads_.completed_count (), downloads_.failed_count ());
+
+        co_await progress_.stop ();
+
+        // Sleep briefly to yield to OS and ensure file handles are genuinely
+        // flushed before post-processing.
+        //
+        asio::steady_timer flush_timer (ioc_);
+        flush_timer.expires_after (chrono::milliseconds (100));
+        co_await flush_timer.async_wait (asio::use_awaitable);
+
+        // Track and extract first pass before verification checks the cache
+        // again
+        //
+        co_await post_process (plan);
 
         // Second pass: unconditionally re-check the filesystem.
         //
@@ -780,112 +879,55 @@ namespace launcher
         if (n > 0)
         {
           launcher::log::info (categories::launcher{}, "re-downloading {} stragglers after verification", n);
-          asio::co_spawn (ioc_, downloads_.execute_all (), asio::detached);
+          progress_.start ();
 
-          while (downloads_.completed_count () + downloads_.failed_count () <
-                downloads_.total_count ())
+          auto monitor_loop_verify = [&]() -> asio::awaitable<void>
           {
-            // Prune completed or failed tasks from the UI list.
-            //
-            erase_if (tasks, [&] (const auto& kv)
+            asio::steady_timer timer (ioc_);
+            while (!tasks.empty ())
             {
-              if (kv.first->completed () || kv.first->failed ())
+              std::erase_if (tasks, [&] (const auto& kv)
               {
-                progress_.remove_entry (kv.second);
-                return true;
-              }
-              return false;
-            });
+                if (kv.first->completed () || kv.first->failed ())
+                {
+                  kv.first->on_progress = nullptr; // disconnect
+                  progress_.remove_entry (kv.second);
+                  return true;
+                }
+                return false;
+              });
 
-            timer.expires_after (chrono::milliseconds (25));
-            co_await timer.async_wait (asio::use_awaitable);
-          }
+              if (!tasks.empty ())
+              {
+                timer.expires_after (chrono::milliseconds (25));
+                co_await timer.async_wait (asio::use_awaitable);
+              }
+            }
+          };
+
+          auto [ord_v, ex_dl_v, ex_ui_v] = co_await asio::experimental::make_parallel_group (
+            asio::co_spawn (ioc_, downloads_.execute_all (), asio::deferred),
+            asio::co_spawn (ioc_, monitor_loop_verify (), asio::deferred)
+          ).async_wait (asio::experimental::wait_for_all (), asio::use_awaitable);
+
+          if (ex_dl_v) std::rethrow_exception (ex_dl_v);
+          if (ex_ui_v) std::rethrow_exception (ex_ui_v);
+
+          co_await progress_.stop ();
 
           if (downloads_.failed_count () > 0)
           {
             launcher::log::error (categories::launcher{}, "download failed after verification pass. aborting.");
-            co_await progress_.stop ();
             throw runtime_error ("download failed after verification pass");
           }
+
+          // Track and extract second pass
+          //
+          co_await post_process (ps);
         }
         else
         {
           launcher::log::debug (categories::launcher{}, "verification pass clean, no stragglers found");
-        }
-
-        co_await progress_.stop ();
-      }
-
-      // Post-process downloads (extraction).
-      //
-      const auto& root (ctx_.install_location);
-      launcher::log::trace_l2 (categories::launcher{}, "post-processing downloaded files (tracking and extracting)");
-
-      // Track direct downloads first.
-      //
-      for (const auto& item : plan)
-      {
-        if (item.action == reconcile_action::download && fs::exists (item.path))
-        {
-          launcher::log::trace_l3 (categories::launcher{}, "tracking raw download: {}", item.path);
-          cache_.track (item.path, item.component, item.version, item.expected_hash);
-        }
-      }
-
-      unordered_map<string, const ma*> amap;
-      auto add_to_amap = [&] (const manifest& mani)
-      {
-        for (const auto& a : mani.archives)
-          amap[manifest_coordinator::resolve_path (a, root).string ()] = &a;
-      };
-
-      add_to_amap (m);
-      add_to_amap (m_raw);
-    #ifdef __linux__
-      add_to_amap (m_helper);
-    #endif
-
-      // Handle archives. If a downloaded item is a zip and appears in our
-      // manifest archive list, we extract it and track the contents.
-      //
-      for (const auto& item : plan)
-      {
-        if (item.action != reconcile_action::download) continue;
-
-        fs::path p (item.path);
-        if (p.extension () != ".zip" && p.extension () != ".ZIP") continue;
-
-        auto it (amap.find (p.string ()));
-        if (it == amap.end ()) continue;
-
-        const auto* arch (it->second);
-
-        try
-        {
-          launcher::log::info (categories::launcher{}, "extracting downloaded archive: {}", p.string ());
-          co_await manifest_coordinator::extract_archive (*arch, p, root);
-
-          vector<fs::path> extracted;
-          extracted.reserve (arch->files.size ());
-
-          for (const auto& f : arch->files)
-          {
-            fs::path ep (manifest_coordinator::resolve_path (f, root));
-            extracted.push_back (std::move (ep));
-          }
-
-          launcher::log::trace_l3 (categories::launcher{}, "tracking {} extracted files from archive", extracted.size ());
-          cache_.track (extracted, item.component, item.version);
-
-          std::error_code ec;
-          fs::remove (p, ec);
-          if (ec)
-            launcher::log::warning (categories::launcher{}, "failed to delete extracted archive {}: {}", p.string (), ec.message ());
-        }
-        catch (const exception& e)
-        {
-          launcher::log::error (categories::launcher{}, "extraction failure for {}: {}", arch->name, e.what ());
-          throw runtime_error ("extraction failure: " + arch->name + ": " + e.what ());
         }
       }
 
@@ -950,7 +992,7 @@ namespace launcher
       if (!success)
       {
         launcher::log::error (categories::launcher{}, "proton execution failed");
-        cerr << "error: execution failed\n";
+        cerr << "error: execution failed\n" << std::flush;
         co_return 1;
       }
 
@@ -1006,7 +1048,7 @@ namespace launcher
       catch (const exception& e)
       {
         launcher::log::error (categories::launcher{}, "failed to launch game: {}", e.what ());
-        cerr << "error: failed to launch game: " << e.what () << "\n";
+        cerr << "error: failed to launch game: " << e.what () << "\n" << std::flush;
         co_return 1;
       }
 
@@ -1513,18 +1555,36 @@ main (int argc, char* argv[])
 
       asio::co_spawn (
         ioc,
-        check_self_update (ioc,
-                           opt.prerelease (),
-                           opt.self_update_only (),
-                           pc.get ()),
-        [&r, &ioc, &pc] (exception_ptr e, bool v)
+        [&]() -> asio::awaitable<void>
         {
-          if (!e)
-            r = v;
+          bool res = false;
+          std::exception_ptr ex;
+
+          try
+          {
+            res = co_await check_self_update (ioc,
+                                              opt.prerelease (),
+                                              opt.self_update_only (),
+                                              pc.get ());
+          }
+          catch (...)
+          {
+            ex = std::current_exception ();
+          }
 
           if (pc != nullptr)
-            asio::co_spawn (ioc, pc->stop (), asio::detached);
+            co_await pc->stop ();
 
+          if (ex)
+            std::rethrow_exception (ex);
+
+          r = res;
+        }(),
+        [&ioc] (exception_ptr /*e*/)
+        {
+          // If an unhandled exception bubbles up here, we just ignore it and
+          // fall through to the main launch process.
+          //
           ioc.stop ();
         });
 
