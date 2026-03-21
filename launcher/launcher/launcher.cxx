@@ -539,7 +539,7 @@ namespace launcher
       {
         launcher::log::trace_l3 (categories::launcher{}, "parsing and injecting dlc manifest assets");
         manifest dlc (r.dlc_manifest_json, manifest_format::dlc);
-        m.archives.reserve (m.archives.size () + dlc.files.size ());
+        m_raw.archives.reserve (m_raw.archives.size () + dlc.files.size ());
 
         // DLCs are treated as archives for download.
         //
@@ -553,7 +553,7 @@ namespace launcher
           x.size = f.size;
           x.hash = f.hash;
 
-          m.archives.push_back (std::move (x));
+          m_raw.archives.push_back (std::move (x));
         }
       }
 
