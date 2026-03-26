@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cctype>
 #include <exception>
 #include <latch>
 #include <mutex>
@@ -259,12 +260,43 @@ namespace launcher
             if (exists_quiet (t.p) && !t.e.empty ())
             {
               string a (compute_blake3 (t.p));
-              t.m = (a == t.e);
+              string e (t.e);
+
+              e.erase (remove_if (e.begin (),
+                                  e.end (),
+                                  [] (unsigned char c)
+              {
+                return isspace (c);
+              }), e.end ());
+
+              bool m (a.size () == e.size () && !a.empty ());
+              if (m)
+              {
+                for (size_t i (0); i < a.size (); ++i)
+                {
+                  if (tolower ((unsigned char) a[i]) !=
+                      tolower ((unsigned char) e[i]))
+                  {
+                    m = false;
+                    break;
+                  }
+                }
+              }
+              t.m = m;
 
               if (t.m)
               {
                 t.mt = get_file_mtime (t.p);
                 t.s = size_quiet (t.p);
+              }
+              else
+              {
+                launcher::log::debug (
+                  categories::cache {},
+                  "hash mismatch for {}: expected '{}', got '{}'",
+                  t.p.string (),
+                  e,
+                  a);
               }
             }
             else
@@ -395,17 +427,9 @@ namespace launcher
           string k (key (p));
           auto cf (db_.find (k));
 
-          if (cf)
+          if (cf && cf->version () == v && stat (p, *cf) == file_state::valid)
           {
-            if (stat (p, *cf) != file_state::valid)
-            {
-              launcher::log::trace_l3 (
-                categories::cache {},
-                "exploded archive {} inner file stale: {}",
-                a.name,
-                p.string ());
-              s.ok = false;
-            }
+            // Valid.
           }
           else if (exists_quiet (p) && !f.hash.value.empty ())
           {
@@ -415,7 +439,7 @@ namespace launcher
           {
             launcher::log::trace_l3 (
               categories::cache {},
-              "exploded archive {} inner file missing: {}",
+              "exploded archive {} inner file missing or stale without hash: {}",
               a.name,
               p.string ());
             s.ok = false;
@@ -431,27 +455,25 @@ namespace launcher
         string k (key (p));
         auto cf (db_.find (k));
 
-        if (cf)
+        if (cf && cf->version () == v && stat (p, *cf) == file_state::valid)
         {
-          if (cf->version () != v || stat (p, *cf) != file_state::valid)
-          {
-            launcher::log::trace_l3 (
-              categories::cache {},
-              "blob archive {} version mismatch or stale",
-              a.name);
-            s.dl = true;
-          }
-
-          s.skip = !s.dl;
+          s.skip = true;
         }
         else if (exists_quiet (p) && !a.hash.value.empty ())
         {
+          if (cf)
+          {
+            launcher::log::trace_l3 (
+              categories::cache {},
+              "blob archive {} version mismatch or stale, checking hash",
+              a.name);
+          }
           fs.push_back ({i, p, a.hash.value, k});
         }
         else
         {
           launcher::log::trace_l3 (categories::cache {},
-                                   "blob archive {} missing from disk/db",
+                                   "blob archive {} missing from disk/db or missing hash",
                                    a.name);
           s.dl = true;
         }
@@ -490,7 +512,7 @@ namespace launcher
         }
         else
         {
-          launcher::log::trace_l3 (
+          launcher::log::debug (
             categories::cache {},
             "hash mismatch for {}, invalidating parent archive",
             l.p.string ());
@@ -584,81 +606,92 @@ namespace launcher
       auto cf (db_.find (k));
       bool dl (false);
 
-      // If the file isn't in our database, we see if it exists on disk.
-      // If it does, we attempt to adopt it by verifying its hash.
-      //
-      if (!cf)
+      if (cf && cf->version () == v && stat (p, *cf) == file_state::valid)
       {
-        if (!exists_quiet (p))
+        // Valid, do nothing.
+      }
+      else if (exists_quiet (p) && !f.hash.value.empty ())
+      {
+        if (cf)
         {
-          launcher::log::trace_l3 (categories::cache {},
-                                   "file {} missing from disk and db",
-                                   f.path);
-          dl = true;
+          launcher::log::trace_l3 (
+            categories::cache {},
+            "file {} version mismatch or stale, checking hash",
+            f.path);
         }
-        else if (!f.hash.value.empty ())
-        {
-          report ("Hashing " + f.path, i, fs.size ());
 
-          try
-          {
-            if (verify_blake3 (p, f.hash.value))
-            {
-              launcher::log::trace_l3 (
-                categories::cache {},
-                "file {} matches expected hash, adopting to db",
-                f.path);
-              db_.store (cached_file (k,
-                                      get_file_mtime (p),
-                                      v,
-                                      c,
-                                      fs::file_size (p),
-                                      f.hash.value));
-            }
-            else
-            {
-              launcher::log::trace_l3 (
-                categories::cache {},
-                "file {} hash mismatch on adoption attempt",
-                f.path);
-              dl = true;
-            }
+        report ("Hashing " + f.path, i, fs.size ());
+
+        try
+        {
+          string a (compute_blake3 (p));
+
+          string expected = f.hash.value;
+          expected.erase(remove_if(expected.begin(), expected.end(),
+              [](unsigned char ch){ return std::isspace(ch); }), expected.end());
+
+          bool match = (a.size() == expected.size() && !a.empty());
+          if (match) {
+              for (size_t idx = 0; idx < a.size(); ++idx) {
+                  if (std::tolower((unsigned char)a[idx]) != std::tolower((unsigned char)expected[idx])) {
+                      match = false;
+                      break;
+                  }
+              }
           }
-          catch (...)
+
+          if (match)
           {
-            launcher::log::warning (categories::cache {},
-                                    "exception during hash verification for {}",
-                                    f.path);
+            launcher::log::trace_l3 (
+              categories::cache {},
+              "file {} matches expected hash, adopting to db",
+              f.path);
+            db_.store (cached_file (k,
+                                    get_file_mtime (p),
+                                    v,
+                                    c,
+                                    fs::file_size (p),
+                                    f.hash.value));
+          }
+          else
+          {
+            launcher::log::debug (
+              categories::cache {},
+              "hash mismatch on adoption attempt for {}: expected '{}', got '{}'",
+              f.path, expected, a);
             dl = true;
           }
         }
-        else
+        catch (const exception& e)
         {
+          launcher::log::warning (categories::cache {},
+                                  "exception during hash verification for {}: {}",
+                                  f.path, e.what());
+          dl = true;
+        }
+        catch (...)
+        {
+          launcher::log::warning (categories::cache {},
+                                  "unknown exception during hash verification for {}",
+                                  f.path);
           dl = true;
         }
       }
       else
       {
-        // We have a database record. Verify that the cache entry's version
-        // matches our target and that the actual file isn't stale.
-        //
-        if (cf->version () != v)
-        {
-          launcher::log::trace_l3 (
-            categories::cache {},
-            "file {} version mismatch (cache: {}, target: {})",
-            f.path,
-            cf->version (),
-            v);
-          dl = true;
-        }
-        else if (stat (p, *cf) != file_state::valid)
+        if (!cf)
         {
           launcher::log::trace_l3 (categories::cache {},
-                                   "file {} state is invalid/stale",
+                                   "file {} missing from disk and db",
                                    f.path);
-          dl = true;
         }
+        else
+        {
+          launcher::log::trace_l3 (categories::cache {},
+                                   "file {} missing from disk or missing hash",
+                                   f.path);
+        }
+        dl = true;
       }
 
       if (dl && f.asset_name)
@@ -818,11 +851,33 @@ namespace launcher
     vector<string> os;
     vector<string> es;
 
-    // Build a set of expected files based on the manifest. Everything else
-    // in the database for this component is considered an orphan.
-    //
     for (const auto& a : m.archives)
-      es.push_back (key (path (a)));
+    {
+      fs::path p (path (a));
+      string ext (p.extension ().string ());
+      transform (ext.begin (),
+                 ext.end (),
+                 ext.begin (),
+                 [] (unsigned char ch)
+      {
+        return tolower (ch);
+      });
+
+      // If it's a zip file, we expect the inner files to be in the cache.
+      //
+      if (ext == ".zip")
+      {
+        for (const auto& f : a.files)
+          es.push_back (key (path (f)));
+      }
+      else
+      {
+        // For standalone blobs (like .iwd files), the archive itself stays on
+        // disk.
+        //
+        es.push_back (key (p));
+      }
+    }
 
     for (const auto& f : m.files)
       if (!f.archive_name)

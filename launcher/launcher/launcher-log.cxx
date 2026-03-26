@@ -39,18 +39,21 @@ namespace launcher
     });
 
     ConsoleSinkConfig c;
-    c.set_colour_mode (ConsoleSinkConfig::ColourMode::Never);
+    c.set_colour_mode (ConsoleSinkConfig::ColourMode::Always);
 
     FileSinkConfig r;
     r.set_filename_append_option (FilenameAppendOption::StartDateTime);
 
+    auto cs (Frontend::create_or_get_sink<ConsoleSink> ("cs",       c));
     auto fs (Frontend::create_or_get_sink<FileSink> ("launcher.log", r));
 
     PatternFormatterOptions pf (
-      "%(time) [%(log_level_short_code)] %(logger:<16) %(caller_function:<32) "
-      "%(short_source_location:<24) %(message)",
+      "%(time) [%(log_level_short_code)] %(message)",
       "%H:%M:%S.%Qms",
       Timezone::LocalTime);
+
+    Logger* l (Frontend::create_or_get_logger ("launcher", {cs, fs}, pf));
+    l->set_log_level (LogLevel::TraceL3);
 
     using namespace categories;
 
