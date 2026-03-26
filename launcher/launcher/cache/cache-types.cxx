@@ -1,10 +1,12 @@
 #include <launcher/cache/cache-types.hxx>
 
+#include <algorithm>
+#include <cctype>
+#include <chrono>
 #include <fstream>
 #include <iomanip>
 #include <sstream>
 #include <vector>
-#include <chrono>
 
 #include <launcher/blake3.h>
 
@@ -157,6 +159,28 @@ namespace launcher
     //
     //
     string a (compute_blake3 (p));
-    return !a.empty () && a == h;
+    if (a.empty ())
+      return false;
+
+    string e (h);
+    e.erase (remove_if (e.begin (),
+                        e.end (),
+                        [] (unsigned char c)
+    {
+      return isspace (c);
+    }), e.end ());
+
+    if (a.size () != e.size ())
+      return false;
+
+    for (size_t i (0); i < a.size (); ++i)
+    {
+      if (tolower ((unsigned char) a[i]) != tolower ((unsigned char) e[i]))
+      {
+        return false;
+      }
+    }
+
+    return true;
   }
 }

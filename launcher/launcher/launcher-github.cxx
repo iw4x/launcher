@@ -182,7 +182,7 @@ namespace launcher
         a = find_asset_regex (r, ar.name);
 
       if (!a)
-        throw runtime_error ("asset not found for archive: " + ar.name);
+        continue; // throw runtime_error ("asset not found for archive: " + ar.name);
 
       ar.url = a->browser_download_url;
     }

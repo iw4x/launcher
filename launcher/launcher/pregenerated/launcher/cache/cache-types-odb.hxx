@@ -9,7 +9,7 @@
 
 #include <odb/version.hxx>
 
-#if ODB_VERSION != 20500UL
+#if ODB_VERSION != 20551UL
 #error ODB runtime version mismatch
 #endif
 

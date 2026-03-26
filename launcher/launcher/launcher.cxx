@@ -1,17 +1,24 @@
+#ifdef _WIN32
+#  include <winsock2.h>
+#  include <windows.h>
+#endif
+
 #include <algorithm>
-#include <cctype>
+#include <cstdlib>
+#include <exception>
 #include <filesystem>
-#include <fstream>
 #include <iostream>
 #include <memory>
-#include <tuple>
+#include <ranges>
+#include <string>
+#include <string_view>
+#include <system_error>
 #include <unordered_map>
+#include <utility>
+#include <vector>
 
 #include <boost/asio.hpp>
-#include <boost/asio/co_spawn.hpp>
-#include <boost/asio/detached.hpp>
 #include <boost/asio/experimental/awaitable_operators.hpp>
-#include <boost/asio/experimental/parallel_group.hpp>
 
 #include <boost/process.hpp>
 
@@ -19,12 +26,12 @@
 #include <launcher/launcher-download.hxx>
 #include <launcher/launcher-github.hxx>
 #include <launcher/launcher-http.hxx>
+#include <launcher/launcher-log.hxx>
 #include <launcher/launcher-manifest.hxx>
 #include <launcher/launcher-options.hxx>
 #include <launcher/launcher-progress.hxx>
 #include <launcher/launcher-steam.hxx>
 #include <launcher/launcher-update.hxx>
-#include <launcher/launcher-log.hxx>
 
 #ifdef __linux__
 #  include <launcher/launcher-steam-proton.hxx>
@@ -32,1650 +39,1190 @@
 
 #include <launcher/version.hxx>
 
-#ifdef _WIN32
-#  include <windows.h>
-#endif
-
-// Include miniz last.
-//
-// We do this to picks up any configuration macros (like _FILE_OFFSET_BITS=64)
-// that might be defined in our project headers or by the build system.
-//
-#include <miniz.h>
+namespace process = boost::process;
+namespace asio = boost::asio;
+namespace views = std::views;
+namespace ranges = std::ranges;
 
 using namespace std;
-namespace fs = filesystem;
-namespace asio = boost::asio;
-
+using namespace std::filesystem;
 using namespace boost::asio::experimental::awaitable_operators;
 
 namespace launcher
 {
-  // Prompt the user for a Yes/No answer.
-  //
-  // We strictly require a 'y' or 'n' (case-insensitive) to proceed. While
-  // defaulting on EOF might seem convenient, it's safer to bail out if the
-  // input stream is broken or closed unexpectedly.
-  //
-  static bool
-  confirm_action (const string& prompt, char def = '\0')
+  namespace
   {
-    launcher::log::trace_l2 (categories::launcher{}, "prompting user for confirmation: {}", prompt);
-
-    string a;
-    do
+    constexpr auto
+    info ([] (auto&&... args)
     {
-      cout << prompt << ' ';
+      log::info (categories::launcher (),
+                 std::forward<decltype (args)> (args)...);
+    });
 
-      // Note: getline() sets the failbit if it fails to extract anything, and
-      // the eofbit if it hits EOF before the delimiter.
-      //
-      getline (cin, a);
+    constexpr auto
+    trace_l3 ([] (auto&&... args)
+    {
+      log::trace_l3 (categories::launcher (),
+                     std::forward<decltype (args)> (args)...);
+    });
 
-      bool f (cin.fail ());
-      bool e (cin.eof ());
+    constexpr auto
+    trace_l2 ([] (auto&&... args)
+    {
+      log::trace_l2 (categories::launcher (),
+                     std::forward<decltype (args)> (args)...);
+    });
 
-      launcher::log::trace_l3 (categories::launcher{}, "user input received: '{}' (fail: {}, eof: {})", a, f, e);
+    constexpr auto
+    error ([] (auto&&... args)
+    {
+      log::error (categories::launcher (),
+                  std::forward<decltype (args)> (args)...);
+    });
 
-      // If we hit EOF or fail without a newline, force one out so the next
-      // output doesn't get messed up.
-      //
-      if (f || e)
-        cout << endl;
+    constexpr auto
+    warning ([] (auto&&... args)
+    {
+      log::warning (categories::launcher (),
+                  std::forward<decltype (args)> (args)...);
+    });
 
-      if (f)
+    string
+    to_utf8 (const path& p)
+    {
+      auto s (p.u8string ());
+      return string (s.begin (), s.end ());
+    }
+
+    path
+    from_utf8 (string_view s)
+    {
+      return path (reinterpret_cast<const char8_t*> (s.data ()),
+                   reinterpret_cast<const char8_t*> (s.data () + s.size ()));
+    }
+
+    void
+    reanchor_cwd ()
+    {
+      error_code ec;
+
+#ifdef _WIN32
+      vector<wchar_t> b (32768);
+      DWORD n (GetModuleFileNameW (nullptr,
+                                   b.data (),
+                                   static_cast<DWORD> (b.size ())));
+
+      if (n == 0)
+        throw system_error (GetLastError (),
+                            system_category (),
+                            "GetModuleFileNameW failed");
+
+      fs::path p (wstring_view (b.data (), n));
+#else
+      path p (canonical ("/proc/self/exe", ec));
+
+      if (ec)
+        throw system_error (ec, "failed to resolve /proc/self/exe");
+#endif
+
+      if (p.empty ())
+        throw runtime_error ("executable path resolved to an empty string");
+
+      path d (p.parent_path ());
+      current_path (d, ec);
+
+      if (ec)
+        throw system_error (ec,
+                            "failed to change working directory to: " +
+                              to_utf8 (d));
+
+      trace_l2 ("changed working directory to: {}", to_utf8 (d));
+    }
+
+    template <typename Coordinator>
+    void
+    bind_rate_limit_ui (asio::io_context& io_ctx,
+                        Coordinator& coord,
+                        progress_coordinator& progress_coord)
+    {
+      auto is_ui_active (make_shared<bool> (false));
+
+      auto callback (
+        [&io_ctx, &progress_coord, is_ui_active] (const string& message,
+                                                  uint64_t remaining_time)
       {
-        launcher::log::error (categories::launcher{}, "failed to read confirmation from stdin");
-        throw ios_base::failure ("unable to read y/n answer from stdin");
-      }
-
-      if (a.empty () && def != '\0')
-      {
-        // We don't want to treat EOF as the default answer; we want to see an
-        // actual newline from the user to confirm they are present and paying
-        // attention.
-        //
-        if (!e)
+        if (!progress_coord.running ())
         {
-          a = def;
-          launcher::log::trace_l3 (categories::launcher{}, "empty input, applying default '{}'", def);
+          progress_coord.start ();
+          *is_ui_active = true;
         }
-      }
-    } while (a != "y" && a != "Y" && a != "n" && a != "N");
 
-    bool r (a == "y" || a == "Y");
-    launcher::log::info (categories::launcher{}, "user answered prompt with: {}", r ? "yes" : "no");
+        string display_str (message + "\n\nTime remaining: " +
+                            std::to_string (remaining_time) + " seconds");
 
+        progress_coord.show_dialog ("Rate Limit", display_str);
+
+        if (remaining_time == 0)
+        {
+          progress_coord.hide_dialog ();
+
+          if (*is_ui_active)
+          {
+            asio::co_spawn (io_ctx, progress_coord.stop (), asio::detached);
+            *is_ui_active = false;
+          }
+        }
+      });
+
+      if constexpr (requires (decltype (callback) func) {
+                      coord.discovery ().set_progress_callback (func);
+                    })
+        coord.discovery ().set_progress_callback (callback);
+      else
+        coord.set_progress_callback (callback);
+    }
+  }
+
+  string
+  path_digest (const path& p)
+  {
+    std::hash<string> h;
+    string r (std::to_string (h (to_utf8 (p))));
+
+    trace_l3 ("computed path digest for {}: {}", to_utf8 (p), r);
     return r;
   }
 
-  // Generate a collision-resistant identifier for filesystem paths.
-  //
-  // We need to associate metadata (like the "accepted" state) with specific
-  // installation paths. Since paths can contain characters that are invalid for
-  // filenames (separators, etc.) or exceed length limits, hashing the string
-  // gives us a stable, safe identifier.
-  //
-  static string
-  path_digest (const fs::path& p)
+  path
+  resolve_cache_root (const path& s = {})
   {
-    std::hash<string> h;
-    string res (std::to_string (h (p.string ())));
-    launcher::log::trace_l3 (categories::launcher{}, "computed path digest for {}: {}", p.string (), res);
-    return res;
-  }
-
-  // Determine the directory for user preference and state caching.
-  //
-  // We try to be good citizens by respecting platform conventions (XDG on
-  // Linux, AppData on Windows). However, if we can't create directories there
-  // (e.g., read-only home, restricted environment), we fall back to a local
-  // ".launcher-cache" in the current working directory to avoid crashing.
-  //
-  static fs::path
-  resolve_cache_root (const fs::path& scope = {})
-  {
-    launcher::log::trace_l2 (categories::launcher{}, "resolving cache root (scope: {})", scope.string ());
-    fs::path d;
+    trace_l2 ("resolving cache root {}", to_utf8 (s));
+    path d;
 
 #ifdef _WIN32
-    // On Windows, caches technically belong in LocalAppData.
+    // On Windows, the standard getenv() uses the ANSI codepage which corrupts
+    // Unicode characters. We must use _wgetenv to retrieve paths containing
+    // non-ASCII characters.
     //
-    if (const char* v = getenv ("LOCALAPPDATA"))
-      d = fs::path (v) / "iw4x";
-    else if (const char* v = getenv ("APPDATA"))
-      d = fs::path (v) / "iw4x";
+    if (const wchar_t* v = _wgetenv (L"LOCALAPPDATA"))
+      d = path (v) / "iw4x";
+    else if (const wchar_t* v = _wgetenv (L"APPDATA"))
+      d = path (v) / "iw4x";
     else
-      d = fs::current_path () / ".iw4x";
+      d = current_path () / ".iw4x";
 #elif defined(__APPLE__)
     if (const char* h = getenv ("HOME"))
-      d = fs::path (h) / "Library" / "Application Support" / "iw4x";
+      d = path (h) / "Library" / "Application Support" / "iw4x";
     else
-      d = fs::current_path () / ".iw4x";
+      d = current_path () / ".iw4x";
 #else
-    // On Linux/Unix, we respect the XDG Base Directory specification.
-    //
     if (const char* v = getenv ("XDG_CACHE_HOME"))
-      d = fs::path (v) / "iw4x";
+      d = path (v) / "iw4x";
     else if (const char* h = getenv ("HOME"))
-      d = fs::path (h) / ".cache" / "iw4x";
+      d = path (h) / ".cache" / "iw4x";
     else
-      d = fs::current_path () / ".iw4x";
+      d = current_path () / ".iw4x";
 #endif
 
     // If we are looking for the cache specific to an installation (to avoid
     // conflicts between multiple installs), append its unique key.
     //
-    if (!scope.empty ())
+    if (!s.empty ())
     {
-      d /= path_digest (scope);
-      launcher::log::trace_l3 (categories::launcher{}, "appended scope digest to cache root: {}", d.string ());
+      d /= path_digest (s);
+      trace_l3 ("appended scope digest to cache root: {}", to_utf8 (d));
     }
 
     error_code ec;
-    fs::create_directories (d, ec);
+
+    d = weakly_canonical (d, ec);
 
     if (ec)
-    {
-      launcher::log::warning (categories::launcher{}, "failed to create system cache dir {}: {}, falling back to local directory", d.string (), ec.message ());
-      // Fallback: If we can't write to the system location, try a local
-      // directory.
-      //
-      d = fs::current_path () / ".iw4x";
+      throw system_error (ec,
+                          "failed to canonicalize cache directory: " +
+                            to_utf8 (d));
 
-      if (!scope.empty ())
-        d /= path_digest (scope);
+    create_directories (d, ec);
 
-      fs::create_directories (d, ec);
-      if (ec)
-        launcher::log::error (categories::launcher{}, "failed to create fallback cache dir {}: {}", d.string (), ec.message ());
-    }
+    if (ec)
+      throw system_error (ec,
+                          "failed to create cache directory: " + to_utf8 (d));
 
-    launcher::log::debug (categories::launcher{}, "resolved cache root to: {}", d.string ());
     return d;
   }
 
-  // Aggregates all the configuration options, environment paths, and flags
-  // derived from CLI arguments and platform detection, so we can pass them
-  // around as a single unit.
-  //
-  struct runtime_context
+  asio::awaitable<void>
+  check_self_update (asio::io_context& io,
+                      bool p,
+                      bool o,
+                      progress_coordinator& pc)
   {
-    fs::path       install_location;
-    string         upstream_owner;
-    string         upstream_repo;
-    bool           prerelease;
-    size_t         concurrency_limit;
-    fs::path       proton_binary;
-    vector<string> proton_arguments;
-    bool           skip_launch;
-  };
+    info ("checking for launcher updates (prerelease: {}, update_only: {})",
+          p,
+          o);
 
-  // Aggregates remote state required for synchronization.
-  //
-  struct remote_state
-  {
-    github_release client;
-    github_release raw;
-    github_release helper;
-    string dlc_manifest_json;
-  };
+    auto uc (make_update_coordinator (io));
+    uc->set_include_prerelease (p);
+    uc->set_auto_restart (o);
 
-  // Main controller for the bootstrap process.
-  //
-  class launcher_controller
-  {
-  public:
-    launcher_controller (asio::io_context& ioc, runtime_context ctx)
-      : ioc_ (ioc),
-        ctx_ (move (ctx)),
-        github_ (ioc_),
-        http_ (ioc_),
-        downloads_ (ioc_, ctx_.concurrency_limit),
-        progress_ (ioc_),
-        cache_ (ioc_, ctx_.install_location)
+    bind_rate_limit_ui (io, *uc, pc);
+
+    auto s (co_await uc->check_for_updates ());
+
+    if (s == update_status::check_failed && o)
+      throw runtime_error ("only update requested but check failed");
+
+    if (s == update_status::up_to_date)
     {
-      launcher::log::trace_l2 (categories::launcher{}, "initializing launcher_controller");
-
-      github_.set_progress_callback (
-        [this] (const string& message, uint64_t seconds_remaining)
-      {
-        this->handle_rate_limit_progress (message, seconds_remaining);
-      });
-
-      // Wire cache coordinator to other subsystems.
-      //
-      cache_.set_github_coordinator (&github_);
-      cache_.set_download_coordinator (&downloads_);
-      cache_.set_progress_coordinator (&progress_);
+      info ("launcher is up to date");
+      co_return;
     }
 
-    asio::awaitable<int>
-    run ()
+    info ("launcher update available, proceeding with installation");
+
+    uc->set_progress_coordinator (&pc);
+    pc.start ();
+
+    const auto& i (uc->last_update_info ());
+
+   //info ("launcher update available: {} (current: {})",
+   //      i.version,
+   //      uc->current_version ());
+
+    auto r (co_await uc->install_update (i));
+
+    if (!r.success)
+      throw runtime_error ("update failed to install: " + r.error_message);
+
+    info ("restarting into new launcher version");
+    uc->restart ();
+  }
+
+  asio::awaitable<void>
+  execute_plan (asio::io_context& io,
+                download_coordinator& dc,
+                progress_coordinator& pc,
+                cache_coordinator& cc,
+                const vector<reconcile_item>& pl,
+                const manifest& md,
+                const path& ir)
+  {
+    struct dl_info
     {
-      launcher::log::info (categories::launcher{}, "starting launcher controller run sequence");
+      string         url;
+      path           tmp;
+      path           dst;
+      uint64_t       size;
+      component_type comp;
+      string         ver;
+      string         hash;
+      int            retries;
+      bool           done;
+    };
 
-      launcher::log::trace_l1 (categories::launcher{}, "resolving remote state...");
-      remote_state remote (co_await resolve_remote_state ());
+    error_code e;
+    path sd (weakly_canonical (resolve_cache_root (ir) / "staging", e));
 
-      launcher::log::trace_l1 (categories::launcher{}, "reconciling artifacts against remote state...");
-      co_await reconcile_artifacts (remote);
+    if (e)
+      throw system_error (e,
+                          "failed to canonicalize staging directory: " +
+                            to_utf8 (sd));
 
-      if (ctx_.skip_launch)
-      {
-        launcher::log::info (categories::launcher{}, "updates completed, skipping game launch as requested and exiting");
-        co_return 0;
-      }
+    create_directories (sd, e);
 
-      launcher::log::trace_l1 (categories::launcher{}, "executing payload...");
-      co_return co_await execute_payload ();
-    }
+    if (e)
+      throw system_error (e,
+                          "failed to create staging directory: " +
+                            to_utf8 (sd));
 
-  private:
-    // Fetch upstream metadata.
+    // Extract only items that require downloading and build tracking
+    // structures.
     //
-    // We use make_parallel_group to launch requests concurrently. This allows
-    // us to capture exceptions from individual tasks and rethrow them after
-    // the group completes.
+    // Note that we use hashes of the destination paths in the staging area to
+    // avoid name collisions if two files have the same basename but belong to
+    // different subdirectories.
     //
-    // Note that we force pre-release semantics for the steam helper (passed
-    // as 'true') because it is strictly a beta component.
-    //
-    asio::awaitable<remote_state>
-    resolve_remote_state ()
+    auto is_dl ([] (const auto& i)
     {
-      launcher::log::trace_l2 (categories::launcher{}, "launching parallel requests for remote state (owner: {}, repo: {}, pre: {})",
-                               ctx_.upstream_owner, ctx_.upstream_repo, ctx_.prerelease);
+      return i.action == reconcile_action::download;
+    });
 
-      using namespace asio::experimental;
-
-      // Note: The destructuring assignment below is intentionally verbose and
-      // admittedly ugly.
-      //
-      // asio::experimental::make_parallel_group() returns a tuple that encodes
-      // *both* the completion order and the result of each operation as a pair
-      // of (exception_ptr, value). This design allows all operations to run to
-      // completion and lets the caller decide how to handle partial failures,
-      // rather than failing fast on the first error.
-      //
-      // Because of that, we must explicitly bind each exception/result pair in
-      // a fixed order, even though only the results are ultimately used.
-      //
-#ifdef __linux__
-      auto [ord, ex_c, c, ex_r, r, ex_h, h, ex_d, d] =
-#else
-      auto [ord, ex_c, c, ex_r, r, ex_d, d] =
-#endif
-        co_await make_parallel_group (
-          asio::co_spawn (
-            ioc_,
-            github_.fetch_latest_release (ctx_.upstream_owner,
-                                          ctx_.upstream_repo,
-                                          ctx_.prerelease),
-            asio::deferred),
-          asio::co_spawn (
-            ioc_,
-            github_.fetch_latest_release ("iw4x",
-                                          "iw4x-rawfiles",
-                                          ctx_.prerelease),
-            asio::deferred),
-#ifdef __linux__
-          asio::co_spawn (
-            ioc_,
-            github_.fetch_latest_release ("iw4x",
-                                          "launcher-steam",
-                                          true),
-            asio::deferred),
-#endif
-          asio::co_spawn (
-            ioc_,
-            [this] () -> asio::awaitable<string>
-            {
-              co_return co_await http_.get ("https://cdn.iw4x.io/update.json");
-            }(),
-            asio::deferred)
-        ).async_wait (wait_for_all (), asio::use_awaitable);
-
-      if (ex_c)
-      {
-        launcher::log::error (categories::launcher{}, "failed to resolve client release state");
-        rethrow_exception (ex_c);
-      }
-
-      if (ex_r)
-      {
-        launcher::log::error (categories::launcher{}, "failed to resolve rawfiles release state");
-        rethrow_exception (ex_r);
-      }
-
-#ifdef __linux__
-      if (ex_h)
-      {
-        launcher::log::error (categories::launcher{}, "failed to resolve launcher-steam release state");
-        rethrow_exception (ex_h);
-      }
-#endif
-
-      if (ex_d)
-      {
-        launcher::log::error (categories::launcher{}, "failed to resolve dlc manifest");
-        rethrow_exception (ex_d);
-      }
-
-      launcher::log::info (categories::launcher{}, "resolved all remote states");
-
-#ifdef __linux__
-      co_return remote_state {move (c), move (r), move (h), move (d)};
-#else
-      co_return remote_state {move (c), move (r), {}, move (d)};
-#endif
-    }
-
-    asio::awaitable<void>
-    reconcile_artifacts (const remote_state& r)
+    auto to_dl ([&sd] (const auto& i)
     {
-      using ct = component_type;
-      using fs_st = file_state;
-      using ga = github_asset;
-      using ma = manifest_archive;
-      using sv = string_view;
+      if (i.url.empty ())
+        throw runtime_error (
+          "reconciliation failed: missing download URL for " + i.path);
 
-      launcher::log::trace_l2 (categories::launcher{}, "checking top-level cache tags vs remote tags");
+      path d (from_utf8 (i.path));
+      path t (sd / (path_digest (d) + "_" + to_utf8 (d.filename ())));
 
-      // First, check the high-level state. If our tags match the remote tags,
-      // we are theoretically up to date, but we must also audit the files on
-      // disk in case the user hasn't manually deleted or corrupted something.
-      //
-      bool c_out (cache_.outdated (ct::client, r.client.tag_name));
-      bool r_out (cache_.outdated (ct::rawfiles, r.raw.tag_name));
+      return dl_info {i.url,
+                      t,
+                      d,
+                      i.expected_size,
+                      i.component,
+                      i.version,
+                      i.expected_hash,
+                      0,
+                      false};
+    });
 
-    #ifdef __linux__
-      bool h_out (cache_.outdated (ct::helper, r.helper.tag_name));
-    #else
-      bool h_out (false);
-    #endif
+    auto ds (pl | views::filter (is_dl) | views::transform (to_dl) |
+             ranges::to<vector> ());
 
-      launcher::log::debug (categories::launcher{}, "outdated checks - client: {}, rawfiles: {}, helper: {}", c_out, r_out, h_out);
+    if (ds.empty ())
+      co_return;
 
-      if (!c_out && !r_out && !h_out)
+    struct active_task
+    {
+      shared_ptr<download_coordinator::task_type> h;
+      shared_ptr<progress_entry> ui;
+      dl_info* ctx;
+
+      active_task (shared_ptr<download_coordinator::task_type> h_,
+                   shared_ptr<progress_entry> ui_,
+                   dl_info* ctx_)
+        : h (std::move (h_)),
+          ui (std::move (ui_)),
+          ctx (ctx_)
       {
-        launcher::log::trace_l2 (categories::launcher{}, "tags match remote, performing deep audit of local files");
-        auto valid ([this] (ct t)
+      }
+    };
+
+    // Loop as long as there are incomplete downloads that have not exhausted
+    // their retry budget.
+    //
+    // Notice that network drops are common during bulk asset fetching. We are
+    // slightly forgiving here and allow a few retries before failing.
+    //
+    auto is_pd ([] (const auto& d)
+    {
+      return !d.done && d.retries < 3;
+    });
+
+    bool hp (ranges::any_of (ds, is_pd));
+
+    while (hp)
+    {
+      vector<active_task> ts;
+
+      auto pds (ds | views::filter (is_pd));
+
+      for (auto& d : pds)
+      {
+        download_request r;
+        r.urls.push_back (d.url);
+        r.target = d.tmp;
+        r.name = to_utf8 (d.dst.filename ());
+        r.expected_size = d.size;
+
+        auto en (pc.add_entry (r.name));
+        auto t (dc.queue_download (std::move (r)));
+
+        en->metrics ().total_bytes.store (d.size, memory_order_relaxed);
+
+        t->on_progress = [en, &pc] (const download_progress& dp)
         {
-          auto s (cache_.audit (t));
-          return std::all_of (s.begin (), s.end (), [] (const auto& p)
-          {
-            return p.second == fs_st::valid;
-          });
-        });
+          pc.update_progress (en, dp.downloaded_bytes, dp.total_bytes);
+        };
 
-        // If tags match and physical files are valid, we can short-circuit.
+        ts.emplace_back (t, en, &d);
+      }
+
+      if (ts.empty ())
+        break;
+
+      info ("executing download batch ({} queued files)", ts.size ());
+      pc.start ();
+
+      auto ml ([&io, &ts, &pc] () -> asio::awaitable<void>
+      {
+        // Periodically scan the active tasks to see if any have finished.
         //
-        if (valid (ct::client) &&
-            valid (ct::rawfiles)
-    #ifdef __linux__
-            && valid (ct::helper)
-    #endif
-        )
+        // If they have, we clean up their UI entries and mark them done. If a
+        // task fails, we increment its retry counter so it will be picked up
+        // again in the next outer loop iteration.
+        //
+        asio::steady_timer tm (io);
+        while (!ts.empty ())
         {
-          launcher::log::info (categories::launcher{}, "all components physically valid and up-to-date. skipping reconcile.");
-          co_return;
-        }
-        else
-        {
-          launcher::log::warning (categories::launcher{}, "tags matched but physical audit failed (files missing/modified). forcing reconcile.");
-        }
-      }
+          erase_if (ts,
+                    [&pc] (const auto& at)
+          {
+            if (at.h->completed () || at.h->failed ())
+            {
+              at.h->on_progress = nullptr;
+              pc.remove_entry (at.ui);
 
-      launcher::log::trace_l1 (categories::launcher{}, "fetching manifests for client and rawfiles");
+              if (at.h->completed ())
+                at.ctx->done = true;
+              else
+                at.ctx->retries++;
 
-      // We need to merge the 'raw' assets and 'client' assets into a single
-      // operational manifest. To do this, we fetch both simultaneously.
-      //
-      auto t_m (github_.fetch_manifest (r.client));
-      auto t_r (github_.fetch_manifest (r.raw));
+              return true;
+            }
 
-      auto [d_m, d_r] =
-        co_await (std::move (t_m) && std::move (t_r));
+            return false;
+          });
 
-      manifest m (std::move (d_m));
-      manifest raw (std::move (d_r));
-
-      launcher::log::trace_l2 (categories::launcher{}, "manifests fetched. client files: {}, raw files: {}", m.files.size (), raw.files.size ());
-
-      // The raw manifest doesn't map 1:1 to the download structure. We index
-      // all known hashes from both sources so we can attach integrity data to
-      // the assets we are about to inject.
-      //
-      unordered_map<string, launcher::hash> hashes;
-      hashes.reserve (m.files.size () + raw.files.size ());
-
-      auto idx ([&hashes] (const manifest& x)
-      {
-        for (const auto& a : x.archives)
-          if (!a.name.empty () && !a.hash.value.empty ())
-            hashes[a.name] = a.hash;
-
-        for (const auto& f : x.files)
-        {
-          if (f.path.empty () || f.hash.value.empty ())
-            continue;
-
-          hashes[f.path] = f.hash;
-          hashes[fs::path (f.path).filename ().string ()] = f.hash;
+          if (!ts.empty ())
+          {
+            tm.expires_after (chrono::milliseconds (25));
+            co_await tm.async_wait (asio::use_awaitable);
+          }
         }
       });
 
-      idx (m);
-      idx (raw);
-      launcher::log::trace_l3 (categories::launcher{}, "indexed {} hashes from manifests", hashes.size ());
-
-      // We need quick lookups for raw structure to map assets to their
-      // internal metadata.
+      // Run the downloads and the monitoring loop concurrently, yielding back
+      // until everything completes.
       //
-      unordered_map<sv, const ma*> raw_archs;
-      for (const auto& a : raw.archives) raw_archs[a.name] = &a;
+      // Notice that we use wait_for_all() to avoid orphaned operations running
+      // in the background if an exception is thrown.
+      //
+      auto [order, err_dl, err_ui](
+        co_await asio::experimental::make_parallel_group (
+          asio::co_spawn (io, dc.execute_all (), asio::deferred),
+          asio::co_spawn (io, ml (), asio::deferred))
+          .async_wait (asio::experimental::wait_for_all (),
+                       asio::use_awaitable));
 
-      unordered_map<string, const manifest_file*> raw_files;
-      for (const auto& f : raw.files)
+      if (err_dl)
+        std::rethrow_exception (err_dl);
+      if (err_ui)
+        std::rethrow_exception (err_ui);
+
+      co_await pc.stop ();
+
+      hp = ranges::any_of (ds, is_pd);
+    }
+
+    auto is_f ([] (const auto& d)
+    {
+      return !d.done;
+    });
+
+    ptrdiff_t fc (ranges::count_if (ds, is_f));
+
+    if (fc > 0)
+      throw runtime_error (std::to_string (fc) +
+                           " downloads failed permanently after retries");
+
+    info ("validating and applying staged files...");
+
+    for (const auto& d : ds)
+    {
+      // Validate that the file actually ended up on disk and matches our
+      // expected dimensions.
+      //
+      // A missing file or a size mismatch at this stage strongly implies a
+      // truncated download or a local filesystem failure.
+      //
+      if (!exists (d.tmp, e))
+        throw runtime_error ("downloaded file missing from staging area: " +
+                             to_utf8 (d.tmp));
+
+      uintmax_t fs (file_size (d.tmp, e));
+
+      if (e || fs == 0 || (d.size > 0 && fs != d.size))
       {
-        if (f.archive_name) continue;
-
-        if (f.asset_name) raw_files[*f.asset_name] = &f;
-        else raw_files[fs::path (f.path).filename ().string ()] = &f;
+        throw runtime_error ("downloaded file failed size validation: " +
+                             to_utf8 (d.tmp));
       }
 
-      unordered_map<sv, const ga*> c_assets;
-      for (const auto& a : r.client.assets) c_assets[a.name] = &a;
-
-      // Consolidate injection logic. We iterate the github assets and convert
-      // them into manifest archives, trying to resolve their hash from the
-      // indices we built above.
-      //
-      auto inject ([&] (manifest& target, const vector<ga>& assets, const string& filter = "")
+      if (d.dst.has_parent_path ())
       {
-        for (const auto& a : assets)
-        {
-          if (!filter.empty () && a.name != filter) continue;
+        path pd (weakly_canonical (d.dst.parent_path (), e));
 
-          ma x;
+        if (e)
+          throw system_error (e,
+                              "failed to canonicalize parent directory: " +
+                                to_utf8 (pd));
+
+        create_directories (pd, e);
+
+        if (e)
+          throw system_error (e,
+                              "failed to create parent directory: " +
+                                to_utf8 (pd));
+      }
+
+      if (exists (d.dst))
+        remove (d.dst, e);
+
+      rename (d.tmp, d.dst, e);
+
+      // If a simple rename fails, it is usually because the staging directory
+      // and the destination directory reside on different filesystem mounts. In
+      // this case, the best we can do is attempt a full copy.
+      //
+      if (e)
+      {
+        copy_file (d.tmp, d.dst, copy_options::overwrite_existing, e);
+
+        if (!e)
+          remove (d.tmp, e);
+        else
+          throw runtime_error ("failed to apply file: " + to_utf8 (d.dst));
+      }
+    }
+
+    unordered_map<string, const manifest_archive*> am;
+
+    for (const auto& a : md.archives)
+      am[to_utf8 (manifest_coordinator::resolve_path (a, ir))] = &a;
+
+    for (const auto& d : ds)
+    {
+      // If the item is a zip file and matches a known archive in our manifest,
+      // extract it directly into the root and track its contents.
+      //
+      if (d.dst.extension () == ".zip" || d.dst.extension () == ".ZIP")
+      {
+        auto i (am.find (to_utf8 (d.dst)));
+
+        if (i != am.end ())
+        {
+          info ("extracting downloaded archive: {}", to_utf8 (d.dst));
+          co_await manifest_coordinator::extract_archive (*i->second,
+                                                          d.dst,
+                                                          ir);
+
+          auto resolve_p ([&ir] (const auto& s)
+          {
+            return manifest_coordinator::resolve_path (s, ir);
+          });
+
+          auto efs (i->second->files | views::transform (resolve_p) |
+                    ranges::to<vector> ());
+
+          cc.track (efs, d.comp, d.ver);
+          remove (d.dst, e);
+
+          continue;
+        }
+      }
+
+      cc.track (to_utf8 (d.dst), d.comp, d.ver, d.hash);
+    }
+  }
+
+  // Synchronize the core client.
+  //
+  asio::awaitable<void>
+  sync_client (asio::io_context& io,
+                github_coordinator& gh,
+                download_coordinator& dc,
+                progress_coordinator& pc,
+                cache_coordinator& cc,
+                const path& root,
+                bool pre)
+  {
+    info ("synchronizing client component...");
+
+    auto rel (co_await gh.fetch_latest_release ("iw4x", "iw4x-client", pre));
+    bool out (cc.outdated (component_type::client, rel.tag_name));
+
+    if (!out)
+    {
+      auto s (cc.audit (component_type::client));
+      bool ok (ranges::all_of (s | views::values, [] (auto st) {
+        return st == file_state::valid; }));
+
+      if (ok)
+      {
+        info ("client components are valid and up to date");
+        co_return;
+      }
+
+      warning ("client physical audit failed, forcing reconcile");
+    }
+
+    auto ms (co_await gh.fetch_manifest (rel));
+    manifest m (ms);
+    auto p (cc.plan (m, component_type::client, rel.tag_name));
+
+    for (auto& i : p | views::filter ([] (const auto& x) {
+      return x.action == reconcile_action::download && x.url.empty (); }))
+    {
+      string fn (to_utf8 (from_utf8 (i.path).filename ()));
+      auto it (ranges::find_if (rel.assets, [&fn] (const auto& a) {
+        return a.name == fn; }));
+
+      if (it != rel.assets.end ())
+        i.url = it->browser_download_url;
+
+      if (i.url.empty ())
+      {
+        throw runtime_error (
+          "reconciliation failed: unable to resolve URL for " +
+          i.path);
+      }
+    }
+
+    co_await execute_plan (io, dc, pc, cc, p, m, root);
+    cc.clean (m, component_type::client);
+    cc.stamp (component_type::client, rel.tag_name);
+  }
+
+  // Synchronize the rawfiles repository.
+  //
+  asio::awaitable<void>
+  sync_rawfiles (asio::io_context& io,
+                  github_coordinator& gh,
+                  download_coordinator& dc,
+                  progress_coordinator& pc,
+                  cache_coordinator& cc,
+                  const path& root,
+                  bool pre)
+  {
+    info ("synchronizing rawfiles component...");
+
+    auto rel (co_await gh.fetch_latest_release ("iw4x", "iw4x-rawfiles", pre));
+    bool out (cc.outdated (component_type::rawfiles, rel.tag_name));
+
+    if (!out)
+    {
+      auto s (cc.audit (component_type::rawfiles));
+      bool ok (ranges::all_of (s | views::values, [] (auto st) {
+        return st == file_state::valid; }));
+
+      if (ok)
+      {
+        info ("rawfiles components are valid and up to date");
+        co_return;
+      }
+
+      warning ("rawfiles physical audit failed, forcing reconcile");
+    }
+
+    auto ms (co_await gh.fetch_manifest (rel));
+    manifest m (ms);
+
+    for (auto& a : m.archives)
+    {
+      if (a.name == "__launcher_archive.zip")
+        a.name = "release.zip";
+    }
+
+    auto p (cc.plan (m, component_type::rawfiles, rel.tag_name));
+
+    for (auto& i : p | views::filter ([] (const auto& x) {
+      return x.action == reconcile_action::download && x.url.empty (); }))
+    {
+      string fn (to_utf8 (from_utf8 (i.path).filename ()));
+
+      auto it (ranges::find_if (rel.assets, [&fn] (const auto& a) {
+        return a.name == fn; }));
+
+      if (it == rel.assets.end ())
+      {
+        string asset_name = fn;
+        replace (asset_name.begin (), asset_name.end (), '.', '_');
+        asset_name = "__launcher_" + asset_name + ".bin";
+
+        it = ranges::find_if (rel.assets, [&asset_name] (const auto& a) {
+          return a.name == asset_name; });
+      }
+
+      if (it != rel.assets.end ())
+        i.url = it->browser_download_url;
+
+      if (i.url.empty ())
+      {
+        throw runtime_error (
+          "reconciliation failed: unable to resolve URL for " +
+          i.path);
+      }
+    }
+
+    co_await execute_plan (io, dc, pc, cc, p, m, root);
+    cc.clean (m, component_type::rawfiles);
+    cc.stamp (component_type::rawfiles, rel.tag_name);
+  }
+
+  // Synchronize dynamic downloadable content (DLC).
+  //
+  asio::awaitable<void>
+  sync_dlc (asio::io_context& io,
+            http_coordinator& hc,
+            download_coordinator& dc,
+            progress_coordinator& pc,
+            cache_coordinator& cc,
+            const path& root)
+  {
+    info ("synchronizing dlc component...");
+
+    auto ms (co_await hc.get ("https://cdn.iw4x.io/update.json"));
+    manifest dlc (ms, manifest_format::dlc);
+
+    manifest m;
+    m.archives = dlc.files | views::transform ([] (const auto& f)
+    {
+      manifest_archive x;
+      x.name = f.path;
+      x.url = "https://cdn.iw4x.io/" + f.path;
+      x.size = f.size;
+      x.hash = f.hash;
+
+      return x;
+    }) | ranges::to<vector> ();
+
+    auto p (cc.plan (m, component_type::dlc, "dlc"));
+
+    for (auto& i : p | views::filter ([] (const auto& x) {
+      return x.action == reconcile_action::download && x.url.empty (); }))
+    {
+      auto it (ranges::find_if (m.archives,
+                                [&i, &root] (const auto& a)
+      {
+        return to_utf8 (from_utf8 (i.path)) ==
+          to_utf8 (manifest_coordinator::resolve_path (a, root));
+      }));
+
+      if (it != m.archives.end ())
+        i.url = it->url;
+
+      if (i.url.empty ())
+      {
+        throw runtime_error (
+          "reconciliation failed: unable to resolve URL for " + i.path);
+      }
+    }
+
+    co_await execute_plan (io, dc, pc, cc, p, m, root);
+    cc.clean (m, component_type::dlc);
+    cc.stamp (component_type::dlc, "dlc");
+  }
+
+#ifdef __linux__
+  asio::awaitable<void>
+  sync_helper (asio::io_context& io,
+                github_coordinator& gh,
+                download_coordinator& dc,
+                progress_coordinator& pc,
+                cache_coordinator& cc,
+                const path& root,
+                bool pre)
+  {
+    info ("synchronizing linux steam helper component...");
+
+    auto rel (co_await gh.fetch_latest_release ("iw4x", "launcher-steam", pre));
+    bool out (cc.outdated (component_type::helper, rel.tag_name));
+
+    if (!out)
+    {
+      auto s (cc.audit (component_type::helper));
+      bool ok (ranges::all_of (s | views::values, [] (auto st) {
+        return st == file_state::valid; }));
+
+      if (ok)
+      {
+        info ("steam helper components are valid and up to date");
+        co_return;
+      }
+
+      warning ("steam helper physical audit failed, forcing reconcile");
+    }
+
+    manifest m;
+    m.archives = rel.assets
+      | views::filter ([] (const auto& a) {
+          return a.name == "steam.exe" || a.name == "steam_api64.dll"; })
+      | views::transform ([] (const auto& a)
+        {
+          manifest_archive x;
           x.name = a.name;
           x.url = a.browser_download_url;
           x.size = a.size;
 
-          if (auto it (raw_archs.find (a.name)); it != raw_archs.end ())
-          {
-            x.hash = it->second->hash;
-            x.files = it->second->files;
-          }
-          else if (auto it (raw_files.find (a.name)); it != raw_files.end ())
-          {
-            x.hash = it->second->hash;
-          }
-          else if (auto it (hashes.find (a.name)); it != hashes.end ())
-          {
-            x.hash = it->second;
-          }
+          return x;
+        })
+      | ranges::to<vector> ();
 
-          target.archives.push_back (std::move (x));
-        }
-      });
+    auto p (cc.plan (m, component_type::helper, rel.tag_name));
 
-      manifest m_raw;
-      m_raw.archives.reserve (r.raw.assets.size ());
-      inject (m_raw, r.raw.assets);
-
-    #ifdef __linux__
-      // On Linux, we need the steam helper binaries which live in a
-      // separate repo.
-      //
-      manifest m_helper;
-      launcher::log::trace_l3 (categories::launcher{}, "injecting linux steam helper assets");
-      inject (m_helper, r.helper.assets, "steam.exe");
-      inject (m_helper, r.helper.assets, "steam_api64.dll");
-    #endif
-
-      if (!r.dlc_manifest_json.empty ())
-      {
-        launcher::log::trace_l3 (categories::launcher{}, "parsing and injecting dlc manifest assets");
-        manifest dlc (r.dlc_manifest_json, manifest_format::dlc);
-        m_raw.archives.reserve (m_raw.archives.size () + dlc.files.size ());
-
-        // DLCs are treated as archives for download.
-        //
-        for (const auto& f : dlc.files)
-        {
-          if (f.path.empty ()) continue;
-
-          ma x;
-          x.name = f.path;
-          x.url = "https://cdn.iw4x.io/" + f.path;
-          x.size = f.size;
-          x.hash = f.hash;
-
-          m_raw.archives.push_back (std::move (x));
-        }
-      }
-
-      // Ask the reconciler what actually needs to be done based on the
-      // assembled manifest.
-      //
-      launcher::log::trace_l2 (categories::launcher{}, "planning reconciliation against local cache...");
-      auto plan (cache_.get_reconciler ().plan (m, ct::client, r.client.tag_name));
-
-      auto plan_raw (cache_.get_reconciler ().plan (m_raw, ct::rawfiles, r.raw.tag_name));
-      plan.insert (plan.end (), std::make_move_iterator (plan_raw.begin ()), std::make_move_iterator (plan_raw.end ()));
-
-    #ifdef __linux__
-      auto plan_helper (cache_.get_reconciler ().plan (m_helper, ct::helper, r.helper.tag_name));
-      plan.insert (plan.end (), std::make_move_iterator (plan_helper.begin ()), std::make_move_iterator (plan_helper.end ()));
-    #endif
-
-      launcher::log::debug (categories::launcher{}, "reconciler produced a plan with {} items", plan.size ());
-
-      unordered_map<sv, const manifest_file*> m_files;
-      for (const auto& f : m.files)
-        if (f.asset_name) m_files[*f.asset_name] = &f;
-
-      // The reconciler doesn't know about GitHub URLs, so we patch
-      // them back into the plan.
-      //
-      for (auto& item : plan)
-      {
-        if (item.action != reconcile_action::download || !item.url.empty ())
-          continue;
-
-        fs::path p (item.path);
-        string fn (p.filename ().string ());
-
-        if (m_files.count (fn))
-        {
-          if (auto it (c_assets.find (fn)); it != c_assets.end ())
-          {
-            item.url = it->second->browser_download_url;
-            launcher::log::trace_l3 (categories::launcher{}, "patched URL for {}: {}", fn, item.url);
-          }
-        }
-      }
-
-      auto sum (cache_.get_reconciler ().summarize (plan));
-      launcher::log::info (categories::launcher{}, "reconcile summary: {} missing, {} stale, {} to download ({} bytes)",
-                           sum.files_missing, sum.files_stale, sum.downloads_required, sum.bytes_to_download);
-
-      auto stamp ([this, &r] ()
-      {
-        launcher::log::trace_l2 (categories::launcher{}, "stamping cache with updated tags");
-        cache_.stamp (ct::client, r.client.tag_name);
-        cache_.stamp (ct::rawfiles, r.raw.tag_name);
-    #ifdef __linux__
-        cache_.stamp (ct::helper, r.helper.tag_name);
-    #endif
-      });
-
-      if (sum.up_to_date ())
-      {
-        launcher::log::info (categories::launcher{}, "plan summary indicates up-to-date. stamping tags and finishing reconcile.");
-        stamp ();
-        co_return;
-      }
-
-      // Execute downloads. We map the active task to its progress entry so we
-      // can update the UI and clean up finished tasks in the loop.
-      //
-      unordered_map<shared_ptr<download_coordinator::task_type>,
-                    shared_ptr<progress_entry>> tasks;
-      tasks.reserve (plan.size ());
-
-      // Count how many downloads we actually need.
-      //
-      std::size_t download_count (0);
-
-      for (const auto& item : plan)
-      {
-        if (item.action != reconcile_action::download || item.url.empty ())
-          continue;
-
-        ++download_count;
-
-        fs::path dst (item.path);
-        if (dst.has_parent_path ())
-        {
-          std::error_code ec;
-          fs::create_directories (dst.parent_path (), ec);
-        }
-
-        download_request req;
-        req.urls.push_back (item.url);
-        req.target = dst;
-        req.name = dst.filename ().string ();
-        req.expected_size = item.expected_size;
-
-        launcher::log::trace_l3 (categories::launcher{}, "queuing download: {} -> {}", req.urls.front (), dst.string ());
-
-        string n (req.name);
-        auto t (downloads_.queue_download (std::move (req)));
-        auto e (progress_.add_entry (n));
-
-        e->metrics ().total_bytes.store (item.expected_size,
-                                        std::memory_order_relaxed);
-        tasks[t] = e;
-
-        t->on_progress = [e, this] (const download_progress& p)
-        {
-          progress_.update_progress (e, p.downloaded_bytes, p.total_bytes);
-        };
-      }
-
-      const auto& root (ctx_.install_location);
-
-      auto post_process = [&] (const auto& current_plan) -> asio::awaitable<void>
-      {
-        launcher::log::trace_l2 (categories::launcher{}, "post-processing downloaded files (tracking and extracting)");
-
-        // Track direct downloads first.
-        //
-        for (const auto& item : current_plan)
-        {
-          if (item.action == reconcile_action::download && fs::exists (item.path))
-          {
-            launcher::log::trace_l3 (categories::launcher{}, "tracking raw download: {}", item.path);
-            cache_.track (item.path, item.component, item.version, item.expected_hash);
-          }
-        }
-
-        unordered_map<string, const ma*> amap;
-        auto add_to_amap = [&] (const manifest& mani)
-        {
-          for (const auto& a : mani.archives)
-            amap[manifest_coordinator::resolve_path (a, root).string ()] = &a;
-        };
-
-        add_to_amap (m);
-        add_to_amap (m_raw);
-      #ifdef __linux__
-        add_to_amap (m_helper);
-      #endif
-
-        // Handle archives. If a downloaded item is a zip and appears in our
-        // manifest archive list, we extract it and track the contents.
-        //
-        for (const auto& item : current_plan)
-        {
-          if (item.action != reconcile_action::download) continue;
-
-          fs::path p (item.path);
-          if (p.extension () != ".zip" && p.extension () != ".ZIP") continue;
-
-          auto it (amap.find (p.string ()));
-          if (it == amap.end ()) continue;
-
-          const auto* arch (it->second);
-
-          try
-          {
-            launcher::log::info (categories::launcher{}, "extracting downloaded archive: {}", p.string ());
-            co_await manifest_coordinator::extract_archive (*arch, p, root);
-
-            vector<fs::path> extracted;
-            extracted.reserve (arch->files.size ());
-
-            for (const auto& f : arch->files)
-            {
-              fs::path ep (manifest_coordinator::resolve_path (f, root));
-              extracted.push_back (std::move (ep));
-            }
-
-            launcher::log::trace_l3 (categories::launcher{}, "tracking {} extracted files from archive", extracted.size ());
-            cache_.track (extracted, item.component, item.version);
-
-            std::error_code ec;
-            fs::remove (p, ec);
-            if (ec)
-              launcher::log::warning (categories::launcher{}, "failed to delete extracted archive {}: {}", p.string (), ec.message ());
-          }
-          catch (const exception& e)
-          {
-            launcher::log::error (categories::launcher{}, "extraction failure for {}: {}", arch->name, e.what ());
-            throw runtime_error ("extraction failure: " + arch->name + ": " + e.what ());
-          }
-        }
-      };
-
-      // Only show the progress UI if there are actual downloads.
-      //
-      if (download_count > 0)
-      {
-        launcher::log::info (categories::launcher{}, "starting {} downloads", download_count);
-        progress_.start ();
-
-        auto monitor_loop = [&]() -> asio::awaitable<void>
-        {
-          asio::steady_timer timer (ioc_);
-          while (!tasks.empty ())
-          {
-            std::erase_if (tasks, [&] (const auto& kv)
-            {
-              if (kv.first->completed () || kv.first->failed ())
-              {
-                kv.first->on_progress = nullptr; // disconnect
-                progress_.remove_entry (kv.second);
-                return true;
-              }
-              return false;
-            });
-
-            if (!tasks.empty ())
-            {
-              timer.expires_after (chrono::milliseconds (25));
-              co_await timer.async_wait (asio::use_awaitable);
-            }
-          }
-        };
-
-        auto [ord, ex_dl, ex_ui] = co_await asio::experimental::make_parallel_group (
-          asio::co_spawn (ioc_, downloads_.execute_all (), asio::deferred),
-          asio::co_spawn (ioc_, monitor_loop (), asio::deferred)
-        ).async_wait (asio::experimental::wait_for_all (), asio::use_awaitable);
-
-        if (ex_dl) std::rethrow_exception (ex_dl);
-        if (ex_ui) std::rethrow_exception (ex_ui);
-
-        launcher::log::debug (categories::launcher{}, "primary download pass finished ({} completed, {} failed)",
-                              downloads_.completed_count (), downloads_.failed_count ());
-
-        co_await progress_.stop ();
-
-        // Sleep briefly to yield to OS and ensure file handles are genuinely
-        // flushed before post-processing.
-        //
-        asio::steady_timer flush_timer (ioc_);
-        flush_timer.expires_after (chrono::milliseconds (100));
-        co_await flush_timer.async_wait (asio::use_awaitable);
-
-        // Track and extract first pass before verification checks the cache
-        // again
-        //
-        co_await post_process (plan);
-
-        // Second pass: unconditionally re-check the filesystem.
-        //
-        // In practice this almost never finds anything, the first pass is
-        // already strict. Still, Downloads can theoretically fail in
-        // subtle ways (dropped connection, truncated write) so we don't
-        // trust the reported state. Instead, we re-run the reconciler
-        // against the actual disk to catch stragglers.
-        //
-        // That is, the real source of truth is the filesystem.
-        //
-        launcher::log::trace_l2 (categories::launcher{}, "starting secondary verification pass");
-        downloads_.clear ();
-        tasks.clear ();
-
-        auto ps (
-          cache_.get_reconciler ().plan (m, ct::client, r.client.tag_name));
-
-        auto ps_raw (
-          cache_.get_reconciler ().plan (m_raw, ct::rawfiles, r.raw.tag_name));
-        ps.insert (ps.end (), std::make_move_iterator (ps_raw.begin ()), std::make_move_iterator (ps_raw.end ()));
-
-    #ifdef __linux__
-        auto ps_helper (
-          cache_.get_reconciler ().plan (m_helper, ct::helper, r.helper.tag_name));
-        ps.insert (ps.end (), std::make_move_iterator (ps_helper.begin ()), std::make_move_iterator (ps_helper.end ()));
-    #endif
-
-        size_t n (0);
-
-        for (auto& p: ps)
-        {
-          if (p.action != reconcile_action::download)
-            continue;
-
-          // The reconciler plan might lack the URL so we have to patch it
-          // back in from the asset list.
-          //
-          if (p.url.empty ())
-          {
-            fs::path d (p.path);
-            string fn (d.filename ().string ());
-
-            if (auto i (c_assets.find (fn)); i != c_assets.end ())
-              p.url = i->second->browser_download_url;
-          }
-
-          if (p.url.empty ())
-            continue;
-
-          n++;
-
-          fs::path d (p.path);
-          if (d.has_parent_path ())
-          {
-            error_code ec;
-            create_directories (d.parent_path (), ec);
-          }
-
-          download_request rq;
-          rq.urls.push_back (p.url);
-          rq.target = d;
-          rq.name = d.filename ().string ();
-          rq.expected_size = p.expected_size;
-
-          launcher::log::warning (categories::launcher{}, "file {} failed verification, requeuing download", rq.name);
-
-          string nm (rq.name);
-          auto t (downloads_.queue_download (move (rq)));
-          auto e (progress_.add_entry (nm + " (verify)"));
-
-          e->metrics ().total_bytes.store (p.expected_size, memory_order_relaxed);
-          tasks[t] = e;
-
-          t->on_progress = [e, this] (const download_progress& dp)
-          {
-            progress_.update_progress (e, dp.downloaded_bytes, dp.total_bytes);
-          };
-        }
-
-        if (n > 0)
-        {
-          launcher::log::info (categories::launcher{}, "re-downloading {} stragglers after verification", n);
-          progress_.start ();
-
-          auto monitor_loop_verify = [&]() -> asio::awaitable<void>
-          {
-            asio::steady_timer timer (ioc_);
-            while (!tasks.empty ())
-            {
-              std::erase_if (tasks, [&] (const auto& kv)
-              {
-                if (kv.first->completed () || kv.first->failed ())
-                {
-                  kv.first->on_progress = nullptr; // disconnect
-                  progress_.remove_entry (kv.second);
-                  return true;
-                }
-                return false;
-              });
-
-              if (!tasks.empty ())
-              {
-                timer.expires_after (chrono::milliseconds (25));
-                co_await timer.async_wait (asio::use_awaitable);
-              }
-            }
-          };
-
-          auto [ord_v, ex_dl_v, ex_ui_v] = co_await asio::experimental::make_parallel_group (
-            asio::co_spawn (ioc_, downloads_.execute_all (), asio::deferred),
-            asio::co_spawn (ioc_, monitor_loop_verify (), asio::deferred)
-          ).async_wait (asio::experimental::wait_for_all (), asio::use_awaitable);
-
-          if (ex_dl_v) std::rethrow_exception (ex_dl_v);
-          if (ex_ui_v) std::rethrow_exception (ex_ui_v);
-
-          co_await progress_.stop ();
-
-          if (downloads_.failed_count () > 0)
-          {
-            launcher::log::error (categories::launcher{}, "download failed after verification pass. aborting.");
-            throw runtime_error ("download failed after verification pass");
-          }
-
-          // Track and extract second pass
-          //
-          co_await post_process (ps);
-        }
-        else
-        {
-          launcher::log::debug (categories::launcher{}, "verification pass clean, no stragglers found");
-        }
-      }
-
-      stamp ();
-    }
-
-    asio::awaitable<int>
-    execute_payload ()
+    for (auto& i : p | views::filter ([] (const auto& x) {
+      return x.action == reconcile_action::download && x.url.empty (); }))
     {
-      launcher::log::info (categories::launcher{}, "preparing to execute game payload");
-#ifdef __linux__
-      co_return co_await execute_proton ();
-#else
-      co_return co_await execute_native ();
-#endif
+      string fn (to_utf8 (from_utf8 (i.path).filename ()));
+      auto it (ranges::find_if (rel.assets, [&fn] (const auto& a) {
+        return a.name == fn; }));
+
+      if (it != rel.assets.end ())
+        i.url = it->browser_download_url;
+
+      if (i.url.empty ())
+        throw runtime_error (
+          "reconciliation failed: unable to resolve URL for " +
+          i.path);
     }
+
+    co_await execute_plan (io, dc, pc, cc, p, m, root);
+    cc.clean (m, component_type::helper);
+    cc.stamp (component_type::helper, rel.tag_name);
+  }
+#endif
 
 #ifdef __linux__
-    asio::awaitable<int>
-    execute_proton ()
-    {
-      if (ctx_.proton_binary.empty ())
-      {
-        launcher::log::error (categories::launcher{}, "game binary unspecified");
-        cerr << "error: game binary unspecified\n";
-        co_return 1;
-      }
-
-      fs::path binary_path (ctx_.install_location / ctx_.proton_binary);
-      if (!fs::exists (binary_path))
-      {
-        launcher::log::error (categories::launcher{}, "game binary not found: {}", binary_path.string ());
-        cerr << "error: game binary not found: " << binary_path << "\n";
-        co_return 1;
-      }
-
-      launcher::log::trace_l1 (categories::launcher{}, "initializing proton coordinator for execution");
-      proton_coordinator proton (ioc_);
-
-      if (!fs::exists (ctx_.install_location / "steam.exe"))
-      {
-        launcher::log::error (categories::launcher{}, "runtime dependency missing: steam.exe");
-        cerr << "error: runtime dependency missing: steam.exe\n";
-        co_return 1;
-      }
-
-      // Try to detect Steam path from environment.
-      //
-      fs::path steam_root;
-      if (const char* home = getenv ("HOME"))
-      {
-        steam_root = fs::path (home) / ".steam" / "steam";
-        launcher::log::trace_l3 (categories::launcher{}, "detected steam root via HOME: {}", steam_root.string ());
-      }
-
-      launcher::log::info (categories::launcher{}, "launching {} via proton", binary_path.string ());
-      bool success (co_await proton.complete_launch (steam_root,
-                                                     binary_path,
-                                                     10190,
-                                                     ctx_.proton_arguments));
-
-      if (!success)
-      {
-        launcher::log::warning (categories::launcher{}, "proton execution failed, attempting fallback to wine");
-        cerr << "warning: proton execution failed, falling back to wine...\n" << std::flush;
-
-        try
-        {
-          namespace bp = boost::process;
-          string wine_exe (bp::search_path ("wine").string ());
-
-          if (wine_exe.empty ())
-          {
-            launcher::log::error (categories::launcher{}, "wine not found in PATH");
-            cerr << "error: wine is not installed or not in PATH\n" << std::flush;
-            co_return 1;
-          }
-
-          vector<string> args;
-          args.push_back (binary_path.string ());
-          args.insert (args.end (), ctx_.proton_arguments.begin (), ctx_.proton_arguments.end ());
-
-          launcher::log::info (categories::launcher{}, "launching via wine: {} {}", wine_exe, binary_path.string ());
-          bp::child game (
-            wine_exe,
-            bp::args (args),
-            bp::start_dir (ctx_.install_location.string ())
-          );
-
-          game.detach ();
-          launcher::log::info (categories::launcher{}, "wine game process detached");
-        }
-        catch (const exception& e)
-        {
-          launcher::log::error (categories::launcher{}, "failed to launch game via wine: {}", e.what ());
-          cerr << "error: failed to launch game via wine: " << e.what () << "\n" << std::flush;
-          co_return 1;
-        }
-      }
-      else
-      {
-        launcher::log::info (categories::launcher{}, "proton execution initiated");
-      }
-
-      co_return 0;
-    }
-#endif
-
-#ifndef __linux__
-    // Unlike the Linux/Proton path, there is no strict ABI or namespace
-    // boundary that we must bridge prior to launch.
-    //
-    // While we could technically introduce a pre-launch Steam check here to
-    // unify behavior across platforms, it is not structurally required on
-    // Windows. The game's own startup logic is capable of handling the "Steam
-    // not found" scenario (or lazy-loading the interface) without our help.
-    //
-    // So for now, we favor correctness-by-minimalism: we treat the launcher as
-    // a thin process-spawning layer that mirrors native OS expectations,
-    // leaving the heavy lifting to the game itself.
-    //
-    asio::awaitable<int>
-    execute_native ()
-    {
-      if (ctx_.proton_binary.empty ())
-      {
-        launcher::log::error (categories::launcher{}, "game binary unspecified");
-        cerr << "error: game binary unspecified\n";
-        co_return 1;
-      }
-
-      fs::path binary_path (ctx_.install_location / ctx_.proton_binary);
-      if (!fs::exists (binary_path))
-      {
-        launcher::log::error (categories::launcher{}, "game binary not found: {}", binary_path.string ());
-        cerr << "error: game binary not found: " << binary_path << "\n";
-        co_return 1;
-      }
-
-      try
-      {
-        launcher::log::info (categories::launcher{}, "launching native game process: {}", binary_path.string ());
-        namespace bp = boost::process;
-        bp::child game (
-          binary_path.string (),
-          bp::args (ctx_.proton_arguments),
-          bp::start_dir (ctx_.install_location.make_preferred ().string ())
-        );
-
-        game.detach ();
-        launcher::log::info (categories::launcher{}, "native game process detached");
-      }
-      catch (const exception& e)
-      {
-        launcher::log::error (categories::launcher{}, "failed to launch game: {}", e.what ());
-        cerr << "error: failed to launch game: " << e.what () << "\n" << std::flush;
-        co_return 1;
-      }
-
-      co_return 0;
-    }
-#endif
-
-  private:
-    // Report the rate limit backoff status to the user.
-    //
-    void
-    handle_rate_limit_progress (const string& msg, uint64_t rem)
-    {
-      launcher::log::trace_l3 (categories::launcher{}, "rate limit progress: {} ({}s remaining)", msg, rem);
-
-      // The progress UI might not have been started yet (e.g., rate limit hit
-      // during initial metadata fetch, before any downloads). Ensure the
-      // render loop is running so the dialog is actually visible.
-      //
-      if (!progress_.running ())
-      {
-        progress_.start ();
-        rate_limit_started_progress_ = true;
-      }
-
-      string s (
-        msg + "\n\nTime remaining: " + std::to_string (rem) + " seconds");
-
-      progress_.show_dialog ("Rate Limit", s);
-
-      // If the countdown has finished, we can dismiss the dialog and carry on
-      // unless we started the progress UI just for this dialog, in which case
-      // we must tear it down so it doesn't interfere with the normal flow.
-      //
-      if (rem == 0)
-      {
-        launcher::log::info (categories::launcher{}, "rate limit cleared, resuming operations");
-        progress_.hide_dialog ();
-
-        if (rate_limit_started_progress_)
-        {
-          asio::co_spawn (ioc_, progress_.stop (), asio::detached);
-          rate_limit_started_progress_ = false;
-        }
-      }
-    }
-
-    asio::io_context& ioc_;
-    runtime_context ctx_;
-    github_coordinator github_;
-    http_coordinator http_;
-    download_coordinator downloads_;
-    progress_coordinator progress_;
-    cache_coordinator cache_;
-    bool rate_limit_started_progress_ {false};
-  };
-
-  // Resolve MW2 installation root via Steam.
-  //
-  asio::awaitable<optional<fs::path>>
-  resolve_root (asio::io_context& ctx)
+  asio::awaitable<void>
+  execute (asio::io_context& io,
+            const path& root,
+            const string& exe,
+            const vector<string>& args)
   {
-    launcher::log::trace_l1 (categories::launcher{}, "resolving installation root");
+    if (exe.empty ())
+      throw runtime_error ("game binary unspecified");
 
-    // First check if we have a path saved from a previous --path override.
-    // If it's still there on disk, we are done.
-    //
-    fs::path cr (resolve_cache_root ());
-    launcher::log::trace_l3 (categories::launcher{}, "opened global cache database at {}", cr.string ());
+    path bin (root / from_utf8 (exe));
+    error_code ec;
 
-    cache_database db (cr);
+    bin = canonical (bin, ec);
 
-    string s (path_digest (fs::current_path ()));
-    string c (db.setting_value (setting_keys::inst_path (s)));
+    if (ec)
+      throw system_error (ec,
+                          "failed to canonicalize game binary path: " +
+                            to_utf8 (bin));
 
-    launcher::log::trace_l3 (categories::launcher{}, "checking for previously saved --path override");
+    proton_coordinator proton (io);
 
-    if (!c.empty ())
+    if (!exists (root / "steam.exe"))
+      throw runtime_error ("runtime dependency missing: steam.exe");
+
+    path steam_root;
+
+    if (const char* h = getenv ("HOME"))
+      steam_root = path (h) / ".steam" / "steam";
+
+    info ("launching {} via proton", to_utf8 (bin));
+
+    bool ok (co_await proton.complete_launch (steam_root, bin, 10190, args));
+
+    if (!ok)
     {
-      launcher::log::trace_l2 (categories::launcher{}, "found saved path override in db: {}", c);
-      fs::path p (c);
-      if (fs::exists (p))
-      {
-        launcher::log::info (categories::launcher{}, "using previously saved install path override: {}", p.string ());
-        co_return p;
-      }
-      else
-      {
-        launcher::log::warning (categories::launcher{}, "saved path override does not exist on disk, falling back to steam detection");
-      }
-    }
+      warning ("proton execution failed, attempting fallback to wine");
 
-    // No override, so try to sniff out the Steam install.
-    //
-    try
-    {
-      launcher::log::trace_l2 (categories::launcher{}, "attempting steam installation detection");
-      auto p (co_await get_mw2_default_path (ctx));
+      path wine_exe (from_utf8 (process::search_path ("wine").string ()));
 
-      if (p && fs::exists (*p))
-      {
-        launcher::log::debug (categories::launcher{}, "steam detection found path: {}", p->string ());
+      if (wine_exe.empty ())
+        throw runtime_error ("wine is not installed or not in PATH");
 
-        // We found a Steam path, but we don't want to nag the user every
-        // single time if they've already said no.
-        //
-        string d (path_digest (*p));
-        string k (setting_keys::steam_prompt (s, d));
-        string a (db.setting_value (k));
+      wine_exe = canonical (wine_exe, ec);
 
-        if (!a.empty ())
-        {
-          launcher::log::trace_l3 (categories::launcher{}, "user previously answered steam prompt with '{}'", a);
-          if (a == "yes")
-          {
-            launcher::log::info (categories::launcher{}, "using steam path based on previous user confirmation");
-            co_return p;
-          }
-        }
-        else
-        {
-          // New path detected. Drop a note to the user and see if they
-          // actually want to use it or stick to the current directory.
-          //
-          launcher::log::info (categories::launcher{}, "new steam path detected, prompting user for confirmation");
-          cout << "Found Steam installation\n"
-              << "  " << p->string () << "\n\n";
+      if (ec)
+        throw system_error (ec,
+                            "failed to canonicalize wine executable path: " +
+                              to_utf8 (wine_exe));
 
-          bool ok (confirm_action (
-            "Install IW4x to this directory? [Y/n] (n = use current directory)",
-            'y'
-          ));
+      vector<string> wa;
+      wa.push_back (to_utf8 (bin));
+      wa.insert (wa.end (), args.begin (), args.end ());
 
-          db.setting (k, ok ? "yes" : "no");
+      info ("launching via wine: {} {}", to_utf8 (wine_exe), to_utf8 (bin));
 
-          if (ok)
-          {
-            launcher::log::info (categories::launcher{}, "user accepted steam path");
-            co_return p;
-          }
-          else
-          {
-            launcher::log::info (categories::launcher{}, "user declined steam path, falling back to CWD");
-            co_return fs::current_path ();
-          }
-        }
-        // User previously said no, so use the current directory.
-        //
-        launcher::log::info (categories::launcher{}, "user previously declined steam path, using CWD");
-        co_return fs::current_path ();
-      }
-      else
-      {
-        launcher::log::trace_l2 (categories::launcher{}, "steam path detection returned nullopt or path doesn't exist");
-      }
-    }
-    catch (const exception& e)
-    {
-      // If something blows up, just fall through to the default.
-      //
-      launcher::log::warning (categories::launcher{}, "exception during steam root resolution: {}", e.what ());
-    }
+      process::spawn (wine_exe.string (),
+                      process::args (wa),
+                      process::start_dir (root.string ()));
 
-    // No Steam installation found; use the current directory.
-    //
-    fs::path cur (fs::current_path ());
-    launcher::log::info (categories::launcher{}, "steam root not found or declined, falling back to current directory: {}", cur.string ());
-    co_return cur;
-  }
-
-  // Check for and optionally install launcher updates.
-  //
-  // Returns true if the launcher is restarting (caller should exit), false
-  // otherwise.
-  //
-  // If `pc` is provided and an update is available, the progress coordinator
-  // will be started to display download progress. The UI is only shown when
-  // there is actually an update to install, that is, we want to avoid
-  // unnecessary UI for up-to-date scenarios.
-  //
-  asio::awaitable<bool>
-  check_self_update (asio::io_context& io,
-                     bool pre,
-                     bool only,
-                     progress_coordinator* pc = nullptr)
-  {
-    launcher::log::info (categories::launcher{}, "checking for launcher updates (prerelease: {}, update_only: {})", pre, only);
-    auto uc (make_update_coordinator (io));
-    uc->set_include_prerelease (pre);
-
-    // If the user explicitly requested an update, we let the coordinator
-    // attempt the restart immediately after installation.
-    //
-    uc->set_auto_restart (only);
-
-    // Wire up rate limit progress callback on the discovery layer's GitHub API
-    // so the user sees a countdown if GitHub throttles.
-    //
-    bool rl_started_ui (false);
-
-    uc->discovery ().set_progress_callback (
-      [pc, &io, &rl_started_ui] (const string& message, uint64_t rem)
-    {
-      if (pc == nullptr)
-        return;
-
-      if (!pc->running ())
-      {
-        pc->start ();
-        rl_started_ui = true;
-      }
-
-      string s (message + "\n\nTime remaining: " + std::to_string (rem) +
-                " seconds");
-
-      pc->show_dialog ("Rate Limit", s);
-
-      if (rem == 0)
-      {
-        pc->hide_dialog ();
-
-        if (rl_started_ui)
-        {
-          asio::co_spawn (io, pc->stop (), asio::detached);
-          rl_started_ui = false;
-        }
-      }
-    });
-
-    try
-    {
-      // First, check if an update is available without starting the UI.
-      //
-      auto s (co_await uc->check_for_updates ());
-
-      // If we were strictly asked to update but couldn't even check (e.g.,
-      // network down), that's fatal. Otherwise, we treat it as a soft failure
-      // and proceed to the application.
-      //
-      if (s == update_status::check_failed && only)
-      {
-        launcher::log::error (categories::launcher{}, "strict update requested but check failed");
-        cerr << "error: failed to check for launcher updates" << endl;
-        co_return false;
-      }
-
-      // No update available, nothing to do.
-      //
-      if (s == update_status::up_to_date)
-      {
-        launcher::log::info (categories::launcher{}, "launcher is up to date");
-        co_return false;
-      }
-
-      // An update is available. Now we can start the UI if requested.
-      //
-      launcher::log::info (categories::launcher{}, "launcher update available, proceeding with installation");
-      if (pc != nullptr)
-      {
-        uc->set_progress_coordinator (pc);
-        pc->start ();
-      }
-
-      // Proceed to install the update.
-      //
-      const auto& info (uc->last_update_info ());
-
-      cout << "launcher update available: " << info.version
-           << " (current: " << uc->current_version () << ")" << endl;
-
-      if (!info.body.empty ())
-        cout << "Release notes:\n" << info.body << "\n" << endl;
-
-      auto r (co_await uc->install_update (info));
-
-      if (!r.success)
-      {
-        launcher::log::error (categories::launcher{}, "update failed to install: {}", r.error_message);
-        cerr << "error: update failed: " << r.error_message << endl;
-        co_return false;
-      }
-
-      // Try to restart into the new version.
-      //
-      if (uc->restart ())
-      {
-        launcher::log::info (categories::launcher{}, "restarting into new launcher version");
-        co_return true;
-      }
-
-      launcher::log::warning (categories::launcher{}, "update successful but auto-restart failed");
-      cerr << "warning: failed to restart launcher automatically" << endl;
-      cout << "please restart the launcher manually." << endl;
-
-      co_return false;
-    }
-    catch (const exception& e)
-    {
-      // Same logic as above: complain loudly if this was the only task,
-      // otherwise just warn and move on.
-      //
-      if (only)
-      {
-        launcher::log::error (categories::launcher{}, "strict update failed with exception: {}", e.what ());
-        cerr << "error: update failed: " << e.what () << endl;
-      }
-      else
-      {
-        launcher::log::warning (categories::launcher{}, "update check failed with exception: {}", e.what ());
-        cerr << "warning: update check failed: " << e.what () << endl;
-      }
-
-      co_return false;
-    }
-  }
-}
-
-int
-main (int argc, char* argv[])
-{
-  using namespace std;
-  using namespace launcher;
-
-  active_logger = new logger;
-
-  launcher::log::info (categories::launcher{}, "launcher {} starting up", HELLO_VERSION_ID);
-
- try
-  {
-    // We need to re-anchor the current working directory to the launcher
-    // executable's location. If we are invoked from a random directory via the
-    // command line, we do not want to start resolving relative paths against
-    // the shell's current working directory.
-    //
-    {
-      error_code ec;
-
-  #ifdef _WIN32
-      // On Windows, we rely on GetModuleFileNameW to figure out our location.
-      // Note that we cap the buffer at MAX_PATH. While this could theoretically
-      // truncate an extremely long path, for a launcher executable, it is
-      // practically sufficient.
-      //
-      wchar_t b[MAX_PATH];
-      fs::path e (GetModuleFileNameW (nullptr, b, MAX_PATH) != 0 ? b : L"");
-  #else
-      // On Linux, we ask procfs. Resolving /proc/self/exe is the standard way
-      // to figure out our own physical location on disk.
-      //
-      fs::path e (fs::canonical ("/proc/self/exe", ec));
-  #endif
-
-      if (!e.empty () && !ec)
-      {
-        fs::path d (e.parent_path ());
-        fs::current_path (d, ec);
-
-        if (ec)
-          launcher::log::warning (
-            categories::launcher {},
-            "unable to change working directory: {}",
-            ec.message ());
-        else
-          launcher::log::trace_l2 (
-            categories::launcher {},
-            "changed working directory to: {}",
-            d.string ());
-      }
-      else
-      {
-        // We failed to resolve the executable location. Figure out the reason
-        // and log it with the context of the underlying system mechanism, since
-        // this usually means things are about to break.
-        //
-        std::string r (ec ? ec.message ()
-                          : "returned path is empty or truncated");
-
-#ifdef _WIN32
-        const char* m ("GetModuleFileNameW");
-  #else
-        const char* m ("/proc/self/exe");
-  #endif
-
-        launcher::log::error (
-          categories::launcher {},
-          "failed to resolve executable location via {}. "
-          "working directory cannot be changed. details: {}",
-          m,
-          r);
-      }
-    }
-
-    launcher::log::trace_l3 (categories::launcher{}, "parsing command line options");
-    options opt (argc, argv);
-
-    // Handle --version.
-    //
-    if (opt.version ())
-    {
-      auto& o (cout);
-
-      o << "Launcher " << HELLO_VERSION_ID << "\n";
-
-      return 0;
-    }
-
-    // Handle --help.
-    //
-    if (opt.help ())
-    {
-      auto& o (cout);
-
-      o << "usage: launcher [options]"   << "\n"
-        << "options:"                 << "\n";
-
-      opt.print_usage (o);
-
-      return 0;
-    }
-
-    asio::io_context ioc;
-    runtime_context ctx;
-
-    // Determine the installation path.
-    //
-    if (!opt.path_specified ())
-    {
-      launcher::log::trace_l2 (categories::launcher{}, "path not specified on CLI, attempting heuristic resolution");
-      optional<fs::path> heuristic;
-
-      asio::co_spawn (
-        ioc,
-        resolve_root (ioc),
-        [&heuristic, &ioc] (exception_ptr ex, optional<fs::path> p)
-        {
-          if (!ex) heuristic = p;
-          ioc.stop ();
-        });
-
-      // Run the detection loop. We restart the context afterwards because
-      // stop() makes it return, and we need it fresh for the launcher itself.
-      //
-      ioc.restart ();
-      ioc.run ();
-      ioc.restart ();
-
-      if (!heuristic)
-      {
-        // User cancelled or no Steam installation found.
-        //
-        launcher::log::error (categories::launcher{}, "failed to resolve installation path");
-        return 1;
-      }
-
-      ctx.install_location = *heuristic;
+      info ("wine game process spawned");
     }
     else
     {
-      ctx.install_location = fs::path (opt.path ());
-      launcher::log::info (categories::launcher{}, "using CLI-specified install location: {}", ctx.install_location.string ());
-
-      // Cache the user-specified path in the database for future runs
-      // without --path.
-      //
-      launcher::log::trace_l2 (categories::launcher{}, "caching user-specified path for future runs");
-      fs::path r (resolve_cache_root ());
-
-      launcher::log::trace_l3 (categories::launcher{}, "opening global cache database at {}", r.string ());
-      cache_database db (r);
-
-      string s (path_digest (fs::current_path ()));
-      launcher::log::debug (categories::launcher{}, "saving path override to database under scope digest: {}", s);
-
-      db.setting (setting_keys::inst_path (s),
-                  ctx.install_location.string ());
+      info ("proton execution initiated");
     }
+  }
+#else
+  asio::awaitable<void>
+  execute (asio::io_context& /* io */,
+            const path& root,
+            const string& exe,
+            const vector<string>& args)
+  {
+    if (exe.empty ())
+      throw runtime_error ("game binary unspecified");
 
-    // Map the command line options to our context.
+    path bin (root / from_utf8 (exe));
+    error_code ec;
+
+    bin = canonical (bin, ec);
+
+    if (ec)
+      throw system_error (ec,
+                          "failed to canonicalize game binary path: " +
+                            to_utf8 (bin));
+
+    info ("launching native game process: {}", to_utf8 (bin));
+
+    // On Windows, boost::process heavily relies on standard strings mapping to
+    // the ANSI codepage which corrupts Unicode strings (Russian, Chinese). We
+    // construct wide strings (UTF-16) to force boost::process into
+    // using CreateProcessW wide-character API.
     //
-    ctx.upstream_owner = "iw4x";
-    ctx.upstream_repo = "iw4x-client";
-    ctx.prerelease = opt.prerelease ();
-    ctx.concurrency_limit = opt.jobs ();
+    vector<wstring> wa;
+    wa.reserve (args.size ());
 
-    launcher::log::debug (categories::launcher{}, "runtime context configured (repo: {}/{}, pre: {}, jobs: {})",
-                          ctx.upstream_owner, ctx.upstream_repo, ctx.prerelease, ctx.concurrency_limit);
+    for (const auto& a : args)
+      wa.push_back (from_utf8 (a).wstring ());
 
-    // Execution settings.
-    //
-    ctx.proton_binary = opt.game_exe ();
-    ctx.skip_launch = opt.skip_launch ();
+    process::spawn (bin.wstring (),
+                    process::args (wa),
+                    process::start_dir (root.wstring ()));
 
-    if (opt.game_args_specified ())
-      ctx.proton_arguments = opt.game_args ();
+    info ("native game process spawned");
 
-    if (!opt.no_self_update () || opt.self_update_only ())
+    co_return;
+  }
+#endif
+}
+
+using namespace launcher;
+
+int
+main (int argc, char* argv[])
+try
+{
+  active_logger = new logger;
+
+  options opt (argc, argv);
+
+  // Handle --version.
+  //
+  if (opt.version ())
+  {
+    auto& o (cout);
+
+    o << "Launcher " << HELLO_VERSION_ID << "\n";
+
+    return 0;
+  }
+
+  // Handle --help.
+  //
+  if (opt.help ())
+  {
+    auto& o (cout);
+
+    o << "usage: launcher[options]" << "\n"
+      << "options:" << "\n";
+
+    opt.print_usage (o);
+
+    return 0;
+  }
+
+  reanchor_cwd ();
+
+  asio::io_context io;
+
+  if (!opt.no_self_update () || opt.self_update_only ())
+  {
+    auto pc (make_unique<progress_coordinator> (io));
+    exception_ptr ex;
+
+    asio::co_spawn (io,[&io, &opt, &pc] () -> asio::awaitable<void>
     {
-      bool r (false);
+      exception_ptr ep;
 
-      // Setup the progress feedback. The progress coordinator is passed to
-      // check_self_update but only started if an update is actually available.
-      //
-      auto pc (make_unique<progress_coordinator> (ioc));
-
-      asio::co_spawn (
-        ioc,
-        [&]() -> asio::awaitable<void>
-        {
-          bool res = false;
-          std::exception_ptr ex;
-
-          try
-          {
-            res = co_await check_self_update (ioc,
-                                              opt.prerelease (),
-                                              opt.self_update_only (),
-                                              pc.get ());
-          }
-          catch (...)
-          {
-            ex = std::current_exception ();
-          }
-
-          if (pc != nullptr)
-            co_await pc->stop ();
-
-          if (ex)
-            std::rethrow_exception (ex);
-
-          r = res;
-        }(),
-        [&ioc] (exception_ptr /*e*/)
-        {
-          // If an unhandled exception bubbles up here, we just ignore it and
-          // fall through to the main launch process.
-          //
-          ioc.stop ();
-        });
-
-      ioc.restart ();
-      ioc.run ();
-      ioc.restart ();
-
-      // If we applied an update that requires a restart (e.g. replaced the
-      // executable) or if the user only asked to update, we are done.
-      //
-      if (r || opt.self_update_only ())
+      try
       {
-        launcher::log::info (categories::launcher{}, "self update completed or requested exit, terminating current process");
-        return 0;
+        co_await check_self_update (io,
+                                    opt.prerelease (),
+                                    opt.self_update_only (),
+                                    *pc);
+      }
+      catch (...)
+      {
+        ep = current_exception ();
+      }
+
+      co_await pc->stop ();
+
+      if (ep)
+        rethrow_exception (ep);
+
+    } (), [&io, &ex] (exception_ptr ep) { ex = ep; });
+
+    io.restart ();
+    io.run ();
+    io.restart ();
+
+    if (ex)
+      rethrow_exception (ex);
+
+    if (opt.self_update_only ())
+      return 0;
+  }
+
+  // Determine the installation path. We use the current directory as the
+  // isolating scope to differentiate multiple launcher installations.
+  //
+  path root;
+  path cr (resolve_cache_root ());
+
+  trace_l3 ("opening global cache database at {}", to_utf8 (cr));
+  cache_database db (cr);
+
+  string scope (path_digest (current_path ()));
+
+  if (opt.path_specified ())
+  {
+    root = from_utf8 (opt.path ());
+    info ("using CLI-specified install location: {}", to_utf8 (root));
+
+    // Cache user-specified path in the database for future runs so the user
+    // doesn't have to keep passing --path manually.
+    //
+    trace_l2 ("saving user-specified path override to database");
+    db.setting (setting_keys::inst_path (scope), to_utf8 (root));
+  }
+  else
+  {
+    trace_l2 ("path not specified on CLI, checking database cache");
+    string saved (db.setting_value (setting_keys::inst_path (scope)));
+
+    if (!saved.empty ())
+    {
+      path p (from_utf8 (saved));
+
+      if (exists (p))
+      {
+        info ("using previously saved install path override: {}", to_utf8 (p));
+        root = p;
+      }
+      else
+      {
+        trace_l2 ("saved path override does not exist on disk, ignoring");
       }
     }
+  }
 
-    // Control Loop.
-    //
-    int exit_code (0);
-    launcher_controller controller (ioc, move (ctx));
+  // If no explicit path override was found or cached, attempt to resolve via
+  // the Steam installation heuristic. If we fail, we halt.
+  //
+  if (root.empty ())
+  {
+    trace_l2 (
+      "no cached override found, attempting steam installation detection");
 
-    asio::co_spawn (
-      ioc,
-      controller.run (),
-      [&exit_code, &ioc] (exception_ptr ex, int r)
+    exception_ptr ex;
+
+    asio::co_spawn (io,
+                    [&io, &root, &scope, &db] () -> asio::awaitable<void>
+    {
+      auto sp (co_await get_mw2_default_path (io));
+
+      if (sp && exists (*sp))
       {
-        exit_code = r;
-        if (ex)
-        {
-          try { rethrow_exception (ex); }
-          catch (const exception& e)
-          {
-            launcher::log::error (categories::launcher{}, "unhandled exception in controller: {}", e.what ());
-            cerr << "error: " << e.what () << "\n";
-            exit_code = 1;
-          }
-        }
-        ioc.stop ();
-      });
+        info ("installation path: {}", to_utf8 (*sp));
+        root = *sp;
+      }
+      else
+      {
+        throw runtime_error (
+          "could not locate installation and no --path was specified");
+      }
+    } (), [&ex] (exception_ptr ep) { ex = ep; });
 
-    ioc.run ();
+    io.restart ();
+    io.run ();
+    io.restart ();
 
-    launcher::log::info (categories::launcher{}, "launcher exiting with code {}", exit_code);
-    return exit_code;
+    if (ex)
+      rethrow_exception (ex);
   }
-  catch (const cli::exception& ex)
+
+  error_code root_ec;
+
+  root = canonical (root, root_ec);
+
+  if (root_ec)
+    throw system_error (root_ec,
+                        "failed to canonicalize installation root: " +
+                          to_utf8 (root));
+
+  info ("final installation root resolved to: {}", to_utf8 (root));
+
+  github_coordinator   gh (io);
+  http_coordinator     hc (io);
+  download_coordinator dc (io, opt.jobs ());
+  progress_coordinator pc (io);
+  cache_coordinator    cc (io, root);
+
+  cc.set_github_coordinator (&gh);
+  cc.set_download_coordinator (&dc);
+  cc.set_progress_coordinator (&pc);
+
+  // Visually alert the user if we hit GitHub's unauthenticated API rate limits
+  //
+  bind_rate_limit_ui (io, gh, pc);
+
+  exception_ptr sync_ex;
+
+  asio::co_spawn (
+    io,
+    [&io, &gh, &hc, &dc, &pc, &cc, &root, &opt] () -> asio::awaitable<void>
   {
-    launcher::log::error (categories::launcher{}, "CLI exception caught in main: {}", ex.what ());
-    cerr << "error: " << ex.what () << "\n";
-    return 1;
-  }
-  catch (const exception& ex)
+    co_await sync_client (io, gh, dc, pc, cc, root, opt.prerelease ());
+    co_await sync_rawfiles (io, gh, dc, pc, cc, root, opt.prerelease ());
+    co_await sync_dlc (io, hc, dc, pc, cc, root);
+
+#ifdef __linux__
+    co_await sync_helper (io, gh, dc, pc, cc, root, true);
+#endif
+  }(),
+    [&io, &sync_ex] (exception_ptr ep)
   {
-    launcher::log::error (categories::launcher{}, "exception caught in main: {}", ex.what ());
-    cerr << "error: " << ex.what () << "\n";
-    return 1;
+    sync_ex = ep;
+    io.stop ();
+  });
+
+  io.restart ();
+  io.run ();
+
+  if (sync_ex)
+    rethrow_exception (sync_ex);
+
+  info ("all components synchronized and up to date");
+
+  if (opt.skip_launch ())
+  {
+    info ("updates completed, skipping game launch as requested and exiting");
+    return 0;
   }
+
+  exception_ptr exec_ex;
+
+  asio::co_spawn (
+    io,
+    [&io, &root, &opt] () -> asio::awaitable<void>
+  {
+    co_await execute (io, root, opt.game_exe (), opt.game_args ());
+
+  } (), [&io, &exec_ex] (exception_ptr ep) { exec_ex = ep; io.stop (); });
+
+  io.restart ();
+  io.run ();
+
+  if (exec_ex)
+    rethrow_exception (exec_ex);
+
+  info ("execution payload dispatched, terminating launcher");
+
+  return 0;
+}
+catch (const cli::exception& ex)
+{
+  error ("CLI exception caught in main: {}", ex.what ());
+  return 1;
+}
+catch (const exception& ex)
+{
+  error ("exception caught in main: {}", ex.what ());
+  return 1;
+}
+catch (...)
+{
+  error ("You've run into a launcher bug we didn't see coming. Since this isn't"
+         "something a restart can fix, please report it to our team so we can"
+         "investigate.");
+  return 1;
 }

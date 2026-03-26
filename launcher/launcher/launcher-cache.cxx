@@ -144,7 +144,44 @@ namespace launcher
         component_type c,
         const string& v)
   {
-    return rec_->plan (m, c, v);
+    manifest opt_m;
+    opt_m.files = m.files;
+
+    for (const auto& a : m.archives)
+    {
+      if (!a.files.empty ())
+      {
+        // Pre-evaluate the inner files to check if they are already fully
+        // satisfied on disk.
+        //
+        manifest test_m;
+        test_m.files = a.files;
+        auto test_p = rec_->plan (test_m, c, v);
+
+        bool needs_dl = false;
+        for (const auto& i : test_p)
+        {
+          if (i.action == reconcile_action::download)
+          {
+            needs_dl = true;
+            break;
+          }
+        }
+
+        // If the files are fully satisfied, add them as standalone items to
+        // the optimized plan so they are preserved, and omit the archive.
+        //
+        if (!needs_dl)
+        {
+          opt_m.files.insert (opt_m.files.end (), a.files.begin (), a.files.end ());
+          continue;
+        }
+      }
+
+      opt_m.archives.push_back (a);
+    }
+
+    return rec_->plan (opt_m, c, v);
   }
 
   reconcile_summary cache_coordinator::
@@ -158,10 +195,10 @@ namespace launcher
          component_type c,
          const string& v)
   {
-    // Generate the plan but don't act on it. Use this to inform the user if
-    // an update is pending without actually touching the disk.
+    // Generate the optimized plan but don't act on it. Use this to inform the
+    // user if an update is pending without actually touching the disk.
     //
-    auto is (rec_->plan (m, c, v));
+    auto is (plan (m, c, v));
     auto s (rec_->summarize (is));
 
     if (s.up_to_date ())
@@ -175,9 +212,9 @@ namespace launcher
         component_type c,
         const string& v)
   {
-    // First, see what needs to be done.
+    // First, see what needs to be done via the optimized plan.
     //
-    auto is (rec_->plan (m, c, v));
+    auto is (plan (m, c, v));
     auto s (rec_->summarize (is));
 
     // If the summary says we are good, then we are good.
@@ -233,11 +270,11 @@ namespace launcher
     reconcile_summary total;
     vector<reconcile_item> ais; // All items.
 
-    // Aggregate plans for all components so we can batch the downloads.
+    // Aggregate optimized plans for all components so we can batch the downloads.
     //
     for (const auto& [m, c, v] : is)
     {
-      auto cis (rec_->plan (m, c, v));
+      auto cis (plan (m, c, v));
       auto s (rec_->summarize (cis));
 
       total.files_valid += s.files_valid;
