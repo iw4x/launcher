@@ -1141,6 +1141,37 @@ try
 
   info ("final installation root resolved to: {}", to_utf8 (root));
 
+  // Check if launcher version changed, if so wipe local .iw4x cache
+  //
+  {
+    string current_ver (HELLO_VERSION_ID);
+    string scope_ver_key ("launcher_version_" + path_digest (root));
+    string saved_ver (db.setting_value (scope_ver_key));
+
+    if (saved_ver != current_ver)
+    {
+      error_code ec;
+      path cache_dir (root / ".iw4x");
+
+      if (exists (cache_dir, ec))
+      {
+        info (
+          "launcher version changed ({} -> {}), wiping local cache directory: "
+          "{}",
+          saved_ver.empty () ? "none" : saved_ver,
+          current_ver,
+          to_utf8 (cache_dir));
+
+        remove_all (cache_dir, ec);
+
+        if (ec)
+          warning ("failed to remove cache directory: {}", ec.message ());
+      }
+
+      db.setting (scope_ver_key, current_ver);
+    }
+  }
+
   github_coordinator   gh (io);
   http_coordinator     hc (io);
   download_coordinator dc (io, opt.jobs ());
