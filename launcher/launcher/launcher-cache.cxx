@@ -156,6 +156,10 @@ namespace launcher
         //
         manifest test_m;
         test_m.files = a.files;
+
+        for (auto& f : test_m.files)
+          f.archive_name.reset ();
+
         auto test_p = rec_->plan (test_m, c, v);
 
         bool needs_dl = false;
@@ -173,7 +177,7 @@ namespace launcher
         //
         if (!needs_dl)
         {
-          opt_m.files.insert (opt_m.files.end (), a.files.begin (), a.files.end ());
+          opt_m.files.insert (opt_m.files.end (), test_m.files.begin (), test_m.files.end ());
           continue;
         }
       }
