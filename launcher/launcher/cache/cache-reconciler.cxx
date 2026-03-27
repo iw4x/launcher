@@ -405,17 +405,6 @@ namespace launcher
       s.ok = true;
       s.dl = false;
 
-      // An archive without a URL is useless to us. We simply skip it.
-      //
-      if (a.url.empty ())
-      {
-        launcher::log::trace_l3 (categories::cache {},
-                                 "skipping archive {} (no URL provided)",
-                                 a.name);
-        s.skip = true;
-        continue;
-      }
-
       if (s.hl)
       {
         // For exploded archives, we check each inner file. If any file is
@@ -560,7 +549,7 @@ namespace launcher
       {
         reconcile_item ri;
         ri.action = reconcile_action::download;
-        ri.path = s.hl ? (root_ / a.name).string () : path (a).string ();
+        ri.path = path (a).string ();
         ri.url = a.url;
         ri.expected_hash = a.hash.value;
         ri.expected_size = a.size;
@@ -694,7 +683,7 @@ namespace launcher
         dl = true;
       }
 
-      if (dl && f.asset_name)
+      if (dl)
       {
         reconcile_item ri;
         ri.action = reconcile_action::download;
