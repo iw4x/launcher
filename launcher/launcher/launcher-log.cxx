@@ -18,7 +18,7 @@ namespace launcher
                        PatternFormatterOptions const&     f,
                        LogLevel                           t)
     {
-      Logger* l (Frontend::create_or_get_logger (n, s, f));
+      Logger* l (Frontend::create_or_get_logger (n, s, f, quill::ClockSourceType::System));
       l->set_log_level (t);
       return l;
     }
@@ -52,7 +52,11 @@ namespace launcher
       "%H:%M:%S.%Qms",
       Timezone::LocalTime);
 
-    Logger* l (Frontend::create_or_get_logger ("launcher", {cs, fs}, pf));
+    Logger* l (Frontend::create_or_get_logger ("launcher",
+                                               {cs, fs},
+                                               pf,
+                                               quill::ClockSourceType::System));
+
     l->set_log_level (LogLevel::TraceL3);
 
     using namespace categories;
