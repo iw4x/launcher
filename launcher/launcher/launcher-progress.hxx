@@ -4,7 +4,6 @@
 
 #include <boost/asio.hpp>
 
-#include <memory>
 #include <string>
 #include <functional>
 #include <vector>
@@ -102,7 +101,7 @@ namespace launcher
 
   private:
     asio::io_context& ioc_;
-    std::unique_ptr<manager_type> manager_;
+    manager_type manager_;
   };
 
   // Format progress for display.

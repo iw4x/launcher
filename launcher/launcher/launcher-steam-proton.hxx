@@ -7,7 +7,6 @@
 #include <boost/asio/io_context.hpp>
 
 #include <filesystem>
-#include <memory>
 #include <optional>
 #include <cstdint>
 #include <string>
@@ -123,7 +122,7 @@ namespace launcher
 
     // Underlying Proton manager.
     //
-    std::unique_ptr<manager_type> manager_;
+    manager_type manager_;
 
     // Configuration flags.
     //

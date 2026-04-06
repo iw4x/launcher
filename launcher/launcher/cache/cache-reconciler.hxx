@@ -4,7 +4,6 @@
 
 #include <filesystem>
 #include <functional>
-#include <memory>
 #include <optional>
 #include <string>
 #include <vector>
@@ -62,8 +61,6 @@ namespace launcher
 
     // We allow hot-swapping the strategy, though usually this is determined at
     // startup.
-    //
-    // @@: the hot-swap portion may not be worth keeping.
     //
     void
     mode (strategy s);

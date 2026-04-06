@@ -6,7 +6,6 @@
 
 #include <filesystem>
 #include <functional>
-#include <memory>
 #include <optional>
 #include <string>
 
@@ -91,6 +90,6 @@ namespace launcher
 
   private:
     asio::io_context& ioc_;
-    std::unique_ptr<client_type> client_;
+    client_type client_;
   };
 }

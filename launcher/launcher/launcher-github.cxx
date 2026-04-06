@@ -19,33 +19,33 @@ namespace launcher
   github_coordinator::
   github_coordinator (asio::io_context& c)
     : ioc_ (c),
-      api_ (make_unique<api_type> (c))
+      api_ (c)
   {
   }
 
   github_coordinator::
   github_coordinator (asio::io_context& c, string t)
     : ioc_ (c),
-      api_ (make_unique<api_type> (c, move (t)))
+      api_ (c, move (t))
   {
   }
 
   void github_coordinator::
   set_token (string t)
   {
-    api_->set_token (move (t));
+    api_.set_token (move (t));
   }
 
   void github_coordinator::
   set_proxy (string u)
   {
-    api_->set_proxy (move (u));
+    api_.set_proxy (move (u));
   }
 
   void github_coordinator::
   set_progress_callback (progress_callback_type cb)
   {
-    api_->set_progress_callback (move (cb));
+    api_.set_progress_callback (move (cb));
   }
 
   asio::awaitable<github_coordinator::release_type> github_coordinator::
@@ -63,7 +63,7 @@ namespace launcher
       // Fetch a small batch; the first one is the newest.
       //
       vector<release_type> rs (
-        co_await api_->get_releases (own, rep, 10));
+        co_await api_.get_releases (own, rep, 10));
 
       if (rs.empty ())
         throw runtime_error ("no releases found for " + own + "/" + rep);
@@ -71,7 +71,7 @@ namespace launcher
       co_return rs[0];
     }
     else
-      co_return co_await api_->get_latest_release (own, rep);
+      co_return co_await api_.get_latest_release (own, rep);
   }
 
   asio::awaitable<github_coordinator::release_type> github_coordinator::
@@ -79,7 +79,7 @@ namespace launcher
                         const string& rep,
                         const string& t)
   {
-    co_return co_await api_->get_release_by_tag (own, rep, t);
+    co_return co_await api_.get_release_by_tag (own, rep, t);
   }
 
   // Manifest handling.
@@ -201,19 +201,19 @@ namespace launcher
   asio::awaitable<github_coordinator::repository_type> github_coordinator::
   fetch_repository (const string& own, const string& rep)
   {
-    co_return co_await api_->get_repository (own, rep);
+    co_return co_await api_.get_repository (own, rep);
   }
 
   github_coordinator::api_type& github_coordinator::
   api () noexcept
   {
-    return *api_;
+    return api_;
   }
 
   const github_coordinator::api_type& github_coordinator::
   api () const noexcept
   {
-    return *api_;
+    return api_;
   }
 
   asio::awaitable<manifest> github_coordinator::

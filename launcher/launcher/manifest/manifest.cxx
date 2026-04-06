@@ -14,24 +14,18 @@ namespace launcher
   std::string hash::
   string () const
   {
-    // @@: Currently stubbed.
-    //
     return value;
   }
 
   bool hash::
   verify (const std::string& data) const
   {
-    // @@: Currently stubbed.
-    //
     return !value.empty ();
   }
 
   bool hash::
   verify (const std::vector<char>& data) const
   {
-    // @@: Currently stubbed.
-    //
     return !value.empty ();
   }
 
@@ -387,8 +381,6 @@ namespace launcher
   asio::awaitable<bool> manifest::
   validate_async () const
   {
-    // @@: Currently stubbed.
-    //
     co_return validate ();
   }
 }

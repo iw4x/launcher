@@ -14,38 +14,38 @@ namespace launcher
   progress_coordinator::
   progress_coordinator (asio::io_context& c)
     : ioc_ (c),
-      manager_ (make_unique<manager_type> (c))
+      manager_ (c)
   {
   }
 
   void progress_coordinator::
   start ()
   {
-    manager_->start ();
+    manager_.start ();
   }
 
   asio::awaitable<void> progress_coordinator::
   stop ()
   {
-    co_await manager_->stop ();
+    co_await manager_.stop ();
   }
 
   bool progress_coordinator::
   running () const noexcept
   {
-    return manager_->running ();
+    return manager_.running ();
   }
 
   shared_ptr<progress_coordinator::entry_type> progress_coordinator::
   add_entry (string l)
   {
-    return manager_->add_entry (move (l));
+    return manager_.add_entry (move (l));
   }
 
   void progress_coordinator::
   remove_entry (shared_ptr<entry_type> e)
   {
-    manager_->remove_entry (move (e));
+    manager_.remove_entry (move (e));
   }
 
   void progress_coordinator::
@@ -82,31 +82,31 @@ namespace launcher
   void progress_coordinator::
   add_log (string m)
   {
-    manager_->add_log (move (m));
+    manager_.add_log (move (m));
   }
 
   void progress_coordinator::
   show_dialog (string t, string m)
   {
-    manager_->show_dialog (move (t), move (m));
+    manager_.show_dialog (move (t), move (m));
   }
 
   void progress_coordinator::
   hide_dialog ()
   {
-    manager_->hide_dialog ();
+    manager_.hide_dialog ();
   }
 
   progress_coordinator::manager_type& progress_coordinator::
   manager () noexcept
   {
-    return *manager_;
+    return manager_;
   }
 
   const progress_coordinator::manager_type& progress_coordinator::
   manager () const noexcept
   {
-    return *manager_;
+    return manager_;
   }
 
   // Formatting

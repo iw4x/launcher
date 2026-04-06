@@ -470,13 +470,13 @@ namespace launcher
 
   http_client::
   http_client (asio::io_context& c)
-    : session_ (make_unique<http_session> (c, http_client_traits ()))
+    : session_ (c, http_client_traits ())
   {
   }
 
   http_client::
   http_client (asio::io_context& c, const http_client_traits& t)
-    : session_ (make_unique<http_session> (c, t))
+    : session_ (c, t)
   {
   }
 
@@ -533,7 +533,7 @@ namespace launcher
   asio::awaitable<http_response> http_client::
   request_impl (http_request rq, uint8_t rc)
   {
-    const auto& t (session_->traits ());
+    const auto& t (session_.traits ());
 
     // Bail out if we're caught in a redirect loop.
     //
@@ -543,8 +543,6 @@ namespace launcher
     url_parts p (parse_url (rq.url));
     bool s (p.scheme == "https");
 
-    // Route to the appropriate protocol handler.
-    //
     http_response rs (s ? co_await request_ssl (rq) : co_await request_tcp (rq));
 
     if (t.follow_redirects && rs.is_redirection ())
@@ -585,9 +583,9 @@ namespace launcher
     using beast_req = http_beast::request<http_beast::string_body>;
     using beast_res = http_beast::response<http_beast::string_body>;
 
-    auto& c (session_->io_context ());
-    auto& x (session_->ssl_context ());
-    const auto& t (session_->traits ());
+    auto& c (session_.io_context ());
+    auto& x (session_.ssl_context ());
+    const auto& t (session_.traits ());
 
     url_parts p (parse_url (rq.url));
 
@@ -681,8 +679,8 @@ namespace launcher
     using beast_req = http_beast::request<http_beast::string_body>;
     using beast_res = http_beast::response<http_beast::string_body>;
 
-    auto& c (session_->io_context ());
-    const auto& t (session_->traits ());
+    auto& c (session_.io_context ());
+    const auto& t (session_.traits ());
 
     url_parts p (parse_url (rq.url));
 
@@ -796,7 +794,7 @@ namespace launcher
     using namespace chrono;
     using parser = http_beast::response_parser<http_beast::buffer_body>;
 
-    const auto& t (session_->traits ());
+    const auto& t (session_.traits ());
 
     // Prevent redirect loops.
     //
@@ -815,7 +813,7 @@ namespace launcher
     url_parts p (parse_url (u));
     bool ssl (p.scheme == "https");
 
-    auto& c (session_->io_context ());
+    auto& c (session_.io_context ());
 
     ios_base::openmode m (ios::binary | ios::out);
     m |= (rs ? ios::app : ios::trunc);
@@ -937,7 +935,7 @@ namespace launcher
     if (ssl)
     {
       using stream = beast::ssl_stream<beast::tcp_stream>;
-      stream s (c, session_->ssl_context ());
+      stream s (c, session_.ssl_context ());
 
       if (!SSL_set_tlsext_host_name (s.native_handle (), p.host.c_str ()))
       {

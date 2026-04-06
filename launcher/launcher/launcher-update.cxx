@@ -2,7 +2,6 @@
 
 #include <atomic>
 #include <iostream>
-#include <memory>
 #include <sstream>
 #include <stdexcept>
 
@@ -15,14 +14,14 @@ namespace launcher
   update_coordinator::
   update_coordinator (asio::io_context& c)
     : ioc_ (c),
-      discovery_ (make_unique<discovery_type> (c)),
-      installer_ (make_unique<installer_type> (c))
+      discovery_ (c),
+      installer_ (c)
   {
     // Wire up the installer's progress reporting immediately. If the
     // installer starts doing work during setup (e.g., resuming a
     // transaction), we need to catch those signals.
     //
-    installer_->set_progress_callback (
+    installer_.set_progress_callback (
       [this] (update_state s, double p, const string& m)
     {
       report_progress (s, p, m);
@@ -56,13 +55,13 @@ namespace launcher
   void update_coordinator::
   set_token (string t)
   {
-    discovery_->set_token (move (t));
+    discovery_.set_token (move (t));
   }
 
   void update_coordinator::
   set_include_prerelease (bool i)
   {
-    discovery_->set_include_prerelease (i);
+    discovery_.set_include_prerelease (i);
   }
 
   void update_coordinator::
@@ -104,7 +103,7 @@ namespace launcher
     {
       // Ask the backend. This might hit the network so we await.
       //
-      last_update_info_ = co_await discovery_->check_for_update (
+      last_update_info_ = co_await discovery_.check_for_update (
         owner_, repo_, current_version_);
 
       if (last_update_info_.empty ())
@@ -162,7 +161,7 @@ namespace launcher
       e = progress_coord_->add_entry (i.asset_name);
       e->metrics ().total_bytes.store (i.asset_size, memory_order_relaxed);
 
-      installer_->set_progress_callback (
+      installer_.set_progress_callback (
         [this, e] (update_state s, double p, const string& m)
       {
         // Map the generic percentage coming from the installer to specific
@@ -185,7 +184,7 @@ namespace launcher
       });
     }
 
-    auto r (co_await installer_->install (i));
+    auto r (co_await installer_.install (i));
 
     if (e && progress_coord_ != nullptr)
       progress_coord_->remove_entry (e);
@@ -221,7 +220,7 @@ namespace launcher
     state_ = update_state::restarting;
     report_progress (update_state::restarting, 0.0, "Restarting...");
 
-    return installer_->schedule_restart (t);
+    return installer_.schedule_restart (t);
   }
 
   update_state update_coordinator::
@@ -252,25 +251,25 @@ namespace launcher
   update_coordinator::discovery_type& update_coordinator::
   discovery () noexcept
   {
-    return *discovery_;
+    return discovery_;
   }
 
   const update_coordinator::discovery_type& update_coordinator::
   discovery () const noexcept
   {
-    return *discovery_;
+    return discovery_;
   }
 
   update_coordinator::installer_type& update_coordinator::
   installer () noexcept
   {
-    return *installer_;
+    return installer_;
   }
 
   const update_coordinator::installer_type& update_coordinator::
   installer () const noexcept
   {
-    return *installer_;
+    return installer_;
   }
 
   void update_coordinator::

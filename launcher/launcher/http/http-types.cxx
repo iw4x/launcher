@@ -166,18 +166,6 @@ namespace launcher
   http_field (std::string n, std::string v)
     : name (std::move (n)), value (std::move (v)) {}
 
-  bool
-  operator== (const http_field& x, const http_field& y) noexcept
-  {
-    return x.name == y.name && x.value == y.value;
-  }
-
-  bool
-  operator!= (const http_field& x, const http_field& y) noexcept
-  {
-    return !(x == y);
-  }
-
   // http_headers
   //
   void http_headers::
@@ -239,11 +227,5 @@ namespace launcher
   operator== (const http_headers& x, const http_headers& y) noexcept
   {
     return x.fields == y.fields;
-  }
-
-  bool
-  operator!= (const http_headers& x, const http_headers& y) noexcept
-  {
-    return !(x == y);
   }
 }

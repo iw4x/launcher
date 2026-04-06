@@ -135,12 +135,6 @@ namespace launcher
   }
 
   inline bool
-  operator!= (const launcher_version& x, const launcher_version& y)
-  {
-    return !(x == y);
-  }
-
-  inline bool
   operator<= (const launcher_version& x, const launcher_version& y)
   {
     return x.compare (y) <= 0;

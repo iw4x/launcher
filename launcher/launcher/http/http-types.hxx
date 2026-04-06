@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cassert>
+#include <compare>
 #include <cstdint>
 #include <optional>
 #include <ostream>
@@ -132,13 +133,10 @@ namespace launcher
     {
       return name.empty () && value.empty ();
     }
+
+    bool
+    operator== (const http_field&) const = default;
   };
-
-  bool
-  operator == (const http_field& x, const http_field& y) noexcept;
-
-  bool
-  operator != (const http_field& x, const http_field& y) noexcept;
 
   // HTTP headers collection.
   //
@@ -214,10 +212,7 @@ namespace launcher
   };
 
   bool
-  operator == (const http_headers& x, const http_headers& y) noexcept;
-
-  bool
-  operator != (const http_headers& x, const http_headers& y) noexcept;
+  operator== (const http_headers& x, const http_headers& y) noexcept;
 
   // HTTP version.
   //
@@ -231,23 +226,8 @@ namespace launcher
       : major (maj),
         minor (min) {}
 
-    bool
-    operator == (const http_version& v) const noexcept
-    {
-      return major == v.major && minor == v.minor;
-    }
-
-    bool
-    operator != (const http_version& v) const noexcept
-    {
-      return !(*this == v);
-    }
-
-    bool
-    operator < (const http_version& v) const noexcept
-    {
-      return major < v.major || (major == v.major && minor < v.minor);
-    }
+    auto
+    operator<=> (const http_version&) const noexcept = default;
 
     std::string
     string () const;

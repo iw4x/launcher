@@ -65,7 +65,4 @@ namespace launcher
 
   bool
   operator== (const download_request& x, const download_request& y);
-
-  bool
-  operator!= (const download_request& x, const download_request& y);
 }

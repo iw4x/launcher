@@ -39,7 +39,4 @@ namespace launcher
 
   bool
   operator == (const http_endpoint& x, const http_endpoint& y) noexcept;
-
-  bool
-  operator != (const http_endpoint& x, const http_endpoint& y) noexcept;
 }

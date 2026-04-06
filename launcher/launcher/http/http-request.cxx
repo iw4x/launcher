@@ -88,26 +88,9 @@ namespace launcher
       set_header ("User-Agent", "IW4x-Launcher/1.1");
   }
 
-  bool
-  operator == (const http_request& x, const http_request& y) noexcept
-  {
-    // Note that we compare all components, including headers and the body.
-    //
-    return x.method == y.method && x.url == y.url && x.version == y.version &&
-      x.headers == y.headers && x.body == y.body;
-  }
-
-  bool
-  operator != (const http_request& x, const http_request& y) noexcept
-  {
-    return !(x == y);
-  }
-
   ostream&
   operator << (ostream& o, const http_request& r)
   {
-    // Serialize just the request line.
-    //
     o << to_string (r.method) << ' ' << r.url << ' ' << r.version;
     return o;
   }

@@ -111,12 +111,6 @@ namespace launcher
     }
   };
 
-  bool
-  operator == (const http_request& x, const http_request& y) noexcept;
-
-  bool
-  operator != (const http_request& x, const http_request& y) noexcept;
-
   std::ostream&
   operator << (std::ostream& o, const http_request& r);
 }

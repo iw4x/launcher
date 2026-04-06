@@ -15,11 +15,13 @@ namespace launcher
     //
     // Note that development builds open the full trace range.
     //
-  #if LAUNCHER_DEVELOP
+#if LAUNCHER_DEVELOP
     inline constexpr quill::LogLevel
       compiled_minimum_level (quill::LogLevel::TraceL3);
 #else
     // TraceL3 for beta, change on release
+    //
+    // ... Actually, keep L3 on release as well, very useful for diagnostics.
     //
     inline constexpr quill::LogLevel
       compiled_minimum_level (quill::LogLevel::TraceL3);

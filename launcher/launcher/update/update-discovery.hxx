@@ -3,7 +3,6 @@
 #include <boost/asio.hpp>
 
 #include <functional>
-#include <memory>
 #include <optional>
 #include <string>
 
@@ -112,7 +111,7 @@ namespace launcher
     parse_asset_version (const std::string& asset_name) const;
 
     asio::io_context& ioc_;
-    std::unique_ptr<api_type> api_;
+    api_type api_;
     bool include_prerelease_ = false;
   };
 }

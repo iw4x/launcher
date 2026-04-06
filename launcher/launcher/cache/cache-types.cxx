@@ -85,8 +85,6 @@ namespace launcher
     // Bail out if we cannot open the file. Returning an empty string cleanly
     // signals a failure to the caller.
     //
-    // @@: throw?
-    //
     ifstream i (p, ios::binary);
     if (!i)
       return string ();
@@ -131,17 +129,12 @@ namespace launcher
   {
     // Sanity check. An empty expected hash cannot match anything valid.
     //
-    // @@: throw?
-    //
     if (h.empty ())
       return false;
 
     // Compute the actual hash and compare. Note that compute_blake3() returning
     // empty means we failed to read the file, which naturally fails the
     // verification. Fall through and test it.
-    //
-    // @@: throw?
-    //
     //
     string a (compute_blake3 (p));
     if (a.empty ())

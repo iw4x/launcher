@@ -7,7 +7,6 @@
 #include <ftxui/component/screen_interactive.hpp>
 #include <ftxui/dom/elements.hpp>
 
-#include <memory>
 #include <vector>
 #include <string>
 #include <functional>

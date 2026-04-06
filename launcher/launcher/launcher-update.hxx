@@ -4,7 +4,6 @@
 
 #include <filesystem>
 #include <functional>
-#include <memory>
 #include <string>
 
 #include <launcher/launcher-progress.hxx>
@@ -183,8 +182,8 @@ namespace launcher
                        const std::string& error = "");
 
     asio::io_context& ioc_;
-    std::unique_ptr<discovery_type> discovery_;
-    std::unique_ptr<installer_type> installer_;
+    discovery_type discovery_;
+    installer_type installer_;
 
     std::string owner_ = "iw4x";
     std::string repo_ = "launcher";
