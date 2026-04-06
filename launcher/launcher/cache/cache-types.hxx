@@ -211,19 +211,6 @@ namespace launcher
     std::string val_;
   };
 
-  namespace setting_keys
-  {
-    // We avoid hardcoding strings all over the launcher. Keeping them here
-    // means we can eventually wire this up to a proper config migration system
-    // if keys change between versions.
-    //
-    std::string
-    inst_path (const std::string& s);
-
-    std::string
-    steam_prompt (const std::string& s, const std::string& d);
-  }
-
   // Record of what we need to do to a given file. Note that we default to the
   // client component here. It is the most common case and saves us from
   // sprinkling explicit initializers in the discovery loop.

@@ -57,21 +57,6 @@ namespace launcher
     return o;
   }
 
-  namespace setting_keys
-  {
-    string
-    inst_path (const string& s)
-    {
-      return "install_path." + s;
-    }
-
-    string
-    steam_prompt (const string& s, const string& d)
-    {
-      return "steam_prompt." + s + "." + d;
-    }
-  }
-
   std::int64_t
   get_file_mtime (const fs::path& p)
   {

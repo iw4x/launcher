@@ -483,12 +483,6 @@ namespace launcher
     const bool&
     build2_metadata () const;
 
-    const std::string&
-    path () const;
-
-    bool
-    path_specified () const;
-
     const bool&
     prerelease () const;
 
@@ -541,8 +535,6 @@ namespace launcher
     bool help_;
     bool version_;
     bool build2_metadata_;
-    std::string path_;
-    bool path_specified_;
     bool prerelease_;
     std::size_t jobs_;
     bool jobs_specified_;

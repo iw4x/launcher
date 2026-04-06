@@ -25,16 +25,6 @@ namespace launcher
 
     // Common options.
     //
-    // Note that we default to the current directory if --path is not
-    // specified.
-    //
-    std::string --path
-    {
-      "<dir>",
-      "The installation directory for the game files. If not specified, the
-       current working directory is used."
-    };
-
     bool --prerelease
     {
       "Opt-in to pre-release (beta) updates. Use this to test upcoming
