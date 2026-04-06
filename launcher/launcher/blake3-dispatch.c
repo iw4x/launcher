@@ -7,8 +7,6 @@
 
 #define BLAKE3_NO_AVX2
 #define BLAKE3_NO_AVX512
-#define BLAKE3_NO_SSE41
-#define BLAKE3_NO_SSE2
 
 #if defined(_MSC_VER)
 #include <Windows.h>

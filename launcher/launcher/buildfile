@@ -98,6 +98,11 @@ cc.poptions =+ "-I$out_root" "-I$src_root"
 if ($develop)
   cxx.coptions =+ "-DLAUNCHER_DEVELOP"
 
+# BLAKE3 SIMD: enable SSE2 and SSE4.1 intrinsics.
+#
+obj{blake3-sse2}:  c.coptions += -msse2
+obj{blake3-sse41}: c.coptions += -msse4.1
+
 # On Windows, we need the advanced API library for registry access (used
 # for Steam path detection).
 #
