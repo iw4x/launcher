@@ -764,8 +764,6 @@ namespace launcher
   : help_ (),
     version_ (),
     build2_metadata_ (),
-    path_ (),
-    path_specified_ (false),
     prerelease_ (),
     jobs_ (99),
     jobs_specified_ (false),
@@ -788,8 +786,6 @@ namespace launcher
   : help_ (),
     version_ (),
     build2_metadata_ (),
-    path_ (),
-    path_specified_ (false),
     prerelease_ (),
     jobs_ (99),
     jobs_specified_ (false),
@@ -815,8 +811,6 @@ namespace launcher
   : help_ (),
     version_ (),
     build2_metadata_ (),
-    path_ (),
-    path_specified_ (false),
     prerelease_ (),
     jobs_ (99),
     jobs_specified_ (false),
@@ -842,8 +836,6 @@ namespace launcher
   : help_ (),
     version_ (),
     build2_metadata_ (),
-    path_ (),
-    path_specified_ (false),
     prerelease_ (),
     jobs_ (99),
     jobs_specified_ (false),
@@ -871,8 +863,6 @@ namespace launcher
   : help_ (),
     version_ (),
     build2_metadata_ (),
-    path_ (),
-    path_specified_ (false),
     prerelease_ (),
     jobs_ (99),
     jobs_specified_ (false),
@@ -896,8 +886,6 @@ namespace launcher
   : help_ (),
     version_ (),
     build2_metadata_ (),
-    path_ (),
-    path_specified_ (false),
     prerelease_ (),
     jobs_ (99),
     jobs_specified_ (false),
@@ -925,8 +913,6 @@ namespace launcher
     os << "--version          Show version information and exit." << ::std::endl;
 
     os << "--build2-metadata  Print the build2 metadata and exit." << ::std::endl;
-
-    os << "--path <dir>       The installation directory for the game files." << ::std::endl;
 
     os << "--prerelease       Opt-in to pre-release (beta) updates." << ::std::endl;
 
@@ -963,9 +949,6 @@ namespace launcher
       &::launcher::cli::thunk< options, &options::version_ >;
       _cli_options_map_["--build2-metadata"] =
       &::launcher::cli::thunk< options, &options::build2_metadata_ >;
-      _cli_options_map_["--path"] =
-      &::launcher::cli::thunk< options, std::string, &options::path_,
-        &options::path_specified_ >;
       _cli_options_map_["--prerelease"] =
       &::launcher::cli::thunk< options, &options::prerelease_ >;
       _cli_options_map_["--jobs"] =

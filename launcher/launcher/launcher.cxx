@@ -30,7 +30,6 @@
 #include <launcher/launcher-manifest.hxx>
 #include <launcher/launcher-options.hxx>
 #include <launcher/launcher-progress.hxx>
-#include <launcher/launcher-steam.hxx>
 #include <launcher/launcher-update.hxx>
 
 #ifdef __linux__
@@ -194,53 +193,13 @@ namespace launcher
   }
 
   path
-  resolve_cache_root (const path& s = {})
+  resolve_cache_root ()
   {
-    trace_l2 ("resolving cache root {}", to_utf8 (s));
-    path d;
+    path d (current_path () / "cache");
 
-#ifdef _WIN32
-    // On Windows, the standard getenv() uses the ANSI codepage which corrupts
-    // Unicode characters. We must use _wgetenv to retrieve paths containing
-    // non-ASCII characters.
-    //
-    if (const wchar_t* v = _wgetenv (L"LOCALAPPDATA"))
-      d = path (v) / "iw4x";
-    else if (const wchar_t* v = _wgetenv (L"APPDATA"))
-      d = path (v) / "iw4x";
-    else
-      d = current_path () / ".iw4x";
-#elif defined(__APPLE__)
-    if (const char* h = getenv ("HOME"))
-      d = path (h) / "Library" / "Application Support" / "iw4x";
-    else
-      d = current_path () / ".iw4x";
-#else
-    if (const char* v = getenv ("XDG_CACHE_HOME"))
-      d = path (v) / "iw4x";
-    else if (const char* h = getenv ("HOME"))
-      d = path (h) / ".cache" / "iw4x";
-    else
-      d = current_path () / ".iw4x";
-#endif
-
-    // If we are looking for the cache specific to an installation (to avoid
-    // conflicts between multiple installs), append its unique key.
-    //
-    if (!s.empty ())
-    {
-      d /= path_digest (s);
-      trace_l3 ("appended scope digest to cache root: {}", to_utf8 (d));
-    }
+    trace_l2 ("cache root: {}", to_utf8 (d));
 
     error_code ec;
-
-    d = weakly_canonical (d, ec);
-
-    if (ec)
-      throw system_error (ec,
-                          "failed to canonicalize cache directory: " +
-                            to_utf8 (d));
 
     create_directories (d, ec);
 
@@ -321,7 +280,7 @@ namespace launcher
     };
 
     error_code e;
-    path sd (weakly_canonical (resolve_cache_root (ir) / "staging", e));
+    path sd (weakly_canonical (resolve_cache_root () / "staging", e));
 
     if (e)
       throw system_error (e,
@@ -1052,83 +1011,10 @@ try
       return 0;
   }
 
-  // Determine the installation path. We use the current directory as the
-  // isolating scope to differentiate multiple launcher installations.
+  // The installation root is the current working directory (which
+  // reanchor_cwd() has already set to the launcher binary's directory).
   //
-  path root;
-  path cr (resolve_cache_root ());
-
-  trace_l3 ("opening global cache database at {}", to_utf8 (cr));
-  cache_database db (cr);
-
-  string scope (path_digest (current_path ()));
-
-  if (opt.path_specified ())
-  {
-    root = from_utf8 (opt.path ());
-    info ("using CLI-specified install location: {}", to_utf8 (root));
-
-    // Cache user-specified path in the database for future runs so the user
-    // doesn't have to keep passing --path manually.
-    //
-    trace_l2 ("saving user-specified path override to database");
-    db.setting (setting_keys::inst_path (scope), to_utf8 (root));
-  }
-  else
-  {
-    trace_l2 ("path not specified on CLI, checking database cache");
-    string saved (db.setting_value (setting_keys::inst_path (scope)));
-
-    if (!saved.empty ())
-    {
-      path p (from_utf8 (saved));
-
-      if (exists (p))
-      {
-        info ("using previously saved install path override: {}", to_utf8 (p));
-        root = p;
-      }
-      else
-      {
-        trace_l2 ("saved path override does not exist on disk, ignoring");
-      }
-    }
-  }
-
-  // If no explicit path override was found or cached, attempt to resolve via
-  // the Steam installation heuristic. If we fail, we halt.
-  //
-  if (root.empty ())
-  {
-    trace_l2 (
-      "no cached override found, attempting steam installation detection");
-
-    exception_ptr ex;
-
-    asio::co_spawn (io,
-                    [&io, &root, &scope, &db] () -> asio::awaitable<void>
-    {
-      auto sp (co_await get_mw2_default_path (io));
-
-      if (sp && exists (*sp))
-      {
-        info ("installation path: {}", to_utf8 (*sp));
-        root = *sp;
-      }
-      else
-      {
-        throw runtime_error (
-          "could not locate installation and no --path was specified");
-      }
-    } (), [&ex] (exception_ptr ep) { ex = ep; });
-
-    io.restart ();
-    io.run ();
-    io.restart ();
-
-    if (ex)
-      rethrow_exception (ex);
-  }
+  path root (current_path ());
 
   error_code root_ec;
 
@@ -1139,19 +1025,22 @@ try
                         "failed to canonicalize installation root: " +
                           to_utf8 (root));
 
-  info ("final installation root resolved to: {}", to_utf8 (root));
+  info ("installation root: {}", to_utf8 (root));
 
-  // Check if launcher version changed, if so wipe local .iw4x cache
+  // Check if launcher version changed, if so wipe local cache directory.
   //
   {
+    path cr (resolve_cache_root ());
+    cache_database db (cr);
+
     string current_ver (HELLO_VERSION_ID);
-    string scope_ver_key ("launcher_version_" + path_digest (root));
+    string scope_ver_key ("launcher_version");
     string saved_ver (db.setting_value (scope_ver_key));
 
     if (saved_ver != current_ver)
     {
       error_code ec;
-      path cache_dir (root / ".iw4x");
+      path cache_dir (root / "cache");
 
       if (exists (cache_dir, ec))
       {
@@ -1166,9 +1055,16 @@ try
 
         if (ec)
           warning ("failed to remove cache directory: {}", ec.message ());
+
+        // Recreate it since the database was inside.
+        //
+        create_directories (cache_dir, ec);
       }
 
-      db.setting (scope_ver_key, current_ver);
+      // Re-open the database after potential wipe and save new version.
+      //
+      cache_database db2 (cr);
+      db2.setting (scope_ver_key, current_ver);
     }
   }
 

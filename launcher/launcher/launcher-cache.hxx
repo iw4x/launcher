@@ -93,7 +93,7 @@ namespace launcher
                           std::size_t tot)>;
 
     // We expect the install_dir to be roughly valid, though we will create
-    // the .iw4x subdirectory and the sqlite database if they don't exist.
+    // the cache subdirectory and the sqlite database if they don't exist.
     //
     // Note that we take the io_context by ref as we don't own the thread
     // pool, we just schedule work onto it.

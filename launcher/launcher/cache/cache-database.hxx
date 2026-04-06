@@ -28,11 +28,11 @@ namespace launcher
   class cache_database
   {
   public:
-    // Hide the database inside the .iw4x directory so we don't clutter the
+    // Hide the database inside the cache directory so we don't clutter the
     // user's game root.
     //
     static constexpr const char* db_name = "iw4x.db";
-    static constexpr const char* dir_name = ".iw4x";
+    static constexpr const char* dir_name = "cache";
 
     // Start schema version at 1.
     //
