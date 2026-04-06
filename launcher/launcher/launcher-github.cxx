@@ -37,6 +37,12 @@ namespace launcher
   }
 
   void github_coordinator::
+  set_proxy (string u)
+  {
+    api_->set_proxy (move (u));
+  }
+
+  void github_coordinator::
   set_progress_callback (progress_callback_type cb)
   {
     api_->set_progress_callback (move (cb));

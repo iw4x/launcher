@@ -513,6 +513,12 @@ namespace launcher
     const bool&
     skip_launch () const;
 
+    const std::string&
+    proxy () const;
+
+    bool
+    proxy_specified () const;
+
     // Print usage information.
     //
     static ::launcher::cli::usage_para
@@ -545,6 +551,8 @@ namespace launcher
     bool no_self_update_;
     bool self_update_only_;
     bool skip_launch_;
+    std::string proxy_;
+    bool proxy_specified_;
   };
 }
 

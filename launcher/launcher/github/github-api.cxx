@@ -580,6 +580,12 @@ namespace launcher
   }
 
   void github_api::
+  set_proxy (string u)
+  {
+    proxy_url_ = move (u);
+  }
+
+  void github_api::
   set_progress_callback (progress_callback_type cb)
   {
     progress_callback_ = move (cb);
@@ -715,13 +721,6 @@ namespace launcher
 
     try
     {
-      // Resolve the host. We hardcode port 443 since all GitHub API
-      // communication must securely take place over HTTPS.
-      //
-      tcp::resolver r (ioc_);
-      auto const eps (co_await r.async_resolve (
-          hst, "443", asio::use_awaitable));
-
       asio::ssl::stream<beast::tcp_stream> s (ioc_, ssl_ctx_);
 
       // Set the SNI (Server Name Indication) hostname. Many modern TLS
@@ -735,11 +734,263 @@ namespace launcher
         throw beast::system_error {ec};
       }
 
-      // Set a generous 30-second timeout for the connection phase.
-      //
-      beast::get_lowest_layer (s).expires_after (chrono::seconds (30));
-      co_await beast::get_lowest_layer (s).async_connect (
-          eps, asio::use_awaitable);
+      auto& layer (beast::get_lowest_layer (s));
+
+      if (proxy_url_ && !proxy_url_->empty ())
+      {
+        // Tunnel through the proxy to the destination, then TLS-handshake.
+        //
+        string pu (*proxy_url_);
+        string pscheme, ph, pp;
+
+        // Parse the proxy URL: extract scheme, strip userinfo, get host:port.
+        //
+        {
+          size_t pos (0);
+          size_t si (pu.find ("://", pos));
+          if (si != string::npos)
+          {
+            pscheme = pu.substr (0, si);
+            pos = si + 3;
+          }
+          else
+            pscheme = "http";
+
+          // Strip userinfo (user:pass@) if present.
+          //
+          size_t at (pu.find ('@', pos));
+          size_t sl (pu.find ('/', pos));
+          size_t auth_start (pos);
+
+          if (at != string::npos && (sl == string::npos || at < sl))
+            auth_start = at + 1;
+
+          size_t ep (sl == string::npos ? pu.size () : sl);
+
+          string authority (pu.substr (auth_start, ep - auth_start));
+          size_t ci (authority.find (':'));
+
+          if (ci != string::npos)
+          {
+            ph = authority.substr (0, ci);
+            pp = authority.substr (ci + 1);
+          }
+          else
+          {
+            ph = authority;
+            pp = (pscheme == "socks5" || pscheme == "socks5h" ||
+                  pscheme == "socks4" || pscheme == "socks4a")
+                  ? "1080" : "8080";
+          }
+        }
+
+        bool socks (pscheme == "socks5"  || pscheme == "socks5h" ||
+                    pscheme == "socks4a" || pscheme == "socks4");
+
+        tcp::resolver pr (ioc_);
+        auto peps (co_await pr.async_resolve (
+            ph, pp, asio::use_awaitable));
+
+        layer.expires_after (chrono::seconds (30));
+        co_await layer.async_connect (peps, asio::use_awaitable);
+
+        if (socks)
+        {
+          // SOCKS5 handshake (RFC 1928 / RFC 1929).
+          //
+          // Parse optional username/password from the proxy URL.
+          //
+          string suser, spass;
+          {
+            size_t pos (0);
+            size_t si (pu.find ("://", pos));
+            if (si != string::npos) pos = si + 3;
+
+            size_t at (pu.find ('@', pos));
+            if (at != string::npos)
+            {
+              size_t sl (pu.find ('/', pos));
+              if (sl == string::npos || at < sl)
+              {
+                string info (pu.substr (pos, at - pos));
+                size_t ci (info.find (':'));
+                if (ci != string::npos)
+                {
+                  suser = info.substr (0, ci);
+                  spass = info.substr (ci + 1);
+                }
+                else
+                  suser = info;
+              }
+            }
+          }
+
+          bool has_auth (!suser.empty ());
+
+          // Client greeting.
+          //
+          uint8_t greeting[4];
+          greeting[0] = 0x05;
+          if (has_auth)
+          {
+            greeting[1] = 0x02;
+            greeting[2] = 0x00;
+            greeting[3] = 0x02;
+          }
+          else
+          {
+            greeting[1] = 0x01;
+            greeting[2] = 0x00;
+          }
+
+          size_t glen (has_auth ? 4 : 3);
+          co_await asio::async_write (
+            layer, asio::buffer (greeting, glen), asio::use_awaitable);
+
+          uint8_t choice[2];
+          co_await asio::async_read (
+            layer, asio::buffer (choice, 2), asio::use_awaitable);
+
+          if (choice[0] != 0x05)
+            throw runtime_error ("SOCKS5 proxy returned invalid version");
+
+          if (choice[1] == 0xFF)
+            throw runtime_error (
+              "SOCKS5 proxy: no acceptable authentication method");
+
+          if (choice[1] == 0x02)
+          {
+            if (!has_auth)
+              throw runtime_error (
+                "SOCKS5 proxy requires authentication but no credentials");
+
+            vector<uint8_t> auth;
+            auth.reserve (3 + suser.size () + spass.size ());
+            auth.push_back (0x01);
+            auth.push_back (static_cast<uint8_t> (suser.size ()));
+            auth.insert (auth.end (), suser.begin (), suser.end ());
+            auth.push_back (static_cast<uint8_t> (spass.size ()));
+            auth.insert (auth.end (), spass.begin (), spass.end ());
+
+            co_await asio::async_write (
+              layer, asio::buffer (auth), asio::use_awaitable);
+
+            uint8_t aresp[2];
+            co_await asio::async_read (
+              layer, asio::buffer (aresp, 2), asio::use_awaitable);
+
+            if (aresp[1] != 0x00)
+              throw runtime_error ("SOCKS5 proxy authentication failed");
+          }
+
+          // CONNECT request: domain name (ATYP 0x03).
+          //
+          uint16_t dport (443);
+          uint8_t port_hi (static_cast<uint8_t> (dport >> 8));
+          uint8_t port_lo (static_cast<uint8_t> (dport & 0xFF));
+
+          vector<uint8_t> creq;
+          creq.reserve (7 + hst.size ());
+          creq.push_back (0x05);
+          creq.push_back (0x01);
+          creq.push_back (0x00);
+          creq.push_back (0x03);
+          creq.push_back (static_cast<uint8_t> (hst.size ()));
+          creq.insert (creq.end (), hst.begin (), hst.end ());
+          creq.push_back (port_hi);
+          creq.push_back (port_lo);
+
+          co_await asio::async_write (
+            layer, asio::buffer (creq), asio::use_awaitable);
+
+          // Read reply header.
+          //
+          uint8_t hdr[4];
+          co_await asio::async_read (
+            layer, asio::buffer (hdr, 4), asio::use_awaitable);
+
+          if (hdr[0] != 0x05)
+            throw runtime_error (
+              "SOCKS5 proxy returned invalid version in reply");
+
+          if (hdr[1] != 0x00)
+          {
+            static const char* const errs[] = {
+              "succeeded",
+              "general SOCKS server failure",
+              "connection not allowed by ruleset",
+              "network unreachable",
+              "host unreachable",
+              "connection refused",
+              "TTL expired",
+              "command not supported",
+              "address type not supported"
+            };
+
+            const char* msg (hdr[1] < 9 ? errs[hdr[1]] : "unknown error");
+            throw runtime_error (
+              string ("SOCKS5 proxy connect failed: ") + msg);
+          }
+
+          // Drain bound address + port.
+          //
+          size_t drain (0);
+          switch (hdr[3])
+          {
+            case 0x01: drain = 4 + 2; break;
+            case 0x04: drain = 16 + 2; break;
+            case 0x03:
+            {
+              uint8_t len;
+              co_await asio::async_read (
+                layer, asio::buffer (&len, 1), asio::use_awaitable);
+              drain = len + 2;
+              break;
+            }
+            default:
+              throw runtime_error (
+                "SOCKS5 proxy returned unknown address type");
+          }
+
+          vector<uint8_t> sink (drain);
+          co_await asio::async_read (
+            layer, asio::buffer (sink), asio::use_awaitable);
+        }
+        else
+        {
+          // HTTP proxy: send CONNECT to establish a tunnel.
+          //
+          string authority (hst + ":443");
+
+          http::request<http::empty_body> creq (
+            http::verb::connect, authority, 11);
+          creq.set (http::field::host, authority);
+
+          layer.expires_after (chrono::seconds (30));
+          co_await http::async_write (
+            beast::get_lowest_layer (s), creq, asio::use_awaitable);
+
+          beast::flat_buffer cbuf;
+          http::response<http::empty_body> cres;
+          co_await http::async_read (
+            beast::get_lowest_layer (s), cbuf, cres, asio::use_awaitable);
+
+          if (cres.result () != http::status::ok)
+            throw runtime_error (
+              "proxy CONNECT failed: " + to_string (cres.result_int ()));
+        }
+      }
+      else
+      {
+        // Direct connection to GitHub.
+        //
+        tcp::resolver r (ioc_);
+        auto const eps (co_await r.async_resolve (
+            hst, "443", asio::use_awaitable));
+
+        layer.expires_after (chrono::seconds (30));
+        co_await layer.async_connect (eps, asio::use_awaitable);
+      }
 
       co_await s.async_handshake (ssl::stream_base::client, asio::use_awaitable);
 

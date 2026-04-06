@@ -12,7 +12,8 @@ namespace launcher
   ftxui::Element progress_renderer::
   render_item (const std::string& label,
                const progress_snapshot& s,
-               int w)
+               int w,
+               unsigned frame)
   {
     bool i (s.total_bytes == 0 ||
             (s.state == progress_state::active && s.total_bytes == 0));
@@ -25,7 +26,7 @@ namespace launcher
 
     std::ostringstream r;
     r << std::right << std::setw (4) << pct << "%"
-      << " " << progress_tracker::format_bar (p, i, w)
+      << " " << progress_tracker::format_bar (p, i, w, frame)
       << " | " << std::setw (12) << progress_tracker::format_speed (s.speed)
       << " | " << std::setw (10) << progress_tracker::format_bytes (s.current_bytes)
       << " | " << std::setw (7);
@@ -47,7 +48,8 @@ namespace launcher
   ftxui::Element progress_renderer::
   render_summary (std::size_t done,
                   std::size_t total,
-                  const progress_snapshot& s)
+                  const progress_snapshot& s,
+                  unsigned frame)
   {
     bool i (s.total_bytes == 0);
     float p (s.progress_ratio ());
@@ -60,7 +62,7 @@ namespace launcher
 
     std::ostringstream r;
     r << std::right << std::setw (4) << pct << "%"
-      << " " << progress_tracker::format_bar (p, i, default_bar_width)
+      << " " << progress_tracker::format_bar (p, i, default_bar_width, frame)
       << " | " << std::setw (12) << progress_tracker::format_speed (s.speed)
       << " | " << std::setw (10) << progress_tracker::format_bytes (s.current_bytes)
       << " | " << std::setw (7);
@@ -199,7 +201,8 @@ namespace launcher
           es.push_back (render_item (
             l.str (),
             item.snapshot,
-            default_bar_width));
+            default_bar_width,
+            c.frame));
         }
 
         if (max < c.items.size ())
@@ -216,7 +219,8 @@ namespace launcher
       bottom_es.push_back (render_summary (
         c.completed_count,
         c.total_count,
-        c.overall));
+        c.overall,
+        c.frame));
 
       Element main_view = vbox ({
         vbox (std::move (es)) | flex | yframe,

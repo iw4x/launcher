@@ -36,6 +36,7 @@ namespace launcher
     std::vector<std::string> log_messages;
     std::size_t completed_count {0};
     std::size_t total_count {0};
+    unsigned frame {0};
 
     bool dialog_visible {false};
     std::string dialog_title;
@@ -52,11 +53,13 @@ namespace launcher
 
     static ftxui::Element render_item (const std::string& label,
                                        const progress_snapshot& snapshot,
-                                       int bar_width = default_bar_width);
+                                       int bar_width = default_bar_width,
+                                       unsigned frame = 0);
 
     static ftxui::Element render_summary (std::size_t completed,
                                           std::size_t total,
-                                          const progress_snapshot& overall);
+                                          const progress_snapshot& overall,
+                                          unsigned frame = 0);
 
     static ftxui::Element render_logs (const std::vector<std::string>& messages);
 

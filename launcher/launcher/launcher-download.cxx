@@ -31,6 +31,15 @@ namespace launcher
   {
   }
 
+  download_coordinator::
+  download_coordinator (asio::io_context& c, size_t n, const http_client_traits& t)
+    : ioc_ (c),
+      manager_ (make_unique<manager_type> (c, n, t)),
+      http_ (make_unique<http_client> (c, t)),
+      traits_ (t)
+  {
+  }
+
   void download_coordinator::
   set_max_parallel (size_t n)
   {

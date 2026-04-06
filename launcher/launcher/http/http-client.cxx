@@ -1,8 +1,10 @@
 #include <launcher/http/http-client.hxx>
 
+#include <filesystem>
 #include <fstream>
 #include <stdexcept>
 #include <iostream>
+#include <vector>
 
 #include <boost/asio/connect.hpp>
 #include <boost/asio/ip/tcp.hpp>
@@ -21,6 +23,7 @@ using namespace std;
 
 namespace launcher
 {
+  namespace fs = std::filesystem;
   namespace http_beast = beast::http;
   using tcp = asio::ip::tcp;
 
@@ -108,6 +111,325 @@ namespace launcher
     from_beast_status (http_beast::status s)
     {
       return static_cast<http_status> (static_cast<uint16_t> (s));
+    }
+
+    // Return true if the proxy URL uses a SOCKS scheme (socks5, socks5h,
+    // socks4, socks4a).
+    //
+    bool
+    is_socks_proxy (const url_parts& p)
+    {
+      return p.scheme == "socks5"  || p.scheme == "socks5h" ||
+             p.scheme == "socks4a" || p.scheme == "socks4";
+    }
+
+    // Parse optional userinfo (user:pass) from the proxy URL.
+    //
+    // The standard form is socks5://user:pass@host:port.
+    //
+    struct proxy_userinfo
+    {
+      string user;
+      string pass;
+    };
+
+    proxy_userinfo
+    parse_proxy_userinfo (const string& proxy_url)
+    {
+      proxy_userinfo r;
+
+      size_t p (0);
+      size_t si (proxy_url.find ("://", p));
+      if (si != string::npos) p = si + 3;
+
+      size_t at (proxy_url.find ('@', p));
+      if (at == string::npos) return r;
+
+      // Make sure the '@' comes before the host portion (before any /).
+      //
+      size_t sl (proxy_url.find ('/', p));
+      if (sl != string::npos && at > sl) return r;
+
+      string info (proxy_url.substr (p, at - p));
+      size_t c (info.find (':'));
+
+      if (c != string::npos)
+      {
+        r.user = info.substr (0, c);
+        r.pass = info.substr (c + 1);
+      }
+      else
+        r.user = info;
+
+      return r;
+    }
+
+    // Parse a proxy URL into url_parts, stripping any userinfo component
+    // so that host/port are extracted correctly.
+    //
+    url_parts
+    parse_proxy_url (const string& proxy_url)
+    {
+      // Remove userinfo if present
+      //
+      // scheme://user:pass@host:port -> scheme://host:port
+      //
+      string u (proxy_url);
+
+      size_t p (0);
+      size_t si (u.find ("://", p));
+      if (si != string::npos) p = si + 3;
+
+      size_t at (u.find ('@', p));
+      if (at != string::npos)
+      {
+        size_t sl (u.find ('/', p));
+        if (sl == string::npos || at < sl)
+          u.erase (p, at - p + 1);
+      }
+
+      return parse_url (u);
+    }
+
+    // TCP connection through an HTTP proxy using the CONNECT method. On success
+    // the returned tcp_stream is connected to the proxy and ready for
+    // tunnelling (e.g. TLS handshake to the origin).
+    //
+    asio::awaitable<void>
+    proxy_connect (beast::tcp_stream& stream,
+                   asio::io_context& ioc,
+                   const url_parts& proxy,
+                   const string& dest_host,
+                   const string& dest_port,
+                   uint32_t connect_timeout,
+                   uint32_t request_timeout)
+    {
+      tcp::resolver rv (ioc);
+      auto eps (co_await rv.async_resolve (
+        proxy.host, proxy.port, asio::use_awaitable));
+
+      stream.expires_after (chrono::milliseconds (connect_timeout));
+      co_await stream.async_connect (eps, asio::use_awaitable);
+
+      // Ask the proxy to open a tunnel to the destination.
+      //
+      string authority (dest_host + ":" + dest_port);
+
+      http_beast::request<http_beast::empty_body> creq (
+        http_beast::verb::connect, authority, 11);
+      creq.set (http_beast::field::host, authority);
+
+      stream.expires_after (chrono::milliseconds (request_timeout));
+      co_await http_beast::async_write (stream, creq, asio::use_awaitable);
+
+      beast::flat_buffer buf;
+      http_beast::response<http_beast::empty_body> cres;
+      co_await http_beast::async_read (stream, buf, cres, asio::use_awaitable);
+
+      if (cres.result () != http_beast::status::ok)
+        throw runtime_error (
+          "proxy CONNECT failed: " + std::to_string (cres.result_int ()));
+    }
+
+    // TCP connection through a SOCKS5 proxy (RFC 1928).
+    //
+    // Supports both no-authentication and username/password authentication (RFC
+    // 1929). On success the tcp_stream is connected through the proxy to
+    // dest_host:dest_port and ready for use (e.g. TLS handshake).
+    //
+    asio::awaitable<void>
+    socks5_connect (beast::tcp_stream& stream,
+                    asio::io_context& ioc,
+                    const url_parts& proxy,
+                    const string& proxy_url,
+                    const string& dest_host,
+                    const string& dest_port,
+                    uint32_t connect_timeout,
+                    uint32_t request_timeout)
+    {
+      // Connect to the SOCKS5 proxy server.
+      //
+      tcp::resolver rv (ioc);
+      auto eps (co_await rv.async_resolve (
+        proxy.host, proxy.port, asio::use_awaitable));
+
+      stream.expires_after (chrono::milliseconds (connect_timeout));
+      co_await stream.async_connect (eps, asio::use_awaitable);
+
+      stream.expires_after (chrono::milliseconds (request_timeout));
+
+      proxy_userinfo ui (parse_proxy_userinfo (proxy_url));
+      bool has_auth (!ui.user.empty ());
+
+      // Client greeting (RFC 1928 §4)
+      //
+      // | VER | NMETHODS | METHODS  |
+      // | 1   | 1        | 1 to 255 |
+      //
+      // Offer no-auth (0x00) and optionally username/password (0x02).
+      //
+      uint8_t greeting[4];
+      greeting[0] = 0x05;                     // SOCKS version 5
+
+      if (has_auth)
+      {
+        greeting[1] = 0x02;                   // 2 methods
+        greeting[2] = 0x00;                   // no authentication
+        greeting[3] = 0x02;                   // username/password
+      }
+      else
+      {
+        greeting[1] = 0x01;                   // 1 method
+        greeting[2] = 0x00;                   // no authentication
+      }
+
+      size_t glen (has_auth ? 4 : 3);
+      co_await asio::async_write (
+        stream, asio::buffer (greeting, glen), asio::use_awaitable);
+
+      // Server method selection
+      //
+      // | VER | METHOD |
+      // | 1   | 1      |
+      //
+      uint8_t choice[2];
+      co_await asio::async_read (
+        stream, asio::buffer (choice, 2), asio::use_awaitable);
+
+      if (choice[0] != 0x05)
+        throw runtime_error ("SOCKS5 proxy returned invalid version");
+
+      if (choice[1] == 0xFF)
+        throw runtime_error (
+          "SOCKS5 proxy: no acceptable authentication method");
+
+      // Username/password sub-negotiation (RFC 1929)
+      //
+      if (choice[1] == 0x02)
+      {
+        if (!has_auth)
+          throw runtime_error (
+            "SOCKS5 proxy requires authentication but no credentials provided");
+
+        // | VER | ULEN | UNAME    | PLEN | PASSWD   |
+        // | 1   | 1    | 1 to 255 | 1    | 1 to 255 |
+        //
+        if (ui.user.size () > 255 || ui.pass.size () > 255)
+          throw runtime_error (
+            "SOCKS5 proxy credentials too long (max 255 bytes each)");
+
+        vector<uint8_t> auth;
+        auth.reserve (3 + ui.user.size () + ui.pass.size ());
+        auth.push_back (0x01); // sub-negotiation version
+        auth.push_back (static_cast<uint8_t> (ui.user.size ()));
+        auth.insert (auth.end (), ui.user.begin (), ui.user.end ());
+        auth.push_back (static_cast<uint8_t> (ui.pass.size ()));
+        auth.insert (auth.end (), ui.pass.begin (), ui.pass.end ());
+
+        co_await asio::async_write (
+          stream, asio::buffer (auth), asio::use_awaitable);
+
+        // | VER | STATUS |
+        // | 1   | 1      |
+        //
+        uint8_t aresp[2];
+        co_await asio::async_read (
+          stream, asio::buffer (aresp, 2), asio::use_awaitable);
+
+        if (aresp[1] != 0x00)
+          throw runtime_error ("SOCKS5 proxy authentication failed");
+      }
+      else if (choice[1] != 0x00)
+      {
+        throw runtime_error (
+          "SOCKS5 proxy selected unsupported auth method: " +
+          std::to_string (static_cast<int> (choice[1])));
+      }
+
+      // CONNECT request (RFC 1928 (4))
+      //
+      // | VER | CMD | RSV   | ATYP | DST.ADDR | DST.PORT |
+      // | 1   | 1   | X'00' | 1    | Variable | 2        |
+      //
+      // ATYP = 0x03 domain name (length-prefixed).
+      //
+      if (dest_host.size () > 255)
+        throw runtime_error ("SOCKS5: destination hostname too long");
+
+      uint16_t port (static_cast<uint16_t> (stoi (dest_port)));
+      uint8_t port_hi (static_cast<uint8_t> (port >> 8));
+      uint8_t port_lo (static_cast<uint8_t> (port & 0xFF));
+
+      vector<uint8_t> creq;
+      creq.reserve (7 + dest_host.size ());
+      creq.push_back (0x05);                                   // VER
+      creq.push_back (0x01);                                   // CMD: CONNECT
+      creq.push_back (0x00);                                   // RSV
+      creq.push_back (0x03);                                   // ATYP: domain name
+      creq.push_back (static_cast<uint8_t> (dest_host.size ()));
+      creq.insert (creq.end (), dest_host.begin (), dest_host.end ());
+      creq.push_back (port_hi);
+      creq.push_back (port_lo);
+
+      co_await asio::async_write (
+        stream, asio::buffer (creq), asio::use_awaitable);
+
+      // CONNECT reply
+      //
+      // | VER | REP | RSV   | ATYP | BND.ADDR | BND.PORT |
+      // | 1   | 1   | X'00' | 1    | Variable | 2        |
+      //
+      // Read the fixed 4-byte header first, then consume the variable-length
+      // bound address + 2-byte port.
+      //
+      uint8_t hdr[4];
+      co_await asio::async_read (
+        stream, asio::buffer (hdr, 4), asio::use_awaitable);
+
+      if (hdr[0] != 0x05)
+        throw runtime_error ("SOCKS5 proxy returned invalid version in reply");
+
+      if (hdr[1] != 0x00)
+      {
+        static const char* const errs[] = {
+          "succeeded",
+          "general SOCKS server failure",
+          "connection not allowed by ruleset",
+          "network unreachable",
+          "host unreachable",
+          "connection refused",
+          "TTL expired",
+          "command not supported",
+          "address type not supported"
+        };
+
+        const char* msg (hdr[1] < 9 ? errs[hdr[1]] : "unknown error");
+        throw runtime_error (
+          string ("SOCKS5 proxy connect failed: ") + msg);
+      }
+
+      // Drain the bound address so the stream is clean for the caller.
+      //
+      size_t drain (0);
+      switch (hdr[3])
+      {
+        case 0x01: drain = 4 + 2; break;   // IPv4 + port
+        case 0x04: drain = 16 + 2; break;  // IPv6 + port
+        case 0x03: // Domain: 1-byte length + name + port
+        {
+          uint8_t len;
+          co_await asio::async_read (
+            stream, asio::buffer (&len, 1), asio::use_awaitable);
+          drain = len + 2;
+          break;
+        }
+        default:
+          throw runtime_error ("SOCKS5 proxy returned unknown address type");
+      }
+
+      vector<uint8_t> sink (drain);
+      co_await asio::async_read (
+        stream, asio::buffer (sink), asio::use_awaitable);
     }
   }
 
@@ -269,9 +591,6 @@ namespace launcher
 
     url_parts p (parse_url (rq.url));
 
-    tcp::resolver rv (c);
-    auto as (co_await rv.async_resolve (p.host, p.port, asio::use_awaitable));
-
     stream s (c, x);
 
     // Configure SNI for TLS.
@@ -284,11 +603,33 @@ namespace launcher
     }
 
     auto& l (beast::get_lowest_layer (s));
-    l.expires_after (chrono::milliseconds (t.connect_timeout));
+
+    if (!t.proxy_url.empty ())
+    {
+      // Tunnel through the proxy, then TLS-handshake.
+      //
+      url_parts pp (parse_proxy_url (t.proxy_url));
+
+      if (is_socks_proxy (pp))
+        co_await socks5_connect (l, c, pp, t.proxy_url,
+                                 p.host, p.port,
+                                 t.connect_timeout, t.request_timeout);
+      else
+        co_await proxy_connect (l, c, pp, p.host, p.port,
+                                t.connect_timeout, t.request_timeout);
+    }
+    else
+    {
+      tcp::resolver rv (c);
+      auto as (co_await rv.async_resolve (
+        p.host, p.port, asio::use_awaitable));
+
+      l.expires_after (chrono::milliseconds (t.connect_timeout));
+      co_await l.async_connect (as, asio::use_awaitable);
+    }
 
     // Establish the connection and perform the handshake.
     //
-    co_await l.async_connect (as, asio::use_awaitable);
     co_await s.async_handshake (ssl::stream_base::client, asio::use_awaitable);
 
     beast_req br;
@@ -345,17 +686,54 @@ namespace launcher
 
     url_parts p (parse_url (rq.url));
 
-    tcp::resolver rv (c);
-    auto as (co_await rv.async_resolve (p.host, p.port, asio::use_awaitable));
-
     beast::tcp_stream s (c);
 
-    s.expires_after (chrono::milliseconds (t.connect_timeout));
-    co_await s.async_connect (as, asio::use_awaitable);
+    // SOCKS proxies are transparent tunnels, so the request target is
+    // always the path.  HTTP proxies require an absolute URI.
+    //
+    bool use_absolute_target (false);
+
+    if (!t.proxy_url.empty ())
+    {
+      url_parts pp (parse_proxy_url (t.proxy_url));
+
+      if (is_socks_proxy (pp))
+      {
+        // SOCKS tunnel: after handshake the stream looks like a direct
+        // connection to the origin.
+        //
+        co_await socks5_connect (s, c, pp, t.proxy_url,
+                                 p.host, p.port,
+                                 t.connect_timeout, t.request_timeout);
+      }
+      else
+      {
+        // HTTP proxy: connect to the proxy and use an absolute URI as
+        // the request target.
+        //
+        tcp::resolver rv (c);
+        auto as (co_await rv.async_resolve (
+          pp.host, pp.port, asio::use_awaitable));
+
+        s.expires_after (chrono::milliseconds (t.connect_timeout));
+        co_await s.async_connect (as, asio::use_awaitable);
+
+        use_absolute_target = true;
+      }
+    }
+    else
+    {
+      tcp::resolver rv (c);
+      auto as (co_await rv.async_resolve (
+        p.host, p.port, asio::use_awaitable));
+
+      s.expires_after (chrono::milliseconds (t.connect_timeout));
+      co_await s.async_connect (as, asio::use_awaitable);
+    }
 
     beast_req br;
     br.method (to_beast_verb (rq.method));
-    br.target (p.target);
+    br.target (use_absolute_target ? rq.url : p.target);
     br.version (rq.version.major * 10 + rq.version.minor);
 
     for (const auto& h : rq.headers)
@@ -399,7 +777,7 @@ namespace launcher
 
   asio::awaitable<uint64_t> http_client::
   download (const string& u,
-            const string& f,
+            const fs::path& f,
             progress_callback cb,
             optional<uint64_t> rs,
             uint64_t rl)
@@ -409,7 +787,7 @@ namespace launcher
 
   asio::awaitable<uint64_t> http_client::
   download_impl (const string& u,
-                 const string& f,
+                 const fs::path& f,
                  progress_callback cb,
                  optional<uint64_t> rs,
                  uint64_t rl,
@@ -438,8 +816,6 @@ namespace launcher
     bool ssl (p.scheme == "https");
 
     auto& c (session_->io_context ());
-    tcp::resolver rv (c);
-    auto as (co_await rv.async_resolve (p.host, p.port, asio::use_awaitable));
 
     ios_base::openmode m (ios::binary | ios::out);
     m |= (rs ? ios::app : ios::trunc);
@@ -454,13 +830,16 @@ namespace launcher
 
     // Generic transfer lambda to handle both plaintext and TLS streams uniformly.
     //
-    auto transfer = [&] (auto& s) -> asio::awaitable<uint64_t>
+    // For plaintext HTTP via a proxy the request target must be an absolute
+    // URI; for everything else (direct or tunnelled) we use the path.
+    //
+    auto transfer = [&] (auto& s, bool absolute_target = false) -> asio::awaitable<uint64_t>
     {
       auto& l (beast::get_lowest_layer (s));
 
       http_beast::request<http_beast::empty_body> br;
       br.method (http_beast::verb::get);
-      br.target (p.target);
+      br.target (absolute_target ? u : p.target);
       br.version (11);
       br.set (http_beast::field::host, p.host);
 
@@ -570,12 +949,32 @@ namespace launcher
       }
 
       auto& l (beast::get_lowest_layer (s));
-      l.expires_after (milliseconds (t.connect_timeout));
 
-      co_await l.async_connect (as, asio::use_awaitable);
+      if (!t.proxy_url.empty ())
+      {
+        url_parts pp (parse_proxy_url (t.proxy_url));
+
+        if (is_socks_proxy (pp))
+          co_await socks5_connect (l, c, pp, t.proxy_url,
+                                   p.host, p.port,
+                                   t.connect_timeout, t.request_timeout);
+        else
+          co_await proxy_connect (l, c, pp, p.host, p.port,
+                                  t.connect_timeout, t.request_timeout);
+      }
+      else
+      {
+        tcp::resolver rv (c);
+        auto as (co_await rv.async_resolve (
+          p.host, p.port, asio::use_awaitable));
+
+        l.expires_after (milliseconds (t.connect_timeout));
+        co_await l.async_connect (as, asio::use_awaitable);
+      }
+
       co_await s.async_handshake (ssl::stream_base::client, asio::use_awaitable);
 
-      auto r (co_await transfer (s));
+      auto r (co_await transfer (s, false));
 
       beast::error_code ec;
       beast::get_lowest_layer (s).socket ().shutdown (tcp::socket::shutdown_both, ec);
@@ -586,10 +985,41 @@ namespace launcher
     {
       beast::tcp_stream s (c);
 
-      s.expires_after (milliseconds (t.connect_timeout));
-      co_await s.async_connect (as, asio::use_awaitable);
+      bool use_absolute_target (false);
 
-      auto r (co_await transfer (s));
+      if (!t.proxy_url.empty ())
+      {
+        url_parts pp (parse_proxy_url (t.proxy_url));
+
+        if (is_socks_proxy (pp))
+        {
+          co_await socks5_connect (s, c, pp, t.proxy_url,
+                                   p.host, p.port,
+                                   t.connect_timeout, t.request_timeout);
+        }
+        else
+        {
+          tcp::resolver rv (c);
+          auto as (co_await rv.async_resolve (
+            pp.host, pp.port, asio::use_awaitable));
+
+          s.expires_after (milliseconds (t.connect_timeout));
+          co_await s.async_connect (as, asio::use_awaitable);
+
+          use_absolute_target = true;
+        }
+      }
+      else
+      {
+        tcp::resolver rv (c);
+        auto as (co_await rv.async_resolve (
+          p.host, p.port, asio::use_awaitable));
+
+        s.expires_after (milliseconds (t.connect_timeout));
+        co_await s.async_connect (as, asio::use_awaitable);
+      }
+
+      auto r (co_await transfer (s, use_absolute_target));
 
       beast::error_code ec;
       s.socket ().shutdown (tcp::socket::shutdown_both, ec);

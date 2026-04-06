@@ -67,5 +67,14 @@ namespace launcher
       "Skip launching the game after updating/installing. The launcher will
        perform all update operations but exit without starting the game."
     };
+
+    std::string --proxy
+    {
+      "<url>",
+      "Route all HTTP/HTTPS traffic through the specified proxy. Accepts
+       \cb{http://host:port}, \cb{https://host:port}, and
+       \cb{socks5://host:port} URLs. For SOCKS5 proxies that require
+       authentication use \cb{socks5://user:pass@host:port}."
+    };
   };
 }

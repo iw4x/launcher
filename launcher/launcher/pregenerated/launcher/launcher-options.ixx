@@ -358,6 +358,18 @@ namespace launcher
   {
     return this->skip_launch_;
   }
+
+  inline const std::string& options::
+  proxy () const
+  {
+    return this->proxy_;
+  }
+
+  inline bool options::
+  proxy_specified () const
+  {
+    return this->proxy_specified_;
+  }
 }
 
 // Begin epilogue.

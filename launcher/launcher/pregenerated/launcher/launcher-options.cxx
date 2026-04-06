@@ -773,7 +773,9 @@ namespace launcher
     game_args_specified_ (false),
     no_self_update_ (),
     self_update_only_ (),
-    skip_launch_ ()
+    skip_launch_ (),
+    proxy_ (),
+    proxy_specified_ (false)
   {
   }
 
@@ -795,7 +797,9 @@ namespace launcher
     game_args_specified_ (false),
     no_self_update_ (),
     self_update_only_ (),
-    skip_launch_ ()
+    skip_launch_ (),
+    proxy_ (),
+    proxy_specified_ (false)
   {
     ::launcher::cli::argv_scanner s (argc, argv, erase);
     _parse (s, opt, arg);
@@ -820,7 +824,9 @@ namespace launcher
     game_args_specified_ (false),
     no_self_update_ (),
     self_update_only_ (),
-    skip_launch_ ()
+    skip_launch_ (),
+    proxy_ (),
+    proxy_specified_ (false)
   {
     ::launcher::cli::argv_scanner s (start, argc, argv, erase);
     _parse (s, opt, arg);
@@ -845,7 +851,9 @@ namespace launcher
     game_args_specified_ (false),
     no_self_update_ (),
     self_update_only_ (),
-    skip_launch_ ()
+    skip_launch_ (),
+    proxy_ (),
+    proxy_specified_ (false)
   {
     ::launcher::cli::argv_scanner s (argc, argv, erase);
     _parse (s, opt, arg);
@@ -872,7 +880,9 @@ namespace launcher
     game_args_specified_ (false),
     no_self_update_ (),
     self_update_only_ (),
-    skip_launch_ ()
+    skip_launch_ (),
+    proxy_ (),
+    proxy_specified_ (false)
   {
     ::launcher::cli::argv_scanner s (start, argc, argv, erase);
     _parse (s, opt, arg);
@@ -895,7 +905,9 @@ namespace launcher
     game_args_specified_ (false),
     no_self_update_ (),
     self_update_only_ (),
-    skip_launch_ ()
+    skip_launch_ (),
+    proxy_ (),
+    proxy_specified_ (false)
   {
     _parse (s, opt, arg);
   }
@@ -927,6 +939,8 @@ namespace launcher
     os << "--self-update-only Only check for and apply launcher updates, then exit." << ::std::endl;
 
     os << "--skip-launch      Skip launching the game after updating/installing." << ::std::endl;
+
+    os << "--proxy <url>      Route all HTTP/HTTPS traffic through the specified proxy." << ::std::endl;
 
     p = ::launcher::cli::usage_para::option;
 
@@ -969,6 +983,9 @@ namespace launcher
       &::launcher::cli::thunk< options, &options::self_update_only_ >;
       _cli_options_map_["--skip-launch"] =
       &::launcher::cli::thunk< options, &options::skip_launch_ >;
+      _cli_options_map_["--proxy"] =
+      &::launcher::cli::thunk< options, std::string, &options::proxy_,
+        &options::proxy_specified_ >;
     }
   };
 

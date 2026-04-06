@@ -180,6 +180,11 @@ namespace launcher
     void
     set_token (std::string token);
 
+    // Set proxy URL for HTTP/HTTPS traffic.
+    //
+    void
+    set_proxy (std::string proxy_url);
+
     // Set progress callback for rate limit notifications.
     //
     using progress_callback_type =
@@ -272,6 +277,7 @@ namespace launcher
     asio::io_context& ioc_;
     ssl::context ssl_ctx_;
     std::optional<std::string> token_;
+    std::optional<std::string> proxy_url_;
     std::optional<github_rate_limit> last_rate_limit_;
     progress_callback_type progress_callback_;
 

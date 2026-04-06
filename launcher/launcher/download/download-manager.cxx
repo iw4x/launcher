@@ -10,8 +10,6 @@
 #include <boost/asio/experimental/parallel_group.hpp>
 #include <boost/asio/steady_timer.hpp>
 
-#include <launcher/http/http-client.hxx>
-
 using namespace std;
 
 namespace launcher
@@ -21,6 +19,16 @@ namespace launcher
                     size_t m)
     : ioc_ (c),
       max_parallel_ (m)
+  {
+  }
+
+  download_manager::
+  download_manager (boost::asio::io_context& c,
+                    size_t m,
+                    const http_client_traits& t)
+    : ioc_ (c),
+      max_parallel_ (m),
+      traits_ (t)
   {
   }
 
@@ -269,7 +277,7 @@ namespace launcher
 
     // The client traits expect our timeouts in milliseconds.
     //
-    http_client_traits tr;
+    http_client_traits tr (traits_);
     tr.connect_timeout = t->request.connect_timeout * 1000;
     tr.request_timeout = t->request.transfer_timeout * 1000;
     tr.follow_redirects = true;
@@ -330,7 +338,7 @@ namespace launcher
 
         uint64_t b (
           co_await c.download (u,
-                               t->request.target.string (),
+                               t->request.target,
                                cb,
                                r,
                                t->request.rate_limit_bytes_per_second));

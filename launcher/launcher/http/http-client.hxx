@@ -2,6 +2,7 @@
 
 #include <chrono>
 #include <cstdint>
+#include <filesystem>
 #include <functional>
 #include <memory>
 #include <string>
@@ -32,6 +33,7 @@ namespace launcher
     std::string user_agent        = "iw4x-launcher/1.1";
     bool follow_redirects         = true;
     bool keep_alive               = true;
+    std::string proxy_url;
   };
 
   class http_session
@@ -109,7 +111,7 @@ namespace launcher
 
     asio::awaitable<std::uint64_t>
     download (const std::string& url,
-              const std::string& target_path,
+              const std::filesystem::path& target_path,
               progress_callback progress = nullptr,
               std::optional<std::uint64_t> resume_from = std::nullopt,
               std::uint64_t rate_limit_bytes_per_second = 0);
@@ -132,7 +134,7 @@ namespace launcher
 
     asio::awaitable<std::uint64_t>
     download_impl (const std::string& url,
-                   const std::string& target_path,
+                   const std::filesystem::path& target_path,
                    progress_callback progress,
                    std::optional<std::uint64_t> resume_from,
                    std::uint64_t rate_limit_bytes_per_second,

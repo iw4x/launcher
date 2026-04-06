@@ -44,6 +44,10 @@ namespace launcher
     download_coordinator (asio::io_context& ioc,
                           std::size_t max_parallel);
 
+    download_coordinator (asio::io_context& ioc,
+                          std::size_t max_parallel,
+                          const http_client_traits& traits);
+
     download_coordinator (const download_coordinator&) = delete;
     download_coordinator& operator= (const download_coordinator&) = delete;
 
@@ -129,5 +133,6 @@ namespace launcher
     asio::io_context& ioc_;
     std::unique_ptr<manager_type> manager_;
     std::unique_ptr<http_client> http_;
+    http_client_traits traits_;
   };
 }
