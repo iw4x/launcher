@@ -939,8 +939,6 @@ int
 main (int argc, char* argv[])
 try
 {
-  active_logger = new logger;
-
   options opt (argc, argv);
 
   // Handle --version.
@@ -969,6 +967,13 @@ try
   }
 
   reanchor_cwd ();
+
+  {
+    error_code ec;
+    create_directories (path ("cache"), ec);
+  }
+
+  active_logger = new logger;
 
   asio::io_context io;
 
@@ -1068,11 +1073,20 @@ try
     }
   }
 
+  // Build proxy-aware HTTP traits if --proxy was specified.
+  //
+  http_client_traits ht;
+  if (!opt.proxy ().empty ())
+    ht.proxy_url = opt.proxy ();
+
   github_coordinator   gh (io);
-  http_coordinator     hc (io);
-  download_coordinator dc (io, opt.jobs ());
+  http_coordinator     hc (io, ht);
+  download_coordinator dc (io, opt.jobs (), ht);
   progress_coordinator pc (io);
   cache_coordinator    cc (io, root);
+
+  if (!opt.proxy ().empty ())
+    gh.set_proxy (opt.proxy ());
 
   cc.set_github_coordinator (&gh);
   cc.set_download_coordinator (&dc);

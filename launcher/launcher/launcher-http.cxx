@@ -133,7 +133,7 @@ namespace launcher
       };
     }
 
-    uint64_t n (co_await client_->download (u, t.string (), acb, rs));
+    uint64_t n (co_await client_->download (u, t, acb, rs));
     co_return n;
   }
 

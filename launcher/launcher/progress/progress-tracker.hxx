@@ -21,7 +21,8 @@ namespace launcher
     static std::string format_bytes (std::uint64_t bytes);
     static std::string format_speed (float bytes_per_sec);
     static std::string format_duration (int seconds);
-    static std::string format_bar (float progress, bool indeterminate, int width);
+    static std::string format_bar (float progress, bool indeterminate, int width,
+                                   unsigned frame = 0);
 
     progress_tracker () = default;
 

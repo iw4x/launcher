@@ -100,7 +100,7 @@ namespace launcher
   }
 
   std::string progress_tracker::
-  format_bar (float p, bool ind, int w)
+  format_bar (float p, bool ind, int w, unsigned frame)
   {
     std::ostringstream o;
     o << "[";
@@ -110,6 +110,33 @@ namespace launcher
       o << " <==> ";
       for (int i (5); i < w; ++i)
         o << " ";
+    }
+    else if (p == 0.0f && w > 3)
+    {
+      // Idle animation: bounce a <=> marker across the bar width.
+      //
+      int marker_len (3);  // "<=>"
+      int travel (w - marker_len);
+      if (travel < 1) travel = 1;
+
+      // Ping-pong: 0..travel-1 then travel-1..0
+      //
+      int cycle (travel * 2);
+      int pos (static_cast<int> (frame % static_cast<unsigned> (cycle)));
+
+      if (pos >= travel)
+        pos = cycle - pos;
+
+      for (int i (0); i < w; ++i)
+      {
+        if (i >= pos && i < pos + marker_len)
+        {
+          int mi (i - pos);
+          o << "<=>"[mi];
+        }
+        else
+          o << " ";
+      }
     }
     else
     {

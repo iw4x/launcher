@@ -45,7 +45,7 @@ namespace launcher
     r.set_filename_append_option (FilenameAppendOption::StartDateTime);
 
     auto cs (Frontend::create_or_get_sink<ConsoleSink> ("cs",       c));
-    auto fs (Frontend::create_or_get_sink<FileSink> ("launcher.log", r));
+    auto fs (Frontend::create_or_get_sink<FileSink> ("cache/launcher.log", r));
 
     PatternFormatterOptions pf (
       "%(time) [%(log_level_short_code)] %(message)",

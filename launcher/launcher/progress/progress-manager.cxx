@@ -280,6 +280,8 @@ namespace launcher
     if (ctx.dialog_visible)
       ctx.dialog_title = dialog_title_, ctx.dialog_message = dialog_message_;
 
+    ctx.frame = frame_++;
+
     return ctx;
   }
 }

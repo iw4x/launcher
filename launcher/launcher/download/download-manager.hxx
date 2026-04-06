@@ -8,6 +8,7 @@
 
 #include <boost/asio.hpp>
 
+#include <launcher/http/http-client.hxx>
 #include <launcher/download/download-task.hxx>
 #include <launcher/download/download-types.hxx>
 
@@ -29,6 +30,10 @@ namespace launcher
     explicit
     download_manager (boost::asio::io_context& ioc,
                       std::size_t max_parallel = 1);
+
+    download_manager (boost::asio::io_context& ioc,
+                      std::size_t max_parallel,
+                      const http_client_traits& traits);
 
     download_manager (const download_manager&) = delete;
     download_manager& operator= (const download_manager&) = delete;
@@ -116,6 +121,7 @@ namespace launcher
   private:
     boost::asio::io_context& ioc_;
     std::size_t max_parallel_;
+    http_client_traits traits_;
     std::vector<std::shared_ptr<launcher::download_task>> tasks_;
 
     completion_callback on_task_complete_;

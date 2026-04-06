@@ -41,6 +41,11 @@ namespace launcher
     void
     set_token (std::string token);
 
+    // Set proxy URL for all API requests.
+    //
+    void
+    set_proxy (std::string proxy_url);
+
     // Set progress callback for rate limit notifications.
     //
     using progress_callback_type =

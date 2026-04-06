@@ -147,5 +147,6 @@ namespace launcher
     std::string dialog_title_;
     std::string dialog_message_;
     asio::strand<asio::any_io_executor> dialog_strand_;
+    unsigned frame_ {0};
   };
 }

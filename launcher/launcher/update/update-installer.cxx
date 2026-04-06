@@ -260,17 +260,17 @@ namespace launcher
       os << "del \"%~f0\"\n";
     }
 
-    STARTUPINFOA si = {};
+    STARTUPINFOW si = {};
     si.cb = sizeof (si);
     si.dwFlags = STARTF_USESHOWWINDOW;
     si.wShowWindow = SW_HIDE;
 
     PROCESS_INFORMATION pi = {};
-    string cmd ("cmd.exe /c \"" + s.string () + "\"");
+    wstring wcmd (L"cmd.exe /c \"" + s.wstring () + L"\"");
 
     launcher::log::trace_l2 (categories::update{}, "spawning detached process for restart script");
-    if (CreateProcessA (nullptr,
-                        cmd.data (),
+    if (CreateProcessW (nullptr,
+                        wcmd.data (),
                         nullptr,
                         nullptr,
                         FALSE,
