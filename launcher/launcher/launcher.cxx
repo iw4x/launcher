@@ -326,8 +326,9 @@ namespace launcher
                       false};
     });
 
-    auto ds (pl | views::filter (is_dl) | views::transform (to_dl) |
-             ranges::to<vector> ());
+    vector<dl_info> ds;
+    for (auto&& x : pl | views::filter (is_dl) | views::transform (to_dl))
+      ds.push_back (std::move (x));
 
     if (ds.empty ())
       co_return;
@@ -551,8 +552,9 @@ namespace launcher
             return manifest_coordinator::resolve_path (s, ir);
           });
 
-          auto efs (i->second->files | views::transform (resolve_p) |
-                    ranges::to<vector> ());
+          vector<path> efs;
+          for (auto&& x : i->second->files | views::transform (resolve_p))
+            efs.push_back (std::move (x));
 
           cc.track (efs, d.comp, d.ver);
           remove (d.dst, e);
@@ -715,7 +717,7 @@ namespace launcher
     manifest dlc (ms, manifest_format::dlc);
 
     manifest m;
-    m.archives = dlc.files | views::transform ([] (const auto& f)
+    for (const auto& f : dlc.files)
     {
       manifest_archive x;
       x.name = f.path;
@@ -723,8 +725,8 @@ namespace launcher
       x.size = f.size;
       x.hash = f.hash;
 
-      return x;
-    }) | ranges::to<vector> ();
+      m.archives.push_back (std::move (x));
+    }
 
     auto p (cc.plan (m, component_type::dlc, "dlc"));
 
@@ -784,19 +786,18 @@ namespace launcher
     }
 
     manifest m;
-    m.archives = rel.assets
-      | views::filter ([] (const auto& a) {
-          return a.name == "steam.exe" || a.name == "steam_api64.dll"; })
-      | views::transform ([] (const auto& a)
-        {
-          manifest_archive x;
-          x.name = a.name;
-          x.url = a.browser_download_url;
-          x.size = a.size;
+    for (const auto& a : rel.assets)
+    {
+      if (a.name != "steam.exe" && a.name != "steam_api64.dll")
+        continue;
 
-          return x;
-        })
-      | ranges::to<vector> ();
+      manifest_archive x;
+      x.name = a.name;
+      x.url = a.browser_download_url;
+      x.size = a.size;
+
+      m.archives.push_back (std::move (x));
+    }
 
     auto p (cc.plan (m, component_type::helper, rel.tag_name));
 
