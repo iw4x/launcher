@@ -53,17 +53,17 @@ namespace launcher
 
   http_coordinator::http_coordinator (asio::io_context& i)
     : ioc_ (i),
-      client_ (make_unique<client_type> (i)) {}
+      client_ (i) {}
 
   http_coordinator::http_coordinator (asio::io_context& i,
                                       const http_client_traits& t)
     : ioc_ (i),
-      client_ (make_unique<client_type> (i, t)) {}
+      client_ (i, t) {}
 
   asio::awaitable<string> http_coordinator::
   get (const string& u)
   {
-    response_type r (co_await client_->get (u));
+    response_type r (co_await client_.get (u));
 
     if (r.is_error ())
       throw runtime_error (fmt_err (r));
@@ -83,7 +83,7 @@ namespace launcher
     // Return the raw response object for non-standard status codes that
     // shouldn't throw immediately.
     //
-    response_type r (co_await client_->get (u));
+    response_type r (co_await client_.get (u));
 
     if (r.is_error ())
       throw runtime_error (fmt_err (r));
@@ -94,7 +94,7 @@ namespace launcher
   asio::awaitable<string> http_coordinator::
   post_json (const string& u, const string& j)
   {
-    response_type r (co_await client_->post (u, j, "application/json"));
+    response_type r (co_await client_.post (u, j, "application/json"));
 
     if (r.is_error ())
       throw runtime_error (fmt_err (r));
@@ -133,7 +133,7 @@ namespace launcher
       };
     }
 
-    uint64_t n (co_await client_->download (u, t, acb, rs));
+    uint64_t n (co_await client_.download (u, t, acb, rs));
     co_return n;
   }
 
@@ -142,7 +142,7 @@ namespace launcher
   {
     // Use HEAD. We only want the metadata, not the payload.
     //
-    response_type r (co_await client_->head (u));
+    response_type r (co_await client_.head (u));
 
     if (r.is_error ())
       throw runtime_error (fmt_err (r));
@@ -158,7 +158,7 @@ namespace launcher
     //
     try
     {
-      response_type r (co_await client_->head (u));
+      response_type r (co_await client_.head (u));
       co_return r.is_success ();
     }
     catch (...)
@@ -170,12 +170,12 @@ namespace launcher
   http_coordinator::client_type& http_coordinator::
   client () noexcept
   {
-    return *client_;
+    return client_;
   }
 
   const http_coordinator::client_type& http_coordinator::
   client () const noexcept
   {
-    return *client_;
+    return client_;
   }
 }

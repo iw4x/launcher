@@ -3,9 +3,6 @@
 #include <iostream>
 #include <unordered_map>
 
-#include <launcher/launcher-download.hxx>
-#include <launcher/launcher-progress.hxx>
-
 using namespace std;
 
 namespace launcher
@@ -67,8 +64,8 @@ namespace launcher
   cache_coordinator (asio::io_context& ioc, const fs::path& d)
     : ctx_ (ioc),
       dir_ (d),
-      db_ (make_unique<database_type> (d)),
-      rec_ (make_unique<reconciler_type> (*db_, d)),
+      db_ (d),
+      rec_ (db_, d),
       dl_ (nullptr),
       prog_ (nullptr),
       gh_ (nullptr)
@@ -97,46 +94,43 @@ namespace launcher
   set_progress_callback (progress_callback cb)
   {
     cb_ = move (cb);
-
-    if (rec_)
-      rec_->progress (cb_);
+    rec_.progress (cb_);
   }
 
   void cache_coordinator::
   set_strategy (strategy s)
   {
-    if (rec_)
-      rec_->mode (s);
+    rec_.mode (s);
   }
 
   strategy cache_coordinator::
   get_strategy () const noexcept
   {
-    return rec_ ? rec_->mode () : strategy::mtime;
+    return rec_.mode ();
   }
 
   bool cache_coordinator::
   outdated (component_type c, const string& t) const
   {
-    return rec_->outdated (c, t);
+    return rec_.outdated (c, t);
   }
 
   optional<string> cache_coordinator::
   version (component_type c) const
   {
-    return rec_->version (c);
+    return rec_.version (c);
   }
 
   file_state cache_coordinator::
   stat (const fs::path& p) const
   {
-    return rec_->stat (p);
+    return rec_.stat (p);
   }
 
   vector<pair<cached_file, file_state>> cache_coordinator::
   audit (component_type c) const
   {
-    return rec_->audit (c);
+    return rec_.audit (c);
   }
 
   vector<reconcile_item> cache_coordinator::
@@ -160,7 +154,7 @@ namespace launcher
         for (auto& f : test_m.files)
           f.archive_name.reset ();
 
-        auto test_p = rec_->plan (test_m, c, v);
+        auto test_p = rec_.plan (test_m, c, v);
 
         bool needs_dl = false;
         for (const auto& i : test_p)
@@ -185,13 +179,13 @@ namespace launcher
       opt_m.archives.push_back (a);
     }
 
-    return rec_->plan (opt_m, c, v);
+    return rec_.plan (opt_m, c, v);
   }
 
   reconcile_summary cache_coordinator::
   summarize (const vector<reconcile_item>& is) const
   {
-    return rec_->summarize (is);
+    return rec_.summarize (is);
   }
 
   cache_result cache_coordinator::
@@ -203,7 +197,7 @@ namespace launcher
     // user if an update is pending without actually touching the disk.
     //
     auto is (plan (m, c, v));
-    auto s (rec_->summarize (is));
+    auto s (rec_.summarize (is));
 
     if (s.up_to_date ())
       return cache_result (cache_status::up_to_date, s);
@@ -219,7 +213,7 @@ namespace launcher
     // First, see what needs to be done via the optimized plan.
     //
     auto is (plan (m, c, v));
-    auto s (rec_->summarize (is));
+    auto s (rec_.summarize (is));
 
     // If the summary says we are good, then we are good.
     //
@@ -279,7 +273,7 @@ namespace launcher
     for (const auto& [m, c, v] : is)
     {
       auto cis (plan (m, c, v));
-      auto s (rec_->summarize (cis));
+      auto s (rec_.summarize (cis));
 
       total.files_valid += s.files_valid;
       total.files_stale += s.files_stale;
@@ -329,7 +323,7 @@ namespace launcher
     // If we survived the downloads, stamp all the versions in the DB.
     //
     for (const auto& [m, c, v] : is)
-      rec_->stamp (c, v);
+      rec_.stamp (c, v);
 
     co_return cache_result (cache_status::update_applied, total);
   }
@@ -340,7 +334,7 @@ namespace launcher
          const string& v,
          const string& h)
   {
-    rec_->track (p, c, v, h);
+    rec_.track (p, c, v, h);
   }
 
   void cache_coordinator::
@@ -348,67 +342,67 @@ namespace launcher
          component_type c,
          const string& v)
   {
-    rec_->track (ps, c, v);
+    rec_.track (ps, c, v);
   }
 
   void cache_coordinator::
   stamp (component_type c, const string& t)
   {
-    rec_->stamp (c, t);
+    rec_.stamp (c, t);
   }
 
   void cache_coordinator::
   forget (const fs::path& p)
   {
-    rec_->forget (p);
+    rec_.forget (p);
   }
 
   vector<string> cache_coordinator::
   clean (const manifest& m, component_type c)
   {
-    return rec_->clean (m, c);
+    return rec_.clean (m, c);
   }
 
   void cache_coordinator::
   clear ()
   {
-    db_->clear ();
+    db_.clear ();
   }
 
   void cache_coordinator::
   vacuum ()
   {
-    db_->vacuum ();
+    db_.vacuum ();
   }
 
   bool cache_coordinator::
   check_integrity () const
   {
-    return db_->check ();
+    return db_.check ();
   }
 
   cache_coordinator::database_type& cache_coordinator::
   database () noexcept
   {
-    return *db_;
+    return db_;
   }
 
   const cache_coordinator::database_type& cache_coordinator::
   database () const noexcept
   {
-    return *db_;
+    return db_;
   }
 
   cache_coordinator::reconciler_type& cache_coordinator::
   get_reconciler () noexcept
   {
-    return *rec_;
+    return rec_;
   }
 
   const cache_coordinator::reconciler_type& cache_coordinator::
   get_reconciler () const noexcept
   {
-    return *rec_;
+    return rec_;
   }
 
   const fs::path& cache_coordinator::
@@ -441,7 +435,7 @@ namespace launcher
     //
     if (ds.empty ())
     {
-      rec_->stamp (c, v);
+      rec_.stamp (c, v);
       co_return cache_result (cache_status::up_to_date);
     }
 
@@ -513,7 +507,7 @@ namespace launcher
 
     // All good.
     //
-    rec_->stamp (c, v);
+    rec_.stamp (c, v);
 
     reconcile_summary s;
     s.downloads_required = ds.size ();

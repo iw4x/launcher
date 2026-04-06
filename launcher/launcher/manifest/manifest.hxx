@@ -4,7 +4,6 @@
 
 #include <string>
 #include <vector>
-#include <memory>
 #include <optional>
 #include <cstdint>
 #include <utility>
@@ -35,6 +34,9 @@ namespace launcher
 
     explicit hash (std::string v)
       : algorithm (hash_algorithm::blake3), value (std::move (v)) {}
+
+    bool
+    operator== (const hash&) const = default;
 
     bool
     empty () const noexcept
@@ -82,6 +84,9 @@ namespace launcher
         archive_name (std::move (ar)) {}
 
     bool
+    operator== (const manifest_file&) const = default;
+
+    bool
     empty () const noexcept
     {
       return path.empty ();
@@ -114,6 +119,18 @@ namespace launcher
         name (std::move (n)),
         url (std::move (u)),
         compression (c) {}
+
+    // Intentionally excludes files from comparison.
+    //
+    bool
+    operator== (const manifest_archive& o) const noexcept
+    {
+      return hash == o.hash &&
+             size == o.size &&
+             name == o.name &&
+             url == o.url &&
+             compression == o.compression;
+    }
 
     bool
     empty () const noexcept
@@ -151,6 +168,9 @@ namespace launcher
     explicit
     manifest (const json::value& jv,
               manifest_format k = manifest_format::update);
+
+    bool
+    operator== (const manifest&) const = default;
 
     // Empty check.
     //
@@ -204,67 +224,6 @@ namespace launcher
     json::object
     serialize_dlc () const;
   };
-
-  // Comparison operators.
-  //
-  inline bool
-  operator== (const hash& x, const hash& y) noexcept
-  {
-    return x.algorithm == y.algorithm && x.value == y.value;
-  }
-
-  inline bool
-  operator!= (const hash& x, const hash& y) noexcept
-  {
-    return !(x == y);
-  }
-
-  inline bool
-  operator== (const manifest_file& x, const manifest_file& y) noexcept
-  {
-    return x.hash == y.hash &&
-           x.size == y.size &&
-           x.path == y.path &&
-           x.asset_name == y.asset_name &&
-           x.archive_name == y.archive_name;
-  }
-
-  inline bool
-  operator!= (const manifest_file& x, const manifest_file& y) noexcept
-  {
-    return !(x == y);
-  }
-
-  inline bool
-  operator== (const manifest_archive& x, const manifest_archive& y) noexcept
-  {
-    return x.hash == y.hash &&
-           x.size == y.size &&
-           x.name == y.name &&
-           x.url == y.url &&
-           x.compression == y.compression;
-  }
-
-  inline bool
-  operator!= (const manifest_archive& x, const manifest_archive& y) noexcept
-  {
-    return !(x == y);
-  }
-
-  inline bool
-  operator== (const manifest& x, const manifest& y) noexcept
-  {
-    return x.format == y.format &&
-           x.kind == y.kind &&
-           x.archives == y.archives &&
-           x.files == y.files;
-  }
-
-  inline bool
-  operator!= (const manifest& x, const manifest& y) noexcept
-  {
-    return !(x == y);
-  }
 
   // Stream output.
   //

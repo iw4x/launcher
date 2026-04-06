@@ -5,7 +5,6 @@
 
 #include <boost/asio.hpp>
 
-#include <memory>
 #include <string>
 #include <optional>
 #include <vector>
@@ -140,7 +139,7 @@ namespace launcher
                                  manifest_format kind);
 
     asio::io_context& ioc_;
-    std::unique_ptr<api_type> api_;
+    api_type api_;
   };
 
   // Find all assets matching a pattern.

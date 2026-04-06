@@ -979,7 +979,7 @@ try
 
   if (!opt.no_self_update () || opt.self_update_only ())
   {
-    auto pc (make_unique<progress_coordinator> (io));
+    progress_coordinator pc (io);
     exception_ptr ex;
 
     asio::co_spawn (io,[&io, &opt, &pc] () -> asio::awaitable<void>
@@ -991,14 +991,14 @@ try
         co_await check_self_update (io,
                                     opt.prerelease (),
                                     opt.self_update_only (),
-                                    *pc);
+                                    pc);
       }
       catch (...)
       {
         ep = current_exception ();
       }
 
-      co_await pc->stop ();
+      co_await pc.stop ();
 
       if (ep)
         rethrow_exception (ep);

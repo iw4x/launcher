@@ -4,7 +4,6 @@
 
 #include <filesystem>
 #include <functional>
-#include <memory>
 #include <optional>
 #include <string>
 
@@ -161,7 +160,7 @@ namespace launcher
                      const std::string& message);
 
     asio::io_context& ioc_;
-    std::unique_ptr<http_client> http_;
+    http_client http_;
     progress_callback_type progress_callback_;
     fs::path download_dir_;
     bool verify_size_ = true;

@@ -45,19 +45,6 @@ namespace launcher
     return std::nullopt;
   }
 
-  bool
-  operator == (const http_response& x, const http_response& y) noexcept
-  {
-    return x.status == y.status && x.version == y.version &&
-      x.reason == y.reason && x.headers == y.headers && x.body == y.body;
-  }
-
-  bool
-  operator != (const http_response& x, const http_response& y) noexcept
-  {
-    return !(x == y);
-  }
-
   std::ostream&
   operator << (std::ostream& o, const http_response& r)
   {

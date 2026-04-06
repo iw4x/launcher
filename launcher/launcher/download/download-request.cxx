@@ -39,13 +39,4 @@ namespace launcher
     bool r (x.urls == y.urls && x.target == y.target);
     return r;
   }
-
-  bool
-  operator!= (const download_request& x, const download_request& y)
-  {
-    // No need to duplicate the logic, just delegate to operator==.
-    //
-    bool r (!(x == y));
-    return r;
-  }
 }

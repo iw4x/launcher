@@ -103,10 +103,4 @@ namespace launcher
            x.path_pattern == y.path_pattern &&
            x.default_method == y.default_method;
   }
-
-  bool
-  operator!= (const http_endpoint& x, const http_endpoint& y) noexcept
-  {
-    return !(x == y);
-  }
 }

@@ -25,7 +25,7 @@ namespace launcher
   update_installer::
   update_installer (asio::io_context& c)
     : ioc_ (c),
-      http_ (make_unique<http_client> (c))
+      http_ (c)
   {
     // We default to the system temp directory for downloads. Note that if we
     // can't determine that (or don't have permissions), then we fall back to
@@ -391,7 +391,7 @@ namespace launcher
       report_progress (update_state::downloading, p, "Downloading...");
     };
 
-    co_await http_->download (ui.asset_url,
+    co_await http_.download (ui.asset_url,
                               t.string (),
                               cb,
                               nullopt,

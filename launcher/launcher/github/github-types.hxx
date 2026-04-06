@@ -192,14 +192,9 @@ namespace launcher
     empty () const;
   };
 
-  // Equality operators.
-  //
   bool operator== (const github_user& x, const github_user& y) noexcept;
-  bool operator!= (const github_user& x, const github_user& y) noexcept;
 
   bool operator== (const github_asset& x, const github_asset& y) noexcept;
-  bool operator!= (const github_asset& x, const github_asset& y) noexcept;
 
   bool operator== (const github_release& x, const github_release& y) noexcept;
-  bool operator!= (const github_release& x, const github_release& y) noexcept;
 }

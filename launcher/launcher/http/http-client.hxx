@@ -4,7 +4,6 @@
 #include <cstdint>
 #include <filesystem>
 #include <functional>
-#include <memory>
 #include <string>
 
 #include <boost/asio.hpp>
@@ -119,13 +118,13 @@ namespace launcher
     http_session&
     session () noexcept
     {
-      return *session_;
+      return session_;
     }
 
     const http_session&
     session () const noexcept
     {
-      return *session_;
+      return session_;
     }
 
   private:
@@ -147,6 +146,6 @@ namespace launcher
     request_tcp (const http_request& req);
 
   private:
-    std::unique_ptr<http_session> session_;
+    http_session session_;
   };
 }

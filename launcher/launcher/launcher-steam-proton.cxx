@@ -17,7 +17,7 @@ namespace launcher
   proton_coordinator::
   proton_coordinator (asio::io_context& c)
     : ioc_ (c),
-      manager_ (make_unique<manager_type> (c)),
+      manager_ (c),
       verbose_ (false),
       logging_ (false)
   {
@@ -56,13 +56,13 @@ namespace launcher
     // Delegate the filesystem scanning to the manager logic. We just want
     // the list.
     //
-    co_return co_await manager_->detect_proton_versions (sp);
+    co_return co_await manager_.detect_proton_versions (sp);
   }
 
   asio::awaitable<optional<proton_coordinator::version_type>> proton_coordinator::
   find_best_version (const fs::path& sp)
   {
-    co_return co_await manager_->find_best_proton (sp);
+    co_return co_await manager_.find_best_proton (sp);
   }
 
   proton_coordinator::environment_type proton_coordinator::
@@ -73,7 +73,7 @@ namespace launcher
     // Assemble the environment variables (LD_LIBRARY_PATH, etc.) required for
     // the container. We inject the logging flag here if requested.
     //
-    return manager_->build_environment (sp, p, id, logging_);
+    return manager_.build_environment (sp, p, id, logging_);
   }
 
   // Launch orchestration.
@@ -98,7 +98,7 @@ namespace launcher
     //
     try
     {
-      co_await manager_->create_steam_appid (gd, e.appid);
+      co_await manager_.create_steam_appid (gd, e.appid);
 
       if (verbose_)
         cout << "created steam_appid.txt in game directory." << "\n";
@@ -115,7 +115,7 @@ namespace launcher
     //
     try
     {
-      co_await manager_->create_steam_appid (ld, e.appid);
+      co_await manager_.create_steam_appid (ld, e.appid);
 
       if (verbose_)
         cout << "created steam_appid.txt in launcher directory." << "\n";
@@ -144,7 +144,7 @@ namespace launcher
     if (verbose_)
       cout << "running ghost process to check steam status..." << "\n";
 
-    auto r (co_await manager_->run_ghost_process (e, h));
+    auto r (co_await manager_.run_ghost_process (e, h));
 
     if (r == ghost_result::steam_running)
     {
@@ -186,7 +186,7 @@ namespace launcher
       }
     }
 
-    co_return co_await manager_->launch_through_proton (e, x, as);
+    co_return co_await manager_.launch_through_proton (e, x, as);
   }
 
   asio::awaitable<bool> proton_coordinator::
@@ -258,7 +258,7 @@ namespace launcher
   is_steam_running (const environment_type& e,
                     const fs::path& h)
   {
-    auto r (co_await manager_->run_ghost_process (e, h));
+    auto r (co_await manager_.run_ghost_process (e, h));
     co_return r == ghost_result::steam_running;
   }
 
@@ -298,12 +298,12 @@ namespace launcher
   proton_coordinator::manager_type& proton_coordinator::
   manager ()
   {
-    return *manager_;
+    return manager_;
   }
 
   const proton_coordinator::manager_type& proton_coordinator::
   manager () const
   {
-    return *manager_;
+    return manager_;
   }
 }

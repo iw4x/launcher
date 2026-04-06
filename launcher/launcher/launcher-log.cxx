@@ -115,11 +115,11 @@ namespace launcher
                          pf,
                          log::policy<update>::threshold);
 
-    // In beta builds, we blow the doors wide open and allow all trace
-    // statements through so internals are visible. The compile-time minimum
-    // level already permits this in LAUNCHER_DEVELOP mode, so we just need to
-    // drop the runtime threshold here so they actually hit the sinks.
+    // In development builds, drop the runtime threshold on every category so
+    // trace statements compiled in by the minimum-level guard actually reach
+    // the sinks.
     //
+#if LAUNCHER_DEVELOP
     log::detail::logger<launcher> ()->set_log_level (LogLevel::TraceL3);
     log::detail::logger<cache>    ()->set_log_level (LogLevel::TraceL3);
     log::detail::logger<download> ()->set_log_level (LogLevel::TraceL3);
@@ -129,6 +129,7 @@ namespace launcher
     log::detail::logger<progress> ()->set_log_level (LogLevel::TraceL3);
     log::detail::logger<steam>    ()->set_log_level (LogLevel::TraceL3);
     log::detail::logger<update>   ()->set_log_level (LogLevel::TraceL3);
+#endif
   }
 
   logger::

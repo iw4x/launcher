@@ -132,19 +132,10 @@ namespace launcher
     return i != assets.end () ? optional<asset_type> (*i) : nullopt;
   }
 
-  // Comparison operators.
-  //
-
   bool
   operator== (const github_user& x, const github_user& y) noexcept
   {
     return x.login == y.login && x.id == y.id;
-  }
-
-  bool
-  operator!= (const github_user& x, const github_user& y) noexcept
-  {
-    return !(x == y);
   }
 
   bool
@@ -154,20 +145,8 @@ namespace launcher
   }
 
   bool
-  operator!= (const github_asset& x, const github_asset& y) noexcept
-  {
-    return !(x == y);
-  }
-
-  bool
   operator== (const github_release& x, const github_release& y) noexcept
   {
     return x.id == y.id && x.tag_name == y.tag_name;
-  }
-
-  bool
-  operator!= (const github_release& x, const github_release& y) noexcept
-  {
-    return !(x == y);
   }
 }

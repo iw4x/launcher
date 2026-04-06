@@ -13,7 +13,7 @@ namespace launcher
   update_discovery::
   update_discovery (asio::io_context& c)
     : ioc_ (c),
-      api_ (make_unique<api_type> (c))
+      api_ (c)
   {
     launcher::log::trace_l2 (categories::update{}, "initialized update_discovery (no token)");
   }
@@ -21,7 +21,7 @@ namespace launcher
   update_discovery::
   update_discovery (asio::io_context& c, string t)
     : ioc_ (c),
-      api_ (make_unique<api_type> (c, move (t)))
+      api_ (c, move (t))
   {
     launcher::log::trace_l2 (categories::update{}, "initialized update_discovery (with token)");
   }
@@ -30,14 +30,14 @@ namespace launcher
   set_token (string t)
   {
     launcher::log::trace_l3 (categories::update{}, "updating github api token");
-    api_->set_token (move (t));
+    api_.set_token (move (t));
   }
 
   void update_discovery::
   set_progress_callback (progress_callback_type c)
   {
     launcher::log::trace_l3 (categories::update{}, "setting progress callback");
-    api_->set_progress_callback (move (c));
+    api_.set_progress_callback (move (c));
   }
 
   void update_discovery::
@@ -92,7 +92,7 @@ namespace launcher
     // prereleases, we will find at least one stable release in this set.
     //
     vector<release_type> rs (
-      co_await api_->get_releases (o, r, 20));
+      co_await api_.get_releases (o, r, 20));
 
     if (rs.empty ())
     {
@@ -149,7 +149,7 @@ namespace launcher
     launcher::log::trace_l2 (categories::update{}, "fetching specific release by tag '{}' from {}/{}", t, o, r);
 
     release_type rel (
-      co_await api_->get_release_by_tag (o, r, t));
+      co_await api_.get_release_by_tag (o, r, t));
 
     if (rel.empty ())
     {
@@ -163,13 +163,13 @@ namespace launcher
   update_discovery::api_type& update_discovery::
   api () noexcept
   {
-    return *api_;
+    return api_;
   }
 
   const update_discovery::api_type& update_discovery::
   api () const noexcept
   {
-    return *api_;
+    return api_;
   }
 
   update_info update_discovery::

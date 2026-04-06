@@ -80,12 +80,4 @@ namespace launcher
            x.progress.downloaded_bytes == y.progress.downloaded_bytes &&
            x.progress.total_bytes == y.progress.total_bytes;
   }
-
-  bool
-  operator!= (const download_response& x, const download_response& y)
-  {
-    // Just invert the equality operator.
-    //
-    return !(x == y);
-  }
 }

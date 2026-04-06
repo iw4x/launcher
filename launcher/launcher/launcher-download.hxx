@@ -5,7 +5,6 @@
 
 #include <boost/asio.hpp>
 
-#include <memory>
 #include <functional>
 #include <filesystem>
 #include <cstdint>
@@ -131,8 +130,8 @@ namespace launcher
 
   private:
     asio::io_context& ioc_;
-    std::unique_ptr<manager_type> manager_;
-    std::unique_ptr<http_client> http_;
+    manager_type manager_;
+    http_client http_;
     http_client_traits traits_;
   };
 }

@@ -2,7 +2,6 @@
 
 #include <filesystem>
 #include <functional>
-#include <memory>
 #include <optional>
 #include <string>
 #include <vector>
@@ -11,6 +10,9 @@
 
 #include <launcher/cache/cache.hxx>
 
+#include <launcher/launcher-download.hxx>
+#include <launcher/launcher-github.hxx>
+#include <launcher/launcher-progress.hxx>
 #include <launcher/manifest/manifest.hxx>
 
 namespace launcher
@@ -67,9 +69,6 @@ namespace launcher
     explicit operator bool () const noexcept;
   };
 
-  class download_coordinator;
-  class progress_coordinator;
-  class github_coordinator;
 
   // The central coordinator for local asset management.
   //
@@ -324,8 +323,8 @@ namespace launcher
     asio::io_context& ctx_;
     fs::path dir_;
 
-    std::unique_ptr<database_type> db_;
-    std::unique_ptr<reconciler_type> rec_;
+    database_type db_;
+    reconciler_type rec_;
 
     download_coordinator* dl_ = nullptr;
     progress_coordinator* prog_ = nullptr;
