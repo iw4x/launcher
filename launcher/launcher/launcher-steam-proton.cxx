@@ -5,7 +5,7 @@
 
 #include <boost/process.hpp>
 
-#include <iostream>
+#include <launcher/launcher-log.hxx>
 
 using namespace std;
 using namespace std::chrono_literals;
@@ -90,7 +90,7 @@ namespace launcher
     //
 
     if (verbose_)
-      cout << "setting up for launch..." << "\n";
+      launcher::log::info (categories::steam{}, "setting up for launch");
 
     // First, plant steam_appid.txt in the game's CWD. The Steam API DLLs look
     // for this to identify the application context. Without it,
@@ -101,11 +101,11 @@ namespace launcher
       co_await manager_.create_steam_appid (gd, e.appid);
 
       if (verbose_)
-        cout << "created steam_appid.txt in game directory." << "\n";
+        launcher::log::info (categories::steam{}, "created steam_appid.txt in game directory");
     }
     catch (const exception& ex)
     {
-      cerr << "error: " << ex.what () << "\n";
+      launcher::log::error (categories::steam{}, "failed to create steam_appid.txt: {}", ex.what ());
       co_return false;
     }
 
@@ -118,14 +118,15 @@ namespace launcher
       co_await manager_.create_steam_appid (ld, e.appid);
 
       if (verbose_)
-        cout << "created steam_appid.txt in launcher directory." << "\n";
+        launcher::log::info (categories::steam{}, "created steam_appid.txt in launcher directory");
     }
     catch (const exception& ex)
     {
       // Not fatal. The game might still run even if our probe fails.
       //
-      cerr << "warning: failed to create steam_appid.txt in launcher directory: "
-           << ex.what () << "\n";
+      launcher::log::warning (categories::steam{},
+                              "failed to create steam_appid.txt in launcher directory: {}",
+                              ex.what ());
     }
 
     // Verify the "ghost" process. We run a dummy executable inside the
@@ -136,33 +137,34 @@ namespace launcher
 
     if (!fs::exists (h))
     {
-      cerr << "warning: steam.exe helper not found at " << h << "\n"
-           << "assuming Steam is not running." << "\n";
+      launcher::log::warning (categories::steam{},
+                              "steam.exe helper not found at {}, assuming Steam is not running",
+                              h.string ());
       co_return false;
     }
 
     if (verbose_)
-      cout << "running ghost process to check steam status..." << "\n";
+      launcher::log::info (categories::steam{}, "running ghost process to check steam status");
 
     auto r (co_await manager_.run_ghost_process (e, h));
 
     if (r == ghost_result::steam_running)
     {
       if (verbose_)
-        cout << "steam is running and initialized." << "\n";
+        launcher::log::info (categories::steam{}, "steam is running and initialized");
 
       co_return true;
     }
     else if (r == ghost_result::steam_not_running)
     {
       if (verbose_)
-        cout << "steam is not running." << "\n";
+        launcher::log::info (categories::steam{}, "steam is not running");
 
       co_return false;
     }
     else
     {
-      cerr << "error: failed to check steam status" << "\n";
+      launcher::log::error (categories::steam{}, "failed to check steam status");
       co_return false;
     }
   }
@@ -174,15 +176,15 @@ namespace launcher
   {
     if (verbose_)
     {
-      cout << "launching through proton..." << "\n"
-           << "  executable: " << x << "\n"
-           << "  proton:     " << e.proton_bin << "\n";
+      launcher::log::info (categories::steam{},
+                           "launching through proton, executable: {}, proton: {}",
+                           x.string (), e.proton_bin.string ());
 
       if (!as.empty ())
       {
-        cout << "  arguments: ";
-        for (const auto& a : as) cout << " " << a;
-        cout << "\n";
+        string args;
+        for (const auto& a : as) args += " " + a;
+        launcher::log::info (categories::steam{}, "  arguments:{}", args);
       }
     }
 
@@ -201,18 +203,18 @@ namespace launcher
     //
 
     if (verbose_)
-      cout << "detecting proton versions..." << "\n";
+      launcher::log::info (categories::steam{}, "detecting proton versions");
 
     auto p (co_await find_best_version (sp));
 
     if (!p)
     {
-      cerr << "error: no suitable proton version found" << "\n";
+      launcher::log::error (categories::steam{}, "no suitable proton version found");
       co_return false;
     }
 
     if (verbose_)
-      cout << "using proton: " << p->name << "\n";
+      launcher::log::info (categories::steam{}, "using proton: {}", p->name);
 
     auto e (prepare_environment (sp, *p, id));
 
@@ -226,12 +228,13 @@ namespace launcher
       // The IPC check failed or Steam isn't there. Try to wake it up.
       //
       if (verbose_)
-        cout << "steam is not running. attempting to start Steam..." << "\n";
+        launcher::log::info (categories::steam{},
+                             "steam is not running, attempting to start Steam");
 
       if (!co_await start_steam ())
       {
-        cerr << "warning: failed to start steam" << "\n"
-             << "launching anyway, steam features may not work." << "\n";
+        launcher::log::warning (categories::steam{},
+                                "failed to start steam. launching anyway, steam features may not work");
       }
       else
       {
@@ -239,7 +242,7 @@ namespace launcher
         // Sleep briefly before retrying the setup.
         //
         if (verbose_)
-          cout << "waiting for steam to initialize..." << "\n";
+          launcher::log::info (categories::steam{}, "waiting for steam to initialize");
 
         asio::steady_timer t (ioc_, 5s);
         co_await t.async_wait (asio::use_awaitable);
@@ -247,7 +250,7 @@ namespace launcher
         r = (co_await setup_for_launch (e, gd, ld));
 
         if (r && verbose_)
-          cout << "steam is now running." << "\n";
+          launcher::log::info (categories::steam{}, "steam is now running");
       }
     }
 
@@ -278,7 +281,7 @@ namespace launcher
       c.detach ();
 
       if (verbose_)
-        cout << "steam started." << "\n";
+        launcher::log::info (categories::steam{}, "steam started");
 
       // Yield briefly to give the process time to register the PID, though
       // pipe creation usually takes longer (handled by caller).
@@ -290,7 +293,7 @@ namespace launcher
     }
     catch (const exception& ex)
     {
-      cerr << "error: failed to start steam: " << ex.what () << "\n";
+      launcher::log::error (categories::steam{}, "failed to start steam: {}", ex.what ());
       co_return false;
     }
   }
