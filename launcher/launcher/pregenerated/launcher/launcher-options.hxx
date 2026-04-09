@@ -513,6 +513,9 @@ namespace launcher
     const bool&
     skip_launch () const;
 
+    const bool&
+    skip_remote () const;
+
     const std::string&
     proxy () const;
 
@@ -551,6 +554,7 @@ namespace launcher
     bool no_self_update_;
     bool self_update_only_;
     bool skip_launch_;
+    bool skip_remote_;
     std::string proxy_;
     bool proxy_specified_;
   };

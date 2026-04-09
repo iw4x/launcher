@@ -988,7 +988,7 @@ try
 
   asio::io_context io;
 
-  if (!opt.no_self_update () || opt.self_update_only ())
+  if ((!opt.no_self_update () || opt.self_update_only ()) && !opt.skip_remote ())
   {
     progress_coordinator pc (io);
     exception_ptr ex;
@@ -1084,56 +1084,64 @@ try
     }
   }
 
-  // Build proxy-aware HTTP traits if --proxy was specified.
-  //
-  http_client_traits ht;
-  if (!opt.proxy ().empty ())
-    ht.proxy_url = opt.proxy ();
-
-  github_coordinator   gh (io);
-  http_coordinator     hc (io, ht);
-  download_coordinator dc (io, opt.jobs (), ht);
-  progress_coordinator pc (io);
-  cache_coordinator    cc (io, root);
-
-  if (!opt.proxy ().empty ())
-    gh.set_proxy (opt.proxy ());
-
-  cc.set_github_coordinator (&gh);
-  cc.set_download_coordinator (&dc);
-  cc.set_progress_coordinator (&pc);
-
-  // Visually alert the user if we hit GitHub's unauthenticated API rate limits
-  //
-  bind_rate_limit_ui (io, gh, pc);
-
-  exception_ptr sync_ex;
-
-  asio::co_spawn (
-    io,
-    [&io, &gh, &hc, &dc, &pc, &cc, &root, &opt] () -> asio::awaitable<void>
+  if (!opt.skip_remote ())
   {
-    co_await sync_client (io, gh, dc, pc, cc, root, opt.prerelease ());
-    co_await sync_rawfiles (io, gh, dc, pc, cc, root, opt.prerelease ());
-    co_await sync_dlc (io, hc, dc, pc, cc, root);
+    // Build proxy-aware HTTP traits if --proxy was specified.
+    //
+    http_client_traits ht;
+    if (!opt.proxy ().empty ())
+      ht.proxy_url = opt.proxy ();
+
+    github_coordinator   gh (io);
+    http_coordinator     hc (io, ht);
+    download_coordinator dc (io, opt.jobs (), ht);
+    progress_coordinator pc (io);
+    cache_coordinator    cc (io, root);
+
+    if (!opt.proxy ().empty ())
+      gh.set_proxy (opt.proxy ());
+
+    cc.set_github_coordinator (&gh);
+    cc.set_download_coordinator (&dc);
+    cc.set_progress_coordinator (&pc);
+
+    // Visually alert the user if we hit GitHub's unauthenticated API rate
+    // limits.
+    //
+    bind_rate_limit_ui (io, gh, pc);
+
+    exception_ptr sync_ex;
+
+    asio::co_spawn (
+      io,
+      [&io, &gh, &hc, &dc, &pc, &cc, &root, &opt] () -> asio::awaitable<void>
+    {
+      co_await sync_client (io, gh, dc, pc, cc, root, opt.prerelease ());
+      co_await sync_rawfiles (io, gh, dc, pc, cc, root, opt.prerelease ());
+      co_await sync_dlc (io, hc, dc, pc, cc, root);
 
 #ifdef __linux__
-    co_await sync_helper (io, gh, dc, pc, cc, root, true);
+      co_await sync_helper (io, gh, dc, pc, cc, root, true);
 #endif
-  }(),
-    [&io, &sync_ex] (exception_ptr ep)
+    }(),
+      [&io, &sync_ex] (exception_ptr ep)
+    {
+      sync_ex = ep;
+      io.stop ();
+    });
+
+    io.restart ();
+    io.run ();
+
+    if (sync_ex)
+      rethrow_exception (sync_ex);
+
+    info ("all components synchronized and up to date");
+  }
+  else
   {
-    sync_ex = ep;
-    io.stop ();
-  });
-
-  io.restart ();
-  io.run ();
-
-  if (sync_ex)
-    rethrow_exception (sync_ex);
-
-  info ("all components synchronized and up to date");
+    info ("skipping remote checks and reconciliation (--skip-remote)");
+  }
 
   if (opt.skip_launch ())
   {

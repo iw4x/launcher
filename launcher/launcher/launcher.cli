@@ -68,6 +68,13 @@ namespace launcher
        perform all update operations but exit without starting the game."
     };
 
+    bool --skip-remote
+    {
+      "Skip all remote checks and file reconciliation. The launcher will
+       attempt to launch the game executable directly without contacting
+       GitHub and without verifying local files."
+    };
+
     std::string --proxy
     {
       "<url>",
