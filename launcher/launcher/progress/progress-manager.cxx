@@ -206,8 +206,7 @@ namespace launcher
       overall_tracker_.update (abs_current);
       om.speed.store (overall_tracker_.speed (), std::memory_order_relaxed);
 
-      update_timer_.expires_after (
-        std::chrono::milliseconds (update_interval_ms));
+      update_timer_.expires_after (update_interval);
 
       try
       {
@@ -234,8 +233,7 @@ namespace launcher
 
       renderer_.update (std::move (ctx));
 
-      render_timer_.expires_after (
-        std::chrono::milliseconds (render_interval_ms));
+      render_timer_.expires_after (render_interval);
 
       try
       {
