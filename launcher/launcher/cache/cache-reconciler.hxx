@@ -6,6 +6,7 @@
 #include <functional>
 #include <optional>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include <launcher/cache/cache-database.hxx>
@@ -128,15 +129,20 @@ namespace launcher
     // and to handle the slightly different semantics of archives (which need
     // extraction) versus standalone files.
     //
+    using cache_map =
+      std::unordered_map<std::string, cached_file>;
+
     std::vector<reconcile_item>
     plan_archives (const std::vector<manifest_archive>& as,
                    component_type c,
-                   const std::string& v);
+                   const std::string& v,
+                   const cache_map& cm);
 
     std::vector<reconcile_item>
     plan_files (const std::vector<manifest_file>& fs,
                 component_type c,
-                const std::string& v);
+                const std::string& v,
+                const cache_map& cm);
 
     reconcile_summary
     summarize (const std::vector<reconcile_item>& items) const;

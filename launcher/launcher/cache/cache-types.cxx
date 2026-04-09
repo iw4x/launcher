@@ -93,9 +93,9 @@ namespace launcher
     blake3_hasher h;
     blake3_hasher_init (&h);
 
-    // Read and hash the file in 64K chunks.
+    // Read and hash the file in 1M chunks.
     //
-    constexpr size_t n (65536);
+    constexpr size_t n (1048576);
     vector<char> b (n);
 
     while (i)

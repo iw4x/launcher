@@ -138,48 +138,12 @@ namespace launcher
         component_type c,
         const string& v)
   {
-    manifest opt_m;
-    opt_m.files = m.files;
-
-    for (const auto& a : m.archives)
-    {
-      if (!a.files.empty ())
-      {
-        // Pre-evaluate the inner files to check if they are already fully
-        // satisfied on disk.
-        //
-        manifest test_m;
-        test_m.files = a.files;
-
-        for (auto& f : test_m.files)
-          f.archive_name.reset ();
-
-        auto test_p = rec_.plan (test_m, c, v);
-
-        bool needs_dl = false;
-        for (const auto& i : test_p)
-        {
-          if (i.action == reconcile_action::download)
-          {
-            needs_dl = true;
-            break;
-          }
-        }
-
-        // If the files are fully satisfied, add them as standalone items to
-        // the optimized plan so they are preserved, and omit the archive.
-        //
-        if (!needs_dl)
-        {
-          opt_m.files.insert (opt_m.files.end (), test_m.files.begin (), test_m.files.end ());
-          continue;
-        }
-      }
-
-      opt_m.archives.push_back (a);
-    }
-
-    return rec_.plan (opt_m, c, v);
+    // We use a single call to rec_.plan() which already handles inner-file
+    // checks within plan_archives(). The old double-plan pattern (testing
+    // each archive's files separately, then planning again) caused every
+    // file to be evaluated and potentially hashed twice.
+    //
+    return rec_.plan (m, c, v);
   }
 
   reconcile_summary cache_coordinator::
