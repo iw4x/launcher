@@ -6,6 +6,7 @@
 #include <fstream>
 #include <iomanip>
 #include <sstream>
+#include <stdexcept>
 #include <vector>
 
 #include <launcher/blake3.h>
@@ -160,5 +161,69 @@ namespace launcher
     }
 
     return true;
+  }
+
+  blake3_hash::
+  blake3_hash (std::string hex)
+  {
+    hex.erase (remove_if (hex.begin (),
+                          hex.end (),
+                          [] (unsigned char c) { return isspace (c); }),
+               hex.end ());
+
+    if (hex.empty ())
+      return; // Empty hash is explicitly allowed (means "no hash").
+
+    if (hex.size () != 64)
+      throw invalid_argument (
+        "invalid blake3 hash length (" + to_string (hex.size ()) +
+        " chars, expected 64): " + hex);
+
+    // Normalize to lowercase and validate hex characters in one pass.
+    //
+    for (char& c : hex)
+    {
+      auto u (static_cast<unsigned char> (c));
+
+      if (!isxdigit (u))
+        throw invalid_argument (
+          "invalid blake3 hash character: " + std::string (1, c));
+
+      c = static_cast<char> (tolower (u));
+    }
+
+    hex_ = move (hex);
+  }
+
+  bool blake3_hash::
+  verify_file (const fs::path& p) const
+  {
+    if (hex_.empty ())
+      return false;
+
+    blake3_hash actual (of_file (p));
+
+    return !actual.empty () && *this == actual;
+  }
+
+  blake3_hash blake3_hash::
+  of_file (const fs::path& p)
+  {
+    // compute_blake3() already returns a lowercase hex string, so we can
+    // construct without re-validation by going through the string constructor
+    // which will normalize it.
+    //
+    std::string h (compute_blake3 (p));
+
+    if (h.empty ())
+      return blake3_hash ();
+
+    return blake3_hash (move (h));
+  }
+
+  ostream&
+  operator<< (ostream& o, const blake3_hash& h)
+  {
+    return o << h.string ();
   }
 }

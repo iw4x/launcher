@@ -259,30 +259,10 @@ namespace launcher
             //
             if (exists_quiet (t.p) && !t.e.empty ())
             {
-              string a (compute_blake3 (t.p));
-              string e (t.e);
+              blake3_hash actual (blake3_hash::of_file (t.p));
+              blake3_hash expected (t.e);
 
-              e.erase (remove_if (e.begin (),
-                                  e.end (),
-                                  [] (unsigned char c)
-              {
-                return isspace (c);
-              }), e.end ());
-
-              bool m (a.size () == e.size () && !a.empty ());
-              if (m)
-              {
-                for (size_t i (0); i < a.size (); ++i)
-                {
-                  if (tolower ((unsigned char) a[i]) !=
-                      tolower ((unsigned char) e[i]))
-                  {
-                    m = false;
-                    break;
-                  }
-                }
-              }
-              t.m = m;
+              t.m = (!actual.empty () && actual == expected);
 
               if (t.m)
               {
@@ -295,8 +275,8 @@ namespace launcher
                   categories::cache {},
                   "hash mismatch for {}: expected '{}', got '{}'",
                   t.p.string (),
-                  e,
-                  a);
+                  expected.string (),
+                  actual.string ());
               }
             }
             else
@@ -613,21 +593,10 @@ namespace launcher
 
         try
         {
-          string a (compute_blake3 (p));
+          blake3_hash actual (blake3_hash::of_file (p));
+          blake3_hash expected_hash (f.hash.value);
 
-          string expected = f.hash.value;
-          expected.erase(remove_if(expected.begin(), expected.end(),
-              [](unsigned char ch){ return std::isspace(ch); }), expected.end());
-
-          bool match = (a.size() == expected.size() && !a.empty());
-          if (match) {
-              for (size_t idx = 0; idx < a.size(); ++idx) {
-                  if (std::tolower((unsigned char)a[idx]) != std::tolower((unsigned char)expected[idx])) {
-                      match = false;
-                      break;
-                  }
-              }
-          }
+          bool match (!actual.empty () && actual == expected_hash);
 
           if (match)
           {
@@ -647,7 +616,7 @@ namespace launcher
             launcher::log::debug (
               categories::cache {},
               "hash mismatch on adoption attempt for {}: expected '{}', got '{}'",
-              f.path, expected, a);
+              f.path, expected_hash.string (), actual.string ());
             dl = true;
           }
         }
