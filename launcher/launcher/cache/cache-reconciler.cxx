@@ -7,6 +7,7 @@
 #include <latch>
 #include <mutex>
 #include <thread>
+#include <unordered_map>
 #include <vector>
 
 #include <boost/asio/post.hpp>
@@ -74,7 +75,7 @@ namespace launcher
   reconciler::
   reconciler (cache_database& db, const fs::path& r)
     : db_ (db),
-      root_ (r),
+      root_ (fs::weakly_canonical (r)),
       strat_ (def_strat)
   {
     launcher::log::trace_l2 (categories::cache {},
@@ -333,14 +334,26 @@ namespace launcher
       static_cast<int> (c),
       v);
 
+    // Pre-load the entire database state for this component into memory so
+    // that the planners can do O(1) lookups instead of per-file SQLite
+    // round-trips.
+    //
+    cache_map cm;
+    {
+      auto fs (db_.files (c));
+      cm.reserve (fs.size ());
+      for (auto& f : fs)
+        cm.emplace (f.path (), move (f));
+    }
+
     vector<reconcile_item> r;
 
-    auto as (plan_archives (m.archives, c, v));
+    auto as (plan_archives (m.archives, c, v, cm));
     r.insert (r.end (),
               make_move_iterator (as.begin ()),
               make_move_iterator (as.end ()));
 
-    auto fs (plan_files (m.files, c, v));
+    auto fs (plan_files (m.files, c, v, cm));
     r.insert (r.end (),
               make_move_iterator (fs.begin ()),
               make_move_iterator (fs.end ()));
@@ -354,15 +367,16 @@ namespace launcher
   vector<reconcile_item> reconciler::
   plan_archives (const vector<manifest_archive>& as,
                  component_type c,
-                 const string& v)
+                 const string& v,
+                 const cache_map& cm)
   {
     launcher::log::trace_l2 (categories::cache {},
                              "planning {} archives",
                              as.size ());
     vector<reconcile_item> r;
 
-    struct link_info { size_t i; fs::path p; string h; string k; };
-    struct file_info { size_t i; fs::path p; string h; string k; };
+    struct link_info { size_t i; fs::path p; string h; string k; uint64_t es; };
+    struct file_info { size_t i; fs::path p; string h; string k; uint64_t es; };
 
     vector<link_info> ls;
     vector<file_info> fs;
@@ -394,15 +408,32 @@ namespace launcher
         {
           fs::path p (root_ / f.path);
           string k (key (p));
-          auto cf (db_.find (k));
+          auto it (cm.find (k));
 
-          if (cf && cf->version () == v && stat (p, *cf) == file_state::valid)
+          if (it != cm.end () &&
+              it->second.version () == v &&
+              stat (p, it->second) == file_state::valid)
           {
             // Valid.
           }
           else if (exists_quiet (p) && !f.hash.value.empty ())
           {
-            ls.push_back ({i, p, f.hash.value, k});
+            // Quick size pre-check: if the file size doesn't match the
+            // manifest, skip the expensive hash entirely.
+            //
+            uint64_t ds (size_quiet (p));
+            if (f.size != 0 && ds != f.size)
+            {
+              launcher::log::trace_l3 (
+                categories::cache {},
+                "size mismatch for {}: expected {}, got {}",
+                p.string (), f.size, ds);
+              s.ok = false;
+            }
+            else
+            {
+              ls.push_back ({i, p, f.hash.value, k, f.size});
+            }
           }
           else
           {
@@ -422,22 +453,39 @@ namespace launcher
         //
         fs::path p (path (a));
         string k (key (p));
-        auto cf (db_.find (k));
+        auto it (cm.find (k));
 
-        if (cf && cf->version () == v && stat (p, *cf) == file_state::valid)
+        if (it != cm.end () &&
+            it->second.version () == v &&
+            stat (p, it->second) == file_state::valid)
         {
           s.skip = true;
         }
         else if (exists_quiet (p) && !a.hash.value.empty ())
         {
-          if (cf)
+          if (it != cm.end ())
           {
             launcher::log::trace_l3 (
               categories::cache {},
               "blob archive {} version mismatch or stale, checking hash",
               a.name);
           }
-          fs.push_back ({i, p, a.hash.value, k});
+
+          // Quick size pre-check.
+          //
+          uint64_t ds (size_quiet (p));
+          if (a.size != 0 && ds != a.size)
+          {
+            launcher::log::trace_l3 (
+              categories::cache {},
+              "blob archive {} size mismatch: expected {}, got {}",
+              a.name, a.size, ds);
+            s.dl = true;
+          }
+          else
+          {
+            fs.push_back ({i, p, a.hash.value, k, a.size});
+          }
         }
         else
         {
@@ -466,6 +514,10 @@ namespace launcher
 
       run_hashes (ts, cb_);
 
+      // Collect all adoptions so we can batch them in a single DB
+      // transaction instead of one per file.
+      //
+      vector<cached_file> adoptions;
       auto i (ts.begin ());
 
       for (const auto& l : ls)
@@ -477,7 +529,7 @@ namespace launcher
           launcher::log::trace_l3 (categories::cache {},
                                    "adopting existing file into db: {}",
                                    l.k);
-          db_.store (cached_file (l.k, t.mt, v, c, t.s, l.h));
+          adoptions.emplace_back (l.k, t.mt, v, c, t.s, l.h);
         }
         else
         {
@@ -499,7 +551,7 @@ namespace launcher
           launcher::log::trace_l3 (categories::cache {},
                                    "adopting existing blob archive into db: {}",
                                    f.k);
-          db_.store (cached_file (f.k, t.mt, v, c, t.s, f.h));
+          adoptions.emplace_back (f.k, t.mt, v, c, t.s, f.h);
           s.skip = true;
         }
         else
@@ -507,6 +559,9 @@ namespace launcher
           s.dl = true;
         }
       }
+
+      if (!adoptions.empty ())
+        db_.store (adoptions);
     }
 
     // Finally, construct the reconciliation plan items based on the state we
@@ -549,20 +604,32 @@ namespace launcher
   vector<reconcile_item> reconciler::
   plan_files (const vector<manifest_file>& fs,
               component_type c,
-              const string& v)
+              const string& v,
+              const cache_map& cm)
   {
     launcher::log::trace_l2 (categories::cache {},
                              "planning {} standalone files",
                              fs.size ());
     vector<reconcile_item> r;
+
+    struct file_entry
+    {
+      size_t mi;       // Manifest index.
+      fs::path p;      // Resolved path.
+      string k;        // DB key.
+      string h;        // Expected hash.
+      uint64_t es;     // Expected size.
+    };
+
+    vector<file_entry> to_hash;
+    vector<size_t> to_download;
+
     size_t i (0);
 
-    // Iterate through standalone files. Similar to archives, we want to skip
-    // anything that is already managed by an archive or is merely a manifest
-    // artifact (like the update JSON itself).
-    //
-    for (const auto& f : fs)
+    for (size_t mi (0); mi < fs.size (); ++mi)
     {
+      const auto& f (fs[mi]);
+
       report ("Checking " + f.path, ++i, fs.size ());
 
       if (f.archive_name)
@@ -572,16 +639,17 @@ namespace launcher
 
       fs::path p (path (f));
       string k (key (p));
-      auto cf (db_.find (k));
-      bool dl (false);
+      auto it (cm.find (k));
 
-      if (cf && cf->version () == v && stat (p, *cf) == file_state::valid)
+      if (it != cm.end () &&
+          it->second.version () == v &&
+          stat (p, it->second) == file_state::valid)
       {
         // Valid, do nothing.
       }
       else if (exists_quiet (p) && !f.hash.value.empty ())
       {
-        if (cf)
+        if (it != cm.end ())
         {
           launcher::log::trace_l3 (
             categories::cache {},
@@ -589,55 +657,26 @@ namespace launcher
             f.path);
         }
 
-        report ("Hashing " + f.path, i, fs.size ());
-
-        try
+        // Quick size pre-check: if the file size doesn't match, skip the
+        // expensive hash computation entirely.
+        //
+        uint64_t ds (size_quiet (p));
+        if (f.size != 0 && ds != f.size)
         {
-          blake3_hash actual (blake3_hash::of_file (p));
-          blake3_hash expected_hash (f.hash.value);
-
-          bool match (!actual.empty () && actual == expected_hash);
-
-          if (match)
-          {
-            launcher::log::trace_l3 (
-              categories::cache {},
-              "file {} matches expected hash, adopting to db",
-              f.path);
-            db_.store (cached_file (k,
-                                    get_file_mtime (p),
-                                    v,
-                                    c,
-                                    fs::file_size (p),
-                                    f.hash.value));
-          }
-          else
-          {
-            launcher::log::debug (
-              categories::cache {},
-              "hash mismatch on adoption attempt for {}: expected '{}', got '{}'",
-              f.path, expected_hash.string (), actual.string ());
-            dl = true;
-          }
+          launcher::log::trace_l3 (
+            categories::cache {},
+            "file {} size mismatch: expected {}, got {}",
+            f.path, f.size, ds);
+          to_download.push_back (mi);
         }
-        catch (const exception& e)
+        else
         {
-          launcher::log::warning (categories::cache {},
-                                  "exception during hash verification for {}: {}",
-                                  f.path, e.what());
-          dl = true;
-        }
-        catch (...)
-        {
-          launcher::log::warning (categories::cache {},
-                                  "unknown exception during hash verification for {}",
-                                  f.path);
-          dl = true;
+          to_hash.push_back ({mi, p, k, f.hash.value, f.size});
         }
       }
       else
       {
-        if (!cf)
+        if (it == cm.end ())
         {
           launcher::log::trace_l3 (categories::cache {},
                                    "file {} missing from disk and db",
@@ -649,24 +688,70 @@ namespace launcher
                                    "file {} missing from disk or missing hash",
                                    f.path);
         }
-        dl = true;
+        to_download.push_back (mi);
       }
+    }
 
-      if (dl)
+    // Run all pending hashes in parallel via the thread pool.
+    //
+    if (!to_hash.empty ())
+    {
+      vector<hash_task> ts;
+      ts.reserve (to_hash.size ());
+
+      for (const auto& e : to_hash)
+        ts.push_back ({e.p, e.h, e.k, c, false, 0, 0, ""});
+
+      run_hashes (ts, cb_);
+
+      // Process results and collect adoptions for batch DB write.
+      //
+      vector<cached_file> adoptions;
+
+      for (size_t j (0); j < to_hash.size (); ++j)
       {
-        reconcile_item ri;
-        ri.action = reconcile_action::download;
-        ri.path = p.string ();
-        ri.expected_hash = f.hash.value;
-        ri.expected_size = f.size;
-        ri.component = c;
-        ri.version = v;
-        r.push_back (move (ri));
+        const auto& e (to_hash[j]);
+        const auto& t (ts[j]);
 
-        launcher::log::trace_l3 (categories::cache {},
-                                 "file item added to reconcile plan: {}",
-                                 ri.path);
+        if (t.m)
+        {
+          launcher::log::trace_l3 (
+            categories::cache {},
+            "file {} matches expected hash, adopting to db",
+            fs[e.mi].path);
+          adoptions.emplace_back (e.k, t.mt, v, c, t.s, e.h);
+        }
+        else
+        {
+          launcher::log::debug (
+            categories::cache {},
+            "hash mismatch on adoption attempt for {}: expected '{}'",
+            fs[e.mi].path, e.h);
+          to_download.push_back (e.mi);
+        }
       }
+
+      if (!adoptions.empty ())
+        db_.store (adoptions);
+    }
+
+    // Emit download items for all files that need it.
+    //
+    for (size_t mi : to_download)
+    {
+      const auto& f (fs[mi]);
+      reconcile_item ri;
+      ri.action = reconcile_action::download;
+      ri.path = path (f).string ();
+      ri.expected_hash = f.hash.value;
+      ri.expected_size = f.size;
+      ri.component = c;
+      ri.version = v;
+      r.push_back (move (ri));
+
+      launcher::log::trace_l3 (categories::cache {},
+                               "file item added to reconcile plan: {}",
+                               ri.path);
     }
 
     return r;
@@ -883,9 +968,10 @@ namespace launcher
   string reconciler::
   key (const fs::path& p) const
   {
-    error_code ec;
-    fs::path can (fs::weakly_canonical (p, ec));
-    string r (ec ? p.string () : can.string ());
+    // Since root_ is already canonical (resolved once in the constructor), we
+    // only need to normalize the path lexically.
+    //
+    string r (p.lexically_normal ().string ());
 
     launcher::log::trace_l3 (categories::cache {},
                              "generated key for path {}: {}",
