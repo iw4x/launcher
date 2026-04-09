@@ -1,14 +1,15 @@
 #pragma once
 
 #include <string>
+#include <map>
 #include <optional>
 #include <vector>
 #include <functional>
 
 #include <boost/asio.hpp>
-#include <boost/asio/ssl.hpp>
-#include <boost/beast.hpp>
 #include <boost/json.hpp>
+
+#include <launcher/http/http-client.hxx>
 
 #include <launcher/github/github-types.hxx>
 #include <launcher/github/github-endpoint.hxx>
@@ -17,9 +18,6 @@
 namespace launcher
 {
   namespace asio = boost::asio;
-  namespace beast = boost::beast;
-  namespace http = beast::http;
-  namespace ssl = asio::ssl;
   namespace json = boost::json;
 
   // GitHub API rate limit information.
@@ -275,23 +273,24 @@ namespace launcher
 
   private:
     asio::io_context& ioc_;
-    ssl::context ssl_ctx_;
+    http_client_traits traits_;
+    std::optional<http_client> client_;
     std::optional<std::string> token_;
-    std::optional<std::string> proxy_url_;
     std::optional<github_rate_limit> last_rate_limit_;
     progress_callback_type progress_callback_;
 
-    // Internal HTTP operations.
+    // Ensure the HTTP client is initialized.
     //
-    asio::awaitable<response_type>
-    perform_request (const std::string& host,
-                     const std::string& target,
-                     http::verb method,
-                     const std::map<std::string, std::string>& headers,
-                     const std::optional<std::string>& body = std::nullopt);
+    http_client&
+    ensure_client ();
+
+    // Convert http_response to github_response.
+    //
+    response_type
+    to_github_response (const http_response& r) const;
 
     void
-    add_default_headers (std::map<std::string, std::string>& headers) const;
+    add_default_headers (http_request& req) const;
 
     // Extract rate limit information from response headers.
     //
