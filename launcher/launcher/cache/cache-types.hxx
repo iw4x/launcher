@@ -6,6 +6,7 @@
 #include <optional>
 #include <ostream>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include <odb/core.hxx>
@@ -210,6 +211,64 @@ namespace launcher
     std::string key_;
     std::string val_;
   };
+
+  // Blake3 hash digest.
+  //
+  // An empty blake3_hash signals "no hash available" and is explicitly
+  // supported. Every non-empty hash must be exactly 64 hex characters
+  // (256-bit Blake3 output).
+  //
+  class blake3_hash
+  {
+  public:
+    blake3_hash () = default;
+
+    explicit
+    blake3_hash (std::string hex);
+
+    explicit
+    blake3_hash (std::string_view hex)
+      : blake3_hash (std::string (hex)) {}
+
+    bool
+    empty () const noexcept
+    {
+      return hex_.empty ();
+    }
+
+    const std::string&
+    string () const noexcept
+    {
+      return hex_;
+    }
+
+    bool
+    verify_file (const fs::path& p) const;
+
+    // Compute the Blake3 hash of a file and return the result. Returns an
+    // empty hash on I/O failure.
+    //
+    static blake3_hash
+    of_file (const fs::path& p);
+
+    bool
+    operator == (const blake3_hash& o) const noexcept
+    {
+      return hex_ == o.hex_;
+    }
+
+    bool
+    operator != (const blake3_hash& o) const noexcept
+    {
+      return hex_ != o.hex_;
+    }
+
+  private:
+    std::string hex_;
+  };
+
+  std::ostream&
+  operator<< (std::ostream& o, const blake3_hash& h);
 
   // Record of what we need to do to a given file. Note that we default to the
   // client component here. It is the most common case and saves us from
