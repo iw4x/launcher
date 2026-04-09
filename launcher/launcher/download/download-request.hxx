@@ -2,6 +2,7 @@
 
 #include <string>
 #include <vector>
+#include <chrono>
 #include <cstdint>
 #include <optional>
 #include <filesystem>
@@ -36,10 +37,10 @@ namespace launcher
     //
     bool resume {true};
 
-    // Timeout settings (in seconds).
+    // Timeout settings.
     //
-    std::uint32_t connect_timeout {30};
-    std::uint32_t transfer_timeout {300};
+    std::chrono::seconds connect_timeout {30};
+    std::chrono::seconds transfer_timeout {300};
 
     // Rate limiting (bytes per second, 0 = no limit).
     //

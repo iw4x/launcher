@@ -14,6 +14,13 @@ using namespace std;
 
 namespace launcher
 {
+  // How frequently we poll for completed tasks and top up the active set.
+  //
+  constexpr chrono::milliseconds reap_interval {50};
+
+  // How frequently we poll while a download is paused.
+  //
+  constexpr chrono::milliseconds pause_poll_interval {100};
   download_manager::
   download_manager (boost::asio::io_context& c,
                     size_t m)
@@ -256,7 +263,7 @@ namespace launcher
 
       // Yield back to the event loop so we aren't pointlessly spinning the CPU.
       //
-      boost::asio::steady_timer tm (ioc_, chrono::milliseconds (50));
+      boost::asio::steady_timer tm (ioc_, reap_interval);
       co_await tm.async_wait (boost::asio::use_awaitable);
     }
 
@@ -275,11 +282,12 @@ namespace launcher
 
     t->response.start_time = chrono::steady_clock::now ();
 
-    // The client traits expect our timeouts in milliseconds.
+    // The client traits expect our timeouts in milliseconds, so convert from
+    // the per-request seconds.
     //
     http_client_traits tr (traits_);
-    tr.connect_timeout = t->request.connect_timeout * 1000;
-    tr.request_timeout = t->request.transfer_timeout * 1000;
+    tr.connect_timeout = chrono::duration_cast<chrono::milliseconds> (t->request.connect_timeout);
+    tr.request_timeout = chrono::duration_cast<chrono::milliseconds> (t->request.transfer_timeout);
     tr.follow_redirects = true;
 
     http_client c (ioc_, tr);
@@ -316,7 +324,7 @@ namespace launcher
       while (t->should_pause ())
       {
         t->set_state (download_state::paused);
-        boost::asio::steady_timer tm (ioc_, chrono::milliseconds (100));
+        boost::asio::steady_timer tm (ioc_, pause_poll_interval);
         co_await tm.async_wait (boost::asio::use_awaitable);
       }
 
@@ -356,10 +364,10 @@ namespace launcher
       {
         string m (e.what ());
 
-        // The server threw a 416 (Requested Range Not Satisfiable). This
-        // usually means our local partial file is completely mangled or we
-        // actually already downloaded the whole thing and got confused trying
-        // to resume. Nuke the file and retry the exact same URL from scratch.
+        // The server returned 416 (Range Not Satisfiable). This usually means
+        // our local partial file is completely mangled or we actually already
+        // downloaded the whole thing and got confused trying to resume. Nuke
+        // the file and retry the exact same URL from scratch.
         //
         if (m.find ("416") != string::npos && r)
         {
