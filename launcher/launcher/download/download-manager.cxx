@@ -360,16 +360,14 @@ namespace launcher
         ok = true;
         break;
       }
-      catch (const exception& e)
+      catch (const http_status_error& e)
       {
-        string m (e.what ());
-
         // The server returned 416 (Range Not Satisfiable). This usually means
         // our local partial file is completely mangled or we actually already
         // downloaded the whole thing and got confused trying to resume. Nuke
         // the file and retry the exact same URL from scratch.
         //
-        if (m.find ("416") != string::npos && r)
+        if (e.status () == http_status::range_not_satisfiable && r)
         {
           error_code ec;
           fs::remove (t->request.target, ec);
@@ -378,6 +376,33 @@ namespace launcher
           --i; // keep the index exactly where it is for the retry.
           continue;
         }
+
+        // Fall through to generic error handling.
+        //
+        string m (e.what ());
+
+        if (i == t->request.urls.size () - 1)
+        {
+          t->set_error (download_error (
+              string ("Download failed: ") + m,
+              u,
+              0));
+        }
+        else
+        {
+          if (t->request.resume && fs::exists (t->request.target))
+          {
+            error_code ec;
+            uint64_t s (fs::file_size (t->request.target, ec));
+
+            if (!ec && s > 0)
+              r = s;
+          }
+        }
+      }
+      catch (const exception& e)
+      {
+        string m (e.what ());
 
         // We've exhausted our list of fallback mirrors. Bail out.
         //
