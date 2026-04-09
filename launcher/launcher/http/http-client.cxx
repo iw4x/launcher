@@ -27,6 +27,21 @@ namespace launcher
   namespace http_beast = beast::http;
   using tcp = asio::ip::tcp;
 
+  // SOCKS5 protocol constants (RFC 1928 / RFC 1929).
+  //
+  constexpr uint8_t socks5_version       = 0x05;
+  constexpr uint8_t socks5_auth_none     = 0x00;
+  constexpr uint8_t socks5_auth_userpass = 0x02;
+  constexpr uint8_t socks5_auth_failed   = 0xFF;
+  constexpr uint8_t socks5_cmd_connect   = 0x01;
+  constexpr uint8_t socks5_atyp_domain   = 0x03;
+  constexpr uint8_t socks5_userpass_ver  = 0x01;
+  constexpr uint8_t socks5_reply_ok      = 0x00;
+
+  // Size of the buffer used when streaming download bodies.
+  //
+  constexpr size_t download_buffer_size  = 8192;
+
   namespace
   {
     struct url_parts
@@ -201,14 +216,14 @@ namespace launcher
                    const url_parts& proxy,
                    const string& dest_host,
                    const string& dest_port,
-                   uint32_t connect_timeout,
-                   uint32_t request_timeout)
+                   chrono::milliseconds connect_timeout,
+                   chrono::milliseconds request_timeout)
     {
       tcp::resolver rv (ioc);
       auto eps (co_await rv.async_resolve (
         proxy.host, proxy.port, asio::use_awaitable));
 
-      stream.expires_after (chrono::milliseconds (connect_timeout));
+      stream.expires_after (connect_timeout);
       co_await stream.async_connect (eps, asio::use_awaitable);
 
       // Ask the proxy to open a tunnel to the destination.
@@ -219,7 +234,7 @@ namespace launcher
         http_beast::verb::connect, authority, 11);
       creq.set (http_beast::field::host, authority);
 
-      stream.expires_after (chrono::milliseconds (request_timeout));
+      stream.expires_after (request_timeout);
       co_await http_beast::async_write (stream, creq, asio::use_awaitable);
 
       beast::flat_buffer buf;
@@ -244,8 +259,8 @@ namespace launcher
                     const string& proxy_url,
                     const string& dest_host,
                     const string& dest_port,
-                    uint32_t connect_timeout,
-                    uint32_t request_timeout)
+                    chrono::milliseconds connect_timeout,
+                    chrono::milliseconds request_timeout)
     {
       // Connect to the SOCKS5 proxy server.
       //
@@ -253,10 +268,10 @@ namespace launcher
       auto eps (co_await rv.async_resolve (
         proxy.host, proxy.port, asio::use_awaitable));
 
-      stream.expires_after (chrono::milliseconds (connect_timeout));
+      stream.expires_after (connect_timeout);
       co_await stream.async_connect (eps, asio::use_awaitable);
 
-      stream.expires_after (chrono::milliseconds (request_timeout));
+      stream.expires_after (request_timeout);
 
       proxy_userinfo ui (parse_proxy_userinfo (proxy_url));
       bool has_auth (!ui.user.empty ());
@@ -266,21 +281,19 @@ namespace launcher
       // | VER | NMETHODS | METHODS  |
       // | 1   | 1        | 1 to 255 |
       //
-      // Offer no-auth (0x00) and optionally username/password (0x02).
-      //
       uint8_t greeting[4];
-      greeting[0] = 0x05;                     // SOCKS version 5
+      greeting[0] = socks5_version;
 
       if (has_auth)
       {
-        greeting[1] = 0x02;                   // 2 methods
-        greeting[2] = 0x00;                   // no authentication
-        greeting[3] = 0x02;                   // username/password
+        greeting[1] = 0x02;                        // 2 methods
+        greeting[2] = socks5_auth_none;
+        greeting[3] = socks5_auth_userpass;
       }
       else
       {
-        greeting[1] = 0x01;                   // 1 method
-        greeting[2] = 0x00;                   // no authentication
+        greeting[1] = 0x01;                        // 1 method
+        greeting[2] = socks5_auth_none;
       }
 
       size_t glen (has_auth ? 4 : 3);
@@ -296,16 +309,16 @@ namespace launcher
       co_await asio::async_read (
         stream, asio::buffer (choice, 2), asio::use_awaitable);
 
-      if (choice[0] != 0x05)
+      if (choice[0] != socks5_version)
         throw runtime_error ("SOCKS5 proxy returned invalid version");
 
-      if (choice[1] == 0xFF)
+      if (choice[1] == socks5_auth_failed)
         throw runtime_error (
           "SOCKS5 proxy: no acceptable authentication method");
 
       // Username/password sub-negotiation (RFC 1929)
       //
-      if (choice[1] == 0x02)
+      if (choice[1] == socks5_auth_userpass)
       {
         if (!has_auth)
           throw runtime_error (
@@ -320,7 +333,7 @@ namespace launcher
 
         vector<uint8_t> auth;
         auth.reserve (3 + ui.user.size () + ui.pass.size ());
-        auth.push_back (0x01); // sub-negotiation version
+        auth.push_back (socks5_userpass_ver);
         auth.push_back (static_cast<uint8_t> (ui.user.size ()));
         auth.insert (auth.end (), ui.user.begin (), ui.user.end ());
         auth.push_back (static_cast<uint8_t> (ui.pass.size ()));
@@ -336,22 +349,20 @@ namespace launcher
         co_await asio::async_read (
           stream, asio::buffer (aresp, 2), asio::use_awaitable);
 
-        if (aresp[1] != 0x00)
+        if (aresp[1] != socks5_reply_ok)
           throw runtime_error ("SOCKS5 proxy authentication failed");
       }
-      else if (choice[1] != 0x00)
+      else if (choice[1] != socks5_auth_none)
       {
         throw runtime_error (
           "SOCKS5 proxy selected unsupported auth method: " +
           std::to_string (static_cast<int> (choice[1])));
       }
 
-      // CONNECT request (RFC 1928 (4))
+      // CONNECT request (RFC 1928 §4)
       //
       // | VER | CMD | RSV   | ATYP | DST.ADDR | DST.PORT |
       // | 1   | 1   | X'00' | 1    | Variable | 2        |
-      //
-      // ATYP = 0x03 domain name (length-prefixed).
       //
       if (dest_host.size () > 255)
         throw runtime_error ("SOCKS5: destination hostname too long");
@@ -362,10 +373,10 @@ namespace launcher
 
       vector<uint8_t> creq;
       creq.reserve (7 + dest_host.size ());
-      creq.push_back (0x05);                                   // VER
-      creq.push_back (0x01);                                   // CMD: CONNECT
+      creq.push_back (socks5_version);
+      creq.push_back (socks5_cmd_connect);
       creq.push_back (0x00);                                   // RSV
-      creq.push_back (0x03);                                   // ATYP: domain name
+      creq.push_back (socks5_atyp_domain);
       creq.push_back (static_cast<uint8_t> (dest_host.size ()));
       creq.insert (creq.end (), dest_host.begin (), dest_host.end ());
       creq.push_back (port_hi);
@@ -386,10 +397,10 @@ namespace launcher
       co_await asio::async_read (
         stream, asio::buffer (hdr, 4), asio::use_awaitable);
 
-      if (hdr[0] != 0x05)
+      if (hdr[0] != socks5_version)
         throw runtime_error ("SOCKS5 proxy returned invalid version in reply");
 
-      if (hdr[1] != 0x00)
+      if (hdr[1] != socks5_reply_ok)
       {
         static const char* const errs[] = {
           "succeeded",
@@ -622,7 +633,7 @@ namespace launcher
       auto as (co_await rv.async_resolve (
         p.host, p.port, asio::use_awaitable));
 
-      l.expires_after (chrono::milliseconds (t.connect_timeout));
+      l.expires_after (t.connect_timeout);
       co_await l.async_connect (as, asio::use_awaitable);
     }
 
@@ -646,7 +657,7 @@ namespace launcher
       br.prepare_payload ();
     }
 
-    l.expires_after (chrono::milliseconds (t.request_timeout));
+    l.expires_after (t.request_timeout);
 
     // Dispatch the request.
     //
@@ -713,7 +724,7 @@ namespace launcher
         auto as (co_await rv.async_resolve (
           pp.host, pp.port, asio::use_awaitable));
 
-        s.expires_after (chrono::milliseconds (t.connect_timeout));
+        s.expires_after (t.connect_timeout);
         co_await s.async_connect (as, asio::use_awaitable);
 
         use_absolute_target = true;
@@ -725,7 +736,7 @@ namespace launcher
       auto as (co_await rv.async_resolve (
         p.host, p.port, asio::use_awaitable));
 
-      s.expires_after (chrono::milliseconds (t.connect_timeout));
+      s.expires_after (t.connect_timeout);
       co_await s.async_connect (as, asio::use_awaitable);
     }
 
@@ -743,7 +754,7 @@ namespace launcher
       br.prepare_payload ();
     }
 
-    s.expires_after (chrono::milliseconds (t.request_timeout));
+    s.expires_after (t.request_timeout);
 
     // Send over the wire.
     //
@@ -844,7 +855,7 @@ namespace launcher
       for (const auto& h : rq.headers)
         br.set (h.name, h.value);
 
-      l.expires_after (milliseconds (t.request_timeout));
+      l.expires_after (t.request_timeout);
       co_await http_beast::async_write (s, br, asio::use_awaitable);
 
       beast::flat_buffer b;
@@ -877,7 +888,7 @@ namespace launcher
       if (ps.content_length ())
         tot = *ps.content_length () + off;
 
-      char db[8192];
+      char db[download_buffer_size];
       ps.get ().body ().data = db;
       ps.get ().body ().size = sizeof (db);
 
@@ -888,7 +899,7 @@ namespace launcher
       //
       while (!ps.is_done ())
       {
-        l.expires_after (milliseconds (t.request_timeout));
+        l.expires_after (t.request_timeout);
 
         size_t n (
           co_await http_beast::async_read_some (s, b, ps, asio::use_awaitable));
@@ -966,7 +977,7 @@ namespace launcher
         auto as (co_await rv.async_resolve (
           p.host, p.port, asio::use_awaitable));
 
-        l.expires_after (milliseconds (t.connect_timeout));
+        l.expires_after (t.connect_timeout);
         co_await l.async_connect (as, asio::use_awaitable);
       }
 
@@ -1001,7 +1012,7 @@ namespace launcher
           auto as (co_await rv.async_resolve (
             pp.host, pp.port, asio::use_awaitable));
 
-          s.expires_after (milliseconds (t.connect_timeout));
+          s.expires_after (t.connect_timeout);
           co_await s.async_connect (as, asio::use_awaitable);
 
           use_absolute_target = true;
@@ -1013,7 +1024,7 @@ namespace launcher
         auto as (co_await rv.async_resolve (
           p.host, p.port, asio::use_awaitable));
 
-        s.expires_after (milliseconds (t.connect_timeout));
+        s.expires_after (t.connect_timeout);
         co_await s.async_connect (as, asio::use_awaitable);
       }
 

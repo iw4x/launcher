@@ -24,8 +24,8 @@ namespace launcher
 
   struct http_client_traits
   {
-    std::uint32_t connect_timeout = 30000;
-    std::uint32_t request_timeout = 60000;
+    std::chrono::milliseconds connect_timeout {30000};
+    std::chrono::milliseconds request_timeout {60000};
     std::uint8_t max_redirects    = 10;
     bool verify_ssl               = false;
     std::string ssl_cert_file;
