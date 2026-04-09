@@ -14,6 +14,7 @@
 #  include <unistd.h>
 #endif
 
+#include <boost/process.hpp>
 #include <miniz.h>
 
 #include <launcher/launcher-log.hxx>
@@ -423,9 +424,6 @@ namespace launcher
     string fn (ap.filename ().string ());
     bool t (fn.size () > 7 && fn.substr (fn.size () - 7) == ".tar.xz");
 
-    // @@: Again, we have a similar logic in manifest, we should make it
-    // generic.
-    //
     if (e == ".zip")
     {
       launcher::log::trace_l3 (categories::update{}, "extracting as .zip format");
@@ -464,11 +462,16 @@ namespace launcher
     }
     else if (t)
     {
-      launcher::log::trace_l3 (categories::update{}, "extracting as .tar.xz format via system call");
-      string c ("tar -xJf \"" + ap.string () + "\" -C \"" +
-                d.string () + "\"");
+      launcher::log::trace_l3 (categories::update{}, "extracting as .tar.xz format");
 
-      int r (system (c.c_str ()));
+      boost::process::child c (
+        boost::process::search_path ("tar"),
+        "-xJf", ap.string (),
+        "-C", d.string ());
+
+      c.wait ();
+
+      int r (c.exit_code ());
       if (r != 0)
       {
         launcher::log::error (categories::update{}, "tar command failed with exit code {}", r);
