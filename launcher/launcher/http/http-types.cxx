@@ -228,4 +228,14 @@ namespace launcher
   {
     return x.fields == y.fields;
   }
+
+  // http_status_error
+  //
+  http_status_error::
+  http_status_error (http_status s, const string& context)
+    : runtime_error (context + ": " + to_string (s) + " (" +
+                     std::to_string (static_cast<uint16_t> (s)) + ")"),
+      status_ (s)
+  {
+  }
 }

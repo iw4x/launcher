@@ -5,7 +5,9 @@
 #include <cstdint>
 #include <optional>
 #include <ostream>
+#include <stdexcept>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -235,4 +237,22 @@ namespace launcher
 
   std::ostream&
   operator << (std::ostream& o, const http_version& v);
+
+  // HTTP error with a machine-readable status code.
+  //
+  // Thrown when a request completes but the server returns an unacceptable
+  // status (e.g. 416 Range Not Satisfiable during a download). Callers can
+  // inspect the status without parsing an exception message string.
+  //
+  class http_status_error : public std::runtime_error
+  {
+  public:
+    http_status_error (http_status s, const std::string& context);
+
+    http_status
+    status () const noexcept { return status_; }
+
+  private:
+    http_status status_;
+  };
 }

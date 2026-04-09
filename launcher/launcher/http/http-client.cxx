@@ -882,8 +882,8 @@ namespace launcher
       }
 
       if (st != 200 && st != 206)
-        throw runtime_error (
-          "download failed with status: " + std::to_string (st));
+        throw http_status_error (
+          static_cast<http_status> (st), "download failed");
 
       if (ps.content_length ())
         tot = *ps.content_length () + off;
