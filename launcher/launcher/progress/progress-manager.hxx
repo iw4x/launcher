@@ -7,6 +7,7 @@
 #include <boost/asio.hpp>
 #include <boost/asio/experimental/parallel_group.hpp>
 
+#include <chrono>
 #include <memory>
 #include <vector>
 #include <string>
@@ -72,8 +73,8 @@ namespace launcher
   class progress_manager
   {
   public:
-    static constexpr int update_interval_ms = 100;
-    static constexpr int render_interval_ms = 50;
+    static constexpr std::chrono::milliseconds update_interval {100};
+    static constexpr std::chrono::milliseconds render_interval {50};
 
     explicit
     progress_manager (asio::io_context& ioc);

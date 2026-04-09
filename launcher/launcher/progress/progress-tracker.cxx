@@ -165,7 +165,9 @@ namespace launcher
 
     std::uint64_t dt (t - t0);
 
-    if (t0 != 0 && dt < min_update_interval_ms * 1000)
+    if (t0 != 0 && dt < static_cast<std::uint64_t> (
+          std::chrono::duration_cast<std::chrono::microseconds> (
+            min_update_interval).count ()))
       return;
 
     std::uint64_t n0 (last_bytes_.load (std::memory_order_relaxed));

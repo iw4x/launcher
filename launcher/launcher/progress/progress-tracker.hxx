@@ -2,11 +2,12 @@
 
 #include <launcher/progress/progress-types.hxx>
 
-#include <string>
 #include <array>
 #include <atomic>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <string>
 
 namespace launcher
 {
@@ -14,7 +15,7 @@ namespace launcher
   {
   public:
     static constexpr float ewma_alpha = 0.2f;
-    static constexpr int min_update_interval_ms = 500;
+    static constexpr std::chrono::milliseconds min_update_interval {500};
     static constexpr std::size_t sample_window_size = 10;
 
     // Formatting utilities
