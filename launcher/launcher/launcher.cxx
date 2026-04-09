@@ -51,6 +51,20 @@ namespace launcher
 {
   namespace
   {
+    // GitHub repository coordinates and CDN base URL for our distribution
+    // infrastructure.
+    //
+    constexpr const char* github_org          = "iw4x";
+    constexpr const char* client_repo         = "iw4x-client";
+    constexpr const char* rawfiles_repo       = "iw4x-rawfiles";
+    constexpr const char* steam_helper_repo   = "launcher-steam";
+    constexpr const char* cdn_manifest_url    = "https://cdn.iw4x.io/update.json";
+    constexpr const char* cdn_base_url        = "https://cdn.iw4x.io/";
+
+    // Steam application ID for the game (Call of Duty: Modern Warfare 2).
+    //
+    constexpr std::uint32_t steam_app_id = 10190;
+
     constexpr auto
     info ([] (auto&&... args)
     {
@@ -243,10 +257,6 @@ namespace launcher
     pc.start ();
 
     const auto& i (uc->last_update_info ());
-
-   //info ("launcher update available: {} (current: {})",
-   //      i.version,
-   //      uc->current_version ());
 
     auto r (co_await uc->install_update (i));
 
@@ -580,7 +590,7 @@ namespace launcher
   {
     info ("synchronizing client component...");
 
-    auto rel (co_await gh.fetch_latest_release ("iw4x", "iw4x-client", pre));
+    auto rel (co_await gh.fetch_latest_release (github_org, client_repo, pre));
     bool out (cc.outdated (component_type::client, rel.tag_name));
 
     if (!out)
@@ -638,7 +648,7 @@ namespace launcher
   {
     info ("synchronizing rawfiles component...");
 
-    auto rel (co_await gh.fetch_latest_release ("iw4x", "iw4x-rawfiles", pre));
+    auto rel (co_await gh.fetch_latest_release (github_org, rawfiles_repo, pre));
     bool out (cc.outdated (component_type::rawfiles, rel.tag_name));
 
     if (!out)
@@ -713,7 +723,7 @@ namespace launcher
   {
     info ("synchronizing dlc component...");
 
-    auto ms (co_await hc.get ("https://cdn.iw4x.io/update.json"));
+    auto ms (co_await hc.get (cdn_manifest_url));
     manifest dlc (ms, manifest_format::dlc);
 
     manifest m;
@@ -721,7 +731,7 @@ namespace launcher
     {
       manifest_archive x;
       x.name = f.path;
-      x.url = "https://cdn.iw4x.io/" + f.path;
+      x.url = string (cdn_base_url) + f.path;
       x.size = f.size;
       x.hash = f.hash;
 
@@ -767,7 +777,7 @@ namespace launcher
   {
     info ("synchronizing linux steam helper component...");
 
-    auto rel (co_await gh.fetch_latest_release ("iw4x", "launcher-steam", pre));
+    auto rel (co_await gh.fetch_latest_release (github_org, steam_helper_repo, pre));
     bool out (cc.outdated (component_type::helper, rel.tag_name));
 
     if (!out)
@@ -855,7 +865,7 @@ namespace launcher
 
     info ("launching {} via proton", to_utf8 (bin));
 
-    bool ok (co_await proton.complete_launch (steam_root, bin, 10190, args));
+    bool ok (co_await proton.complete_launch (steam_root, bin, steam_app_id, args));
 
     if (!ok)
     {
