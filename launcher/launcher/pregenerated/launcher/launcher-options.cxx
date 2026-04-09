@@ -774,6 +774,7 @@ namespace launcher
     no_self_update_ (),
     self_update_only_ (),
     skip_launch_ (),
+    skip_remote_ (),
     proxy_ (),
     proxy_specified_ (false)
   {
@@ -798,6 +799,7 @@ namespace launcher
     no_self_update_ (),
     self_update_only_ (),
     skip_launch_ (),
+    skip_remote_ (),
     proxy_ (),
     proxy_specified_ (false)
   {
@@ -825,6 +827,7 @@ namespace launcher
     no_self_update_ (),
     self_update_only_ (),
     skip_launch_ (),
+    skip_remote_ (),
     proxy_ (),
     proxy_specified_ (false)
   {
@@ -852,6 +855,7 @@ namespace launcher
     no_self_update_ (),
     self_update_only_ (),
     skip_launch_ (),
+    skip_remote_ (),
     proxy_ (),
     proxy_specified_ (false)
   {
@@ -881,6 +885,7 @@ namespace launcher
     no_self_update_ (),
     self_update_only_ (),
     skip_launch_ (),
+    skip_remote_ (),
     proxy_ (),
     proxy_specified_ (false)
   {
@@ -906,6 +911,7 @@ namespace launcher
     no_self_update_ (),
     self_update_only_ (),
     skip_launch_ (),
+    skip_remote_ (),
     proxy_ (),
     proxy_specified_ (false)
   {
@@ -939,6 +945,8 @@ namespace launcher
     os << "--self-update-only Only check for and apply launcher updates, then exit." << ::std::endl;
 
     os << "--skip-launch      Skip launching the game after updating/installing." << ::std::endl;
+
+    os << "--skip-remote      Skip all remote checks and file reconciliation." << ::std::endl;
 
     os << "--proxy <url>      Route all HTTP/HTTPS traffic through the specified proxy." << ::std::endl;
 
@@ -983,6 +991,8 @@ namespace launcher
       &::launcher::cli::thunk< options, &options::self_update_only_ >;
       _cli_options_map_["--skip-launch"] =
       &::launcher::cli::thunk< options, &options::skip_launch_ >;
+      _cli_options_map_["--skip-remote"] =
+      &::launcher::cli::thunk< options, &options::skip_remote_ >;
       _cli_options_map_["--proxy"] =
       &::launcher::cli::thunk< options, std::string, &options::proxy_,
         &options::proxy_specified_ >;

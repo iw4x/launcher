@@ -359,6 +359,12 @@ namespace launcher
     return this->skip_launch_;
   }
 
+  inline const bool& options::
+  skip_remote () const
+  {
+    return this->skip_remote_;
+  }
+
   inline const std::string& options::
   proxy () const
   {
