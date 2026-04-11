@@ -138,6 +138,42 @@ namespace launcher
              p.scheme == "socks4a" || p.scheme == "socks4";
     }
 
+    // Return true if the proxy scheme is one we can handle (plain HTTP
+    // or one of the SOCKS variants).
+    //
+    bool
+    is_supported_proxy_scheme (const string& s)
+    {
+      return s == "http"    ||
+             s == "socks5"  || s == "socks5h" ||
+             s == "socks4a" || s == "socks4";
+    }
+
+    // Validate a proxy URL and throw a descriptive error when the scheme
+    // is unsupported or misspelled. Called early, before any connection
+    // attempt, so the user sees a clear message instead of a cryptic
+    // 10053/connection-aborted at the protocol level.
+    //
+    void
+    validate_proxy_url (const string& proxy_url)
+    {
+      if (proxy_url.empty ())
+        return;
+
+      url_parts p (parse_url (proxy_url));
+
+      if (p.scheme == "https")
+        throw runtime_error (
+          "HTTPS proxy connections are not supported (yet): " + proxy_url +
+          "\n  hint: use http:// for an HTTP proxy, or socks5:// for SOCKS5");
+
+      if (!is_supported_proxy_scheme (p.scheme))
+        throw runtime_error (
+          "unsupported proxy scheme '" + p.scheme + "' in: " + proxy_url +
+          "\n  hint: supported schemes are http://, socks5://, socks5h://, "
+          "socks4://, socks4a://");
+    }
+
     // Parse optional userinfo (user:pass) from the proxy URL.
     //
     // The standard form is socks5://user:pass@host:port.
@@ -538,6 +574,7 @@ namespace launcher
   asio::awaitable<http_response> http_client::
   request (const http_request& rq)
   {
+    validate_proxy_url (session_.traits ().proxy_url);
     co_return co_await request_impl (rq, 0);
   }
 
@@ -799,6 +836,7 @@ namespace launcher
             optional<uint64_t> rs,
             uint64_t rl)
   {
+    validate_proxy_url (session_.traits ().proxy_url);
     co_return co_await download_impl (u, f, cb, rs, rl, 0);
   }
 
