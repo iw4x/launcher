@@ -681,6 +681,14 @@ namespace launcher
     if (!bres.body ().empty ())
       rs.body = bres.body ();
 
+    // Gracefully shut down the TCP connection so the peer sees a clean
+    // close rather than a RST (which triggers WSAECONNABORTED / 10053
+    // on Windows).
+    //
+    beast::error_code ec;
+    beast::get_lowest_layer (s).socket ().shutdown (
+      tcp::socket::shutdown_both, ec);
+
     co_return rs;
   }
 
@@ -901,8 +909,14 @@ namespace launcher
       {
         l.expires_after (t.request_timeout);
 
-        size_t n (
-          co_await http_beast::async_read_some (s, b, ps, asio::use_awaitable));
+        co_await http_beast::async_read_some (s, b, ps, asio::use_awaitable);
+
+        // The actual body bytes written into db is the buffer space
+        // consumed by the parser, not the stream-level byte count
+        // returned by async_read_some (which includes HTTP framing
+        // overhead such as chunk headers for chunked responses).
+        //
+        size_t n (download_buffer_size - ps.get ().body ().size);
 
         if (n > 0)
         {
