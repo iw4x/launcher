@@ -114,6 +114,38 @@ namespace launcher
                    reinterpret_cast<const char8_t*> (s.data () + s.size ()));
     }
 
+    // On Windows, system error messages (error_code::message(),
+    // system_error::what()) are encoded in the ANSI codepage (e.g.
+    // CP1251 on Russian installs). Convert to UTF-8 so our log output
+    // isn't garbled. On other platforms this is a no-op pass-through.
+    //
+    string
+    to_utf8_system_message ([[maybe_unused]] const string& s)
+    {
+#ifdef _WIN32
+      int n (static_cast<int> (s.size ()));
+      int wn (MultiByteToWideChar (CP_ACP, 0, s.data (), n, nullptr, 0));
+
+      if (wn > 0)
+      {
+        wstring w (static_cast<size_t> (wn), L'\0');
+        MultiByteToWideChar (CP_ACP, 0, s.data (), n, w.data (), wn);
+
+        int un (WideCharToMultiByte (
+          CP_UTF8, 0, w.data (), wn, nullptr, 0, nullptr, nullptr));
+
+        if (un > 0)
+        {
+          string r (static_cast<size_t> (un), '\0');
+          WideCharToMultiByte (
+            CP_UTF8, 0, w.data (), wn, r.data (), un, nullptr, nullptr);
+          return r;
+        }
+      }
+#endif
+      return s;
+    }
+
     void
     reanchor_cwd ()
     {
@@ -1070,7 +1102,8 @@ try
         remove_all (cache_dir, ec);
 
         if (ec)
-          warning ("failed to remove cache directory: {}", ec.message ());
+          warning ("failed to remove cache directory: {}",
+                   to_utf8_system_message (ec.message ()));
 
         // Recreate it since the database was inside.
         //
@@ -1176,42 +1209,8 @@ catch (const cli::exception& ex)
 }
 catch (const exception& ex)
 {
-#ifdef _WIN32
-  // Windows system_error gives us ANSI (like CP1251 on Russian installs)
-  // instead of UTF-8. We have to bounce it through UTF-16 to get valid
-  // UTF-8 for our diagnostics, otherwise it ends up garbled. If the Win32
-  // conversion machinery fails us here for some reason, we just fall back
-  // to the raw string and hope for the best.
-  //
-  string m;
-  {
-    const char* r (e.what ());
-    int n (static_cast<int> (strlen (r)));
-    int wn (MultiByteToWideChar (CP_ACP, 0, r, n, nullptr, 0));
-
-    if (wn > 0)
-    {
-      wstring w (static_cast<size_t> (wn), L'\0');
-      MultiByteToWideChar (CP_ACP, 0, r, n, w.data (), wn);
-
-      int un (WideCharToMultiByte (
-        CP_UTF8, 0, w.data (), wn, nullptr, 0, nullptr, nullptr));
-
-      if (un > 0)
-      {
-        m.resize (static_cast<size_t> (un));
-        WideCharToMultiByte (
-          CP_UTF8, 0, w.data (), wn, m.data (), un, nullptr, nullptr);
-      }
-    }
-
-    if (m.empty ())
-      m.assign (r);
-  }
-  error ("exception caught in main: {}", m);
-#else
-  error ("exception caught in main: {}", ex.what ());
-#endif
+  error ("exception caught in main: {}",
+         to_utf8_system_message (ex.what ()));
   return 1;
 }
 catch (...)
