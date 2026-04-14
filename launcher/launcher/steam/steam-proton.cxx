@@ -141,8 +141,8 @@ namespace launcher
 
   proton_manager::
   proton_manager (asio::io_context& ioc, bool force_steam_runtime)
-    : ioc_ (ioc),
-      force_steam_runtime_(force_steam_runtime)
+    : force_steam_runtime_(force_steam_runtime),
+      ioc_ (ioc)
   {
     launcher::log::trace_l2 (categories::steam{}, "initialized proton_manager");
   }
