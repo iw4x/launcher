@@ -505,6 +505,9 @@ namespace launcher
     game_args_specified () const;
 
     const bool&
+    force_steam_runtime () const;
+
+    const bool&
     no_self_update () const;
 
     const bool&
@@ -551,6 +554,7 @@ namespace launcher
     bool game_exe_specified_;
     std::vector<std::string> game_args_;
     bool game_args_specified_;
+    bool force_steam_runtime_;
     bool no_self_update_;
     bool self_update_only_;
     bool skip_launch_;
