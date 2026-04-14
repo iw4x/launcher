@@ -85,7 +85,7 @@ namespace launcher
     // Constructor.
     //
     explicit
-    proton_manager (asio::io_context& ioc);
+    proton_manager (asio::io_context& ioc, bool force_steam_runtime = false);
 
     proton_manager (const proton_manager&) = delete;
     proton_manager& operator= (const proton_manager&) = delete;
@@ -154,6 +154,10 @@ namespace launcher
     //
     static bool
     version_compare (const proton_version& a, const proton_version& b);
+
+    // Force Steam runtime container
+    //
+    bool force_steam_runtime_;
 
     // IO context reference.
     //

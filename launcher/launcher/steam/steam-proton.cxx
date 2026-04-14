@@ -140,8 +140,9 @@ namespace launcher
   //
 
   proton_manager::
-  proton_manager (asio::io_context& ioc)
-    : ioc_ (ioc)
+  proton_manager (asio::io_context& ioc, bool force_steam_runtime)
+    : ioc_ (ioc),
+      force_steam_runtime_(force_steam_runtime)
   {
     launcher::log::trace_l2 (categories::steam{}, "initialized proton_manager");
   }
@@ -516,9 +517,9 @@ namespace launcher
       string b;           // Binary to run.
       vector<string> cs;  // Command strings.
 
-      if (is_steam_deck ())
+      if (is_steam_deck () || force_steam_runtime_)
       {
-        launcher::log::info (categories::steam{}, "setting up sniper runtime container for steam deck launch");
+        launcher::log::info (categories::steam{}, "setting up steam sniper runtime container");
 
         // On Deck we have to wrap everything in the sniper runtime container.
         // It's a nesting doll situation:

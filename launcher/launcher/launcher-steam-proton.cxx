@@ -15,9 +15,9 @@ namespace launcher
   namespace bp = boost::process;
 
   proton_coordinator::
-  proton_coordinator (asio::io_context& c)
+  proton_coordinator (asio::io_context& c, bool fsr)
     : ioc_ (c),
-      manager_ (c),
+      manager_ (c, fsr),
       verbose_ (false),
       logging_ (false)
   {
