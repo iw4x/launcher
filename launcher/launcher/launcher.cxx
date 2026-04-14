@@ -938,7 +938,8 @@ namespace launcher
   execute (asio::io_context& /* io */,
             const path& root,
             const string& exe,
-            const vector<string>& args)
+            const vector<string>& args,
+            bool /* force_steam_runtime */)
   {
     if (exe.empty ())
       throw runtime_error ("game binary unspecified");
