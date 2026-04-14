@@ -342,6 +342,12 @@ namespace launcher
   }
 
   inline const bool& options::
+  force_steam_runtime () const
+  {
+    return this->force_steam_runtime_;
+  }
+
+  inline const bool& options::
   no_self_update () const
   {
     return this->no_self_update_;

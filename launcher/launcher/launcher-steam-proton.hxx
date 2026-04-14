@@ -26,7 +26,7 @@ namespace launcher
     // Constructors.
     //
     explicit
-    proton_coordinator (asio::io_context& ioc);
+    proton_coordinator (asio::io_context& ioc, bool force_steam_runtime);
 
     proton_coordinator (const proton_coordinator&) = delete;
     proton_coordinator& operator= (const proton_coordinator&) = delete;

@@ -771,6 +771,7 @@ namespace launcher
     game_exe_specified_ (false),
     game_args_ (),
     game_args_specified_ (false),
+    force_steam_runtime_ (),
     no_self_update_ (),
     self_update_only_ (),
     skip_launch_ (),
@@ -796,6 +797,7 @@ namespace launcher
     game_exe_specified_ (false),
     game_args_ (),
     game_args_specified_ (false),
+    force_steam_runtime_ (),
     no_self_update_ (),
     self_update_only_ (),
     skip_launch_ (),
@@ -824,6 +826,7 @@ namespace launcher
     game_exe_specified_ (false),
     game_args_ (),
     game_args_specified_ (false),
+    force_steam_runtime_ (),
     no_self_update_ (),
     self_update_only_ (),
     skip_launch_ (),
@@ -852,6 +855,7 @@ namespace launcher
     game_exe_specified_ (false),
     game_args_ (),
     game_args_specified_ (false),
+    force_steam_runtime_ (),
     no_self_update_ (),
     self_update_only_ (),
     skip_launch_ (),
@@ -882,6 +886,7 @@ namespace launcher
     game_exe_specified_ (false),
     game_args_ (),
     game_args_specified_ (false),
+    force_steam_runtime_ (),
     no_self_update_ (),
     self_update_only_ (),
     skip_launch_ (),
@@ -908,6 +913,7 @@ namespace launcher
     game_exe_specified_ (false),
     game_args_ (),
     game_args_specified_ (false),
+    force_steam_runtime_ (),
     no_self_update_ (),
     self_update_only_ (),
     skip_launch_ (),
@@ -926,29 +932,32 @@ namespace launcher
     if (p == ::launcher::cli::usage_para::text)
       os << ::std::endl;
 
-    os << "--help             Show this help message and exit." << ::std::endl;
+    os << "--help                Show this help message and exit." << ::std::endl;
 
-    os << "--version          Show version information and exit." << ::std::endl;
+    os << "--version             Show version information and exit." << ::std::endl;
 
-    os << "--build2-metadata  Print the build2 metadata and exit." << ::std::endl;
+    os << "--build2-metadata     Print the build2 metadata and exit." << ::std::endl;
 
-    os << "--prerelease       Opt-in to pre-release (beta) updates." << ::std::endl;
+    os << "--prerelease          Opt-in to pre-release (beta) updates." << ::std::endl;
 
-    os << "--jobs|-j <num>    The number of parallel download jobs to run." << ::std::endl;
+    os << "--jobs|-j <num>       The number of parallel download jobs to run." << ::std::endl;
 
-    os << "--game-exe <file>  The game executable to launch." << ::std::endl;
+    os << "--game-exe <file>     The game executable to launch." << ::std::endl;
 
-    os << "--game-args <arg>  Additional arguments to pass to the game executable." << ::std::endl;
+    os << "--game-args <arg>     Additional arguments to pass to the game executable." << ::std::endl;
 
-    os << "--no-self-update   Skip the automatic launcher self-update check." << ::std::endl;
+    os << "--force-steam-runtime Use the Steam Linux Runtime container instead of the" << ::std::endl
+       << "                      standalone Proton." << ::std::endl;
 
-    os << "--self-update-only Only check for and apply launcher updates, then exit." << ::std::endl;
+    os << "--no-self-update      Skip the automatic launcher self-update check." << ::std::endl;
 
-    os << "--skip-launch      Skip launching the game after updating/installing." << ::std::endl;
+    os << "--self-update-only    Only check for and apply launcher updates, then exit." << ::std::endl;
 
-    os << "--skip-remote      Skip all remote checks and file reconciliation." << ::std::endl;
+    os << "--skip-launch         Skip launching the game after updating/installing." << ::std::endl;
 
-    os << "--proxy <url>      Route all HTTP/HTTPS traffic through the specified proxy." << ::std::endl;
+    os << "--skip-remote         Skip all remote checks and file reconciliation." << ::std::endl;
+
+    os << "--proxy <url>         Route all HTTP/HTTPS traffic through the specified proxy." << ::std::endl;
 
     p = ::launcher::cli::usage_para::option;
 
@@ -985,6 +994,8 @@ namespace launcher
       _cli_options_map_["--game-args"] =
       &::launcher::cli::thunk< options, std::vector<std::string>, &options::game_args_,
         &options::game_args_specified_ >;
+      _cli_options_map_["--force-steam-runtime"] =
+      &::launcher::cli::thunk< options, &options::force_steam_runtime_ >;
       _cli_options_map_["--no-self-update"] =
       &::launcher::cli::thunk< options, &options::no_self_update_ >;
       _cli_options_map_["--self-update-only"] =

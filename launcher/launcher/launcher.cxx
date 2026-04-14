@@ -870,7 +870,8 @@ namespace launcher
   execute (asio::io_context& io,
             const path& root,
             const string& exe,
-            const vector<string>& args)
+            const vector<string>& args,
+            const bool force_steam_runtime)
   {
     if (exe.empty ())
       throw runtime_error ("game binary unspecified");
@@ -885,7 +886,7 @@ namespace launcher
                           "failed to canonicalize game binary path: " +
                             to_utf8 (bin));
 
-    proton_coordinator proton (io);
+    proton_coordinator proton (io, force_steam_runtime);
 
     if (!exists (root / "steam.exe"))
       throw runtime_error ("runtime dependency missing: steam.exe");
@@ -1188,7 +1189,12 @@ try
     io,
     [&io, &root, &opt] () -> asio::awaitable<void>
   {
-    co_await execute (io, root, opt.game_exe (), opt.game_args ());
+    co_await execute (
+        io,
+        root,
+        opt.game_exe (),
+        opt.game_args (),
+        opt.force_steam_runtime ());
 
   } (), [&io, &exec_ex] (exception_ptr ep) { exec_ex = ep; io.stop (); });
 

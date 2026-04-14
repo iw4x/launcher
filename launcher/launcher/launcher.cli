@@ -50,6 +50,11 @@ namespace launcher
        multiple times."
     };
 
+    bool --force-steam-runtime
+    {
+      "Use the Steam Linux Runtime container instead of the standalone Proton."
+    };
+
     bool --no-self-update
     {
       "Skip the automatic launcher self-update check. Use this if you want to
