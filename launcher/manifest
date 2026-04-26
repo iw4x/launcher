@@ -96,7 +96,7 @@ bpkg.bindist.fedora:--fedora-buildflags=prepend
 
 bpkg.create:config.bin.lib=static
 bpkg.create:config.cc.poptions=[null]
-bpkg.create:config.cc.coptions=[null]
+bpkg.create:config.cc.coptions="-Wformat"
 bpkg.create:config.cc.loptions=[null]
 \
 
@@ -113,6 +113,20 @@ bpkg.bindist.archive:--recursive=auto
 bpkg.create:config.bin.lib=static
 
 b.create:config.cc.coptions="-Wall -O3"
+\
+
+bindist-freebsd-builds: bindist
+bindist-freebsd-build-include: freebsd*-**
+bindist-freebsd-build-exclude: **
+bindist-freebsd-build-config:
+\
++bpkg.bindist.archive:
++bbot.bindist.upload:
+
+bpkg.bindist.archive:--recursive=auto
+
+bpkg.create:config.bin.lib=static
+bpkg.create:config.cc.poptions+="-D_LIBCPP_ENABLE_CXX26_REMOVED_CODECVT"
 \
 
 bindist-windows-builds: bindist
