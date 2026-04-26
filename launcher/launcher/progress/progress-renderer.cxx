@@ -116,6 +116,9 @@ namespace launcher
   {
     if (running ())
       stop ();
+
+    if (ui_thread_.joinable ())
+      ui_thread_.join ();
   }
 
   void progress_renderer::
@@ -124,13 +127,21 @@ namespace launcher
     if (running_.exchange (true, std::memory_order_relaxed))
       return;
 
-    component_ = create_component ();
-
-    ui_thread_ = std::jthread ([this]
+    try
     {
-      screen_.Loop (component_);
+      component_ = create_component ();
+
+      ui_thread_ = std::thread ([this]
+      {
+        screen_.Loop (component_);
+        running_.store (false, std::memory_order_relaxed);
+      });
+    }
+    catch (...)
+    {
       running_.store (false, std::memory_order_relaxed);
-    });
+      throw;
+    }
   }
 
   void progress_renderer::
@@ -140,6 +151,9 @@ namespace launcher
       return;
 
     screen_.Exit ();
+
+    if (ui_thread_.joinable ())
+      ui_thread_.join ();
   }
 
   void progress_renderer::

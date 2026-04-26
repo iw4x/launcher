@@ -94,6 +94,6 @@ namespace launcher
     ftxui::Component component_;
 
     std::atomic<bool> running_ {false};
-    std::jthread ui_thread_;
+    std::thread ui_thread_;
   };
 }
