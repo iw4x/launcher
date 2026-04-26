@@ -9,7 +9,6 @@
 #include <filesystem>
 #include <iostream>
 #include <memory>
-#include <ranges>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -40,8 +39,6 @@
 
 namespace process = boost::process;
 namespace asio = boost::asio;
-namespace views = std::views;
-namespace ranges = std::ranges;
 
 using namespace std;
 using namespace std::filesystem;
@@ -369,8 +366,11 @@ namespace launcher
     });
 
     vector<dl_info> ds;
-    for (auto&& x : pl | views::filter (is_dl) | views::transform (to_dl))
-      ds.push_back (std::move (x));
+    for (const auto& x : pl)
+    {
+      if (is_dl (x))
+        ds.push_back (to_dl (x));
+    }
 
     if (ds.empty ())
       co_return;
@@ -402,16 +402,17 @@ namespace launcher
       return !d.done && d.retries < 3;
     });
 
-    bool hp (ranges::any_of (ds, is_pd));
+    bool hp (std::any_of (ds.begin (), ds.end (), is_pd));
 
     while (hp)
     {
       vector<active_task> ts;
 
-      auto pds (ds | views::filter (is_pd));
-
-      for (auto& d : pds)
+      for (auto& d : ds)
       {
+        if (!is_pd (d))
+          continue;
+
         download_request r;
         r.urls.push_back (d.url);
         r.target = d.tmp;
@@ -495,7 +496,7 @@ namespace launcher
 
       co_await pc.stop ();
 
-      hp = ranges::any_of (ds, is_pd);
+      hp = std::any_of (ds.begin (), ds.end (), is_pd);
     }
 
     auto is_f ([] (const auto& d)
@@ -503,7 +504,7 @@ namespace launcher
       return !d.done;
     });
 
-    ptrdiff_t fc (ranges::count_if (ds, is_f));
+    ptrdiff_t fc (std::count_if (ds.begin (), ds.end (), is_f));
 
     if (fc > 0)
       throw runtime_error (std::to_string (fc) +
@@ -595,8 +596,8 @@ namespace launcher
           });
 
           vector<path> efs;
-          for (auto&& x : i->second->files | views::transform (resolve_p))
-            efs.push_back (std::move (x));
+          for (const auto& x : i->second->files)
+            efs.push_back (resolve_p (x));
 
           cc.track (efs, d.comp, d.ver);
           remove (d.dst, e);
@@ -628,8 +629,8 @@ namespace launcher
     if (!out)
     {
       auto s (cc.audit (component_type::client));
-      bool ok (ranges::all_of (s | views::values, [] (auto st) {
-        return st == file_state::valid; }));
+      bool ok (std::all_of (s.begin (), s.end (), [] (const auto& p) {
+        return p.second == file_state::valid; }));
 
       if (ok)
       {
@@ -644,11 +645,13 @@ namespace launcher
     manifest m (ms);
     auto p (cc.plan (m, component_type::client, rel.tag_name));
 
-    for (auto& i : p | views::filter ([] (const auto& x) {
-      return x.action == reconcile_action::download && x.url.empty (); }))
+    for (auto& i : p)
     {
+      if (!(i.action == reconcile_action::download && i.url.empty ()))
+        continue;
+
       string fn (to_utf8 (from_utf8 (i.path).filename ()));
-      auto it (ranges::find_if (rel.assets, [&fn] (const auto& a) {
+      auto it (std::find_if (rel.assets.begin (), rel.assets.end (), [&fn] (const auto& a) {
         return a.name == fn; }));
 
       if (it != rel.assets.end ())
@@ -686,8 +689,8 @@ namespace launcher
     if (!out)
     {
       auto s (cc.audit (component_type::rawfiles));
-      bool ok (ranges::all_of (s | views::values, [] (auto st) {
-        return st == file_state::valid; }));
+      bool ok (std::all_of (s.begin (), s.end (), [] (const auto& p) {
+        return p.second == file_state::valid; }));
 
       if (ok)
       {
@@ -709,12 +712,14 @@ namespace launcher
 
     auto p (cc.plan (m, component_type::rawfiles, rel.tag_name));
 
-    for (auto& i : p | views::filter ([] (const auto& x) {
-      return x.action == reconcile_action::download && x.url.empty (); }))
+    for (auto& i : p)
     {
+      if (!(i.action == reconcile_action::download && i.url.empty ()))
+        continue;
+
       string fn (to_utf8 (from_utf8 (i.path).filename ()));
 
-      auto it (ranges::find_if (rel.assets, [&fn] (const auto& a) {
+      auto it (std::find_if (rel.assets.begin (), rel.assets.end (), [&fn] (const auto& a) {
         return a.name == fn; }));
 
       if (it == rel.assets.end ())
@@ -723,7 +728,7 @@ namespace launcher
         replace (asset_name.begin (), asset_name.end (), '.', '_');
         asset_name = "__launcher_" + asset_name + ".bin";
 
-        it = ranges::find_if (rel.assets, [&asset_name] (const auto& a) {
+        it = std::find_if (rel.assets.begin (), rel.assets.end (), [&asset_name] (const auto& a) {
           return a.name == asset_name; });
       }
 
@@ -772,11 +777,13 @@ namespace launcher
 
     auto p (cc.plan (m, component_type::dlc, "dlc"));
 
-    for (auto& i : p | views::filter ([] (const auto& x) {
-      return x.action == reconcile_action::download && x.url.empty (); }))
+    for (auto& i : p)
     {
-      auto it (ranges::find_if (m.archives,
-                                [&i, &root] (const auto& a)
+      if (!(i.action == reconcile_action::download && i.url.empty ()))
+        continue;
+
+      auto it (std::find_if (m.archives.begin (), m.archives.end (),
+                             [&i, &root] (const auto& a)
       {
         return to_utf8 (from_utf8 (i.path)) ==
           to_utf8 (manifest_coordinator::resolve_path (a, root));
@@ -815,8 +822,8 @@ namespace launcher
     if (!out)
     {
       auto s (cc.audit (component_type::helper));
-      bool ok (ranges::all_of (s | views::values, [] (auto st) {
-        return st == file_state::valid; }));
+      bool ok (std::all_of (s.begin (), s.end (), [] (const auto& p) {
+        return p.second == file_state::valid; }));
 
       if (ok)
       {
@@ -843,11 +850,13 @@ namespace launcher
 
     auto p (cc.plan (m, component_type::helper, rel.tag_name));
 
-    for (auto& i : p | views::filter ([] (const auto& x) {
-      return x.action == reconcile_action::download && x.url.empty (); }))
+    for (auto& i : p)
     {
+      if (!(i.action == reconcile_action::download && i.url.empty ()))
+        continue;
+
       string fn (to_utf8 (from_utf8 (i.path).filename ()));
-      auto it (ranges::find_if (rel.assets, [&fn] (const auto& a) {
+      auto it (std::find_if (rel.assets.begin (), rel.assets.end (), [&fn] (const auto& a) {
         return a.name == fn; }));
 
       if (it != rel.assets.end ())
