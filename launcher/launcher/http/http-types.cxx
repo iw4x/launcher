@@ -150,7 +150,8 @@ namespace launcher
   http_version::string () const
   {
     ostringstream os;
-    os << "HTTP/" << static_cast<unsigned> (major) << '.' << static_cast<unsigned> (minor);
+    os << "HTTP/" << static_cast<unsigned> (major_) << '.'
+                  << static_cast<unsigned> (minor_);
     return os.str ();
   }
 

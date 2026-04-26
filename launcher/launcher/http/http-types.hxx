@@ -220,13 +220,13 @@ namespace launcher
   //
   struct http_version
   {
-    std::uint8_t major;
-    std::uint8_t minor;
+    std::uint8_t major_;
+    std::uint8_t minor_;
 
     explicit
     http_version (std::uint8_t maj = 1, std::uint8_t min = 1)
-      : major (maj),
-        minor (min) {}
+      : major_ (maj),
+        minor_ (min) {}
 
     auto
     operator<=> (const http_version&) const noexcept = default;

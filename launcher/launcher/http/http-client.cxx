@@ -681,7 +681,7 @@ namespace launcher
     beast_req br;
     br.method (to_beast_verb (rq.method));
     br.target (rq.target ());
-    br.version (rq.version.major * 10 + rq.version.minor);
+    br.version (rq.version.major_ * 10 + rq.version.minor_);
 
     for (const auto& h : rq.headers)
       br.set (h.name, h.value);
@@ -788,7 +788,7 @@ namespace launcher
     beast_req br;
     br.method (to_beast_verb (rq.method));
     br.target (use_absolute_target ? rq.url : p.target);
-    br.version (rq.version.major * 10 + rq.version.minor);
+    br.version (rq.version.major_ * 10 + rq.version.minor_);
 
     for (const auto& h : rq.headers)
       br.set (h.name, h.value);

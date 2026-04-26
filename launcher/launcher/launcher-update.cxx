@@ -294,9 +294,9 @@ namespace launcher
     // Bake in the compiled version constants.
     //
     launcher_version v;
-    v.major = HELLO_VERSION_MAJOR;
-    v.minor = HELLO_VERSION_MINOR;
-    v.patch = HELLO_VERSION_PATCH;
+    v.major_ = HELLO_VERSION_MAJOR;
+    v.minor_ = HELLO_VERSION_MINOR;
+    v.patch_ = HELLO_VERSION_PATCH;
 
     // Parse the full version string to get pre-release and snapshot info. For
     // stable releases these fields will be empty/zero.

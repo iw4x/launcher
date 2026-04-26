@@ -31,9 +31,9 @@ check (const string& s,
   // state machine is likely misidentifying the delimiter or the numeric
   // conversion is off.
   //
-  if (v->major != mj ||
-      v->minor != mi ||
-      v->patch != pt ||
+  if (v->major_ != mj ||
+      v->minor_ != mi ||
+      v->patch_ != pt ||
       v->pre_release != pr ||
       v->snapshot_sn != sn ||
       v->snapshot_id != id)

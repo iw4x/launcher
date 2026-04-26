@@ -45,9 +45,9 @@ namespace launcher
   {
     // Standard semver precedence for the main components.
     //
-    if (major != v.major) return major < v.major ? -1 : 1;
-    if (minor != v.minor) return minor < v.minor ? -1 : 1;
-    if (patch != v.patch) return patch < v.patch ? -1 : 1;
+    if (major_ != v.major_) return major_ < v.major_ ? -1 : 1;
+    if (minor_ != v.minor_) return minor_ < v.minor_ ? -1 : 1;
+    if (patch_ != v.patch_) return patch_ < v.patch_ ? -1 : 1;
 
     // Now it gets tricky. We store pre-release as a unit16_t where 0 means
     // "final release", but in semver, 1.0.0 is greater than 1.0.0-alpha.
@@ -79,7 +79,7 @@ namespace launcher
   string () const
   {
     ostringstream o;
-    o << major << '.' << minor << '.' << patch;
+    o << major_ << '.' << minor_ << '.' << patch_;
 
     // Map our internal representation back to string. Recall that we offset
     // betas by 500 to keep the sort order sane in the integer member.
@@ -145,15 +145,15 @@ namespace launcher
     }
 
     launcher_version v;
-    v.major = static_cast<uint32_t> (*mj);
-    v.minor = static_cast<uint32_t> (*mi);
-    v.patch = static_cast<uint32_t> (*pa);
+    v.major_ = static_cast<uint32_t> (*mj);
+    v.minor_ = static_cast<uint32_t> (*mi);
+    v.patch_ = static_cast<uint32_t> (*pa);
 
     // If we hit the end, it's a final release.
     //
     if (p >= s.size ())
     {
-      launcher::log::trace_l3 (categories::update{}, "parsed release version: {}.{}.{}", v.major, v.minor, v.patch);
+      launcher::log::trace_l3 (categories::update{}, "parsed release version: {}.{}.{}", v.major_, v.minor_, v.patch_);
       return v;
     }
 

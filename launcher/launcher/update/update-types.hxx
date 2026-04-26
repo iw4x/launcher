@@ -22,9 +22,9 @@ namespace launcher
   //
   struct launcher_version
   {
-    std::uint32_t major = 0;
-    std::uint32_t minor = 0;
-    std::uint32_t patch = 0;
+    std::uint32_t major_ = 0;
+    std::uint32_t minor_ = 0;
+    std::uint32_t patch_ = 0;
 
     // Pre-release: 0 = release, 1-499 = alpha, 500-999 = beta. The actual
     // number is stored, e.g., alpha.2 = 2, beta.3 = 503.
@@ -49,9 +49,9 @@ namespace launcher
                       std::uint16_t pr = 0,
                       std::uint64_t sn = 0,
                       std::string   si = "")
-      : major (mj),
-        minor (mi),
-        patch (pa),
+      : major_ (mj),
+        minor_ (mi),
+        patch_ (pa),
         pre_release (pr),
         snapshot_sn (sn),
         snapshot_id (std::move (si))
@@ -61,7 +61,7 @@ namespace launcher
     bool
     empty () const noexcept
     {
-      return major == 0 && minor == 0 && patch == 0;
+      return major_ == 0 && minor_ == 0 && patch_ == 0;
     }
 
     bool
