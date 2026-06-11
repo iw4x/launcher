@@ -160,8 +160,8 @@ if ! test -d "$bdir"; then
   run bpkg create -d "$bdir" cc \
     config.cxx=g++ \
     config.c=gcc \
-    "config.cxx.coptions=-O3" \
-    "config.c.coptions=-O3" \
+    "config.cxx.coptions=-O3 -include $owd/launcher/third-party/glibc-compat/glibc-2.17.h" \
+    "config.c.coptions=-O3 -include $owd/launcher/third-party/glibc-compat/glibc-2.17.h" \
     config.bin.lib=static \
     config.install.relocatable=true
 else
