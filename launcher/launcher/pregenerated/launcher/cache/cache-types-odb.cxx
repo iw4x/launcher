@@ -651,7 +651,7 @@ namespace odb
       callback (db, obj, callback_event::pre_load);
       init (obj, sts.image (), &db);
       load_ (sts, obj, false);
-      sts.load_delayed (0);
+      sts.load_delayed (nullptr);
       l.unlock ();
       callback (db, obj, callback_event::post_load);
       pointer_cache_traits::load (ig.position ());
@@ -690,7 +690,7 @@ namespace odb
     callback (db, obj, callback_event::pre_load);
     init (obj, sts.image (), &db);
     load_ (sts, obj, false);
-    sts.load_delayed (0);
+    sts.load_delayed (nullptr);
     l.unlock ();
     callback (db, obj, callback_event::post_load);
     reference_cache_traits::load (pos);
@@ -721,7 +721,7 @@ namespace odb
     callback (db, obj, callback_event::pre_load);
     init (obj, sts.image (), &db);
     load_ (sts, obj, true);
-    sts.load_delayed (0);
+    sts.load_delayed (nullptr);
     l.unlock ();
     callback (db, obj, callback_event::post_load);
     return true;
@@ -783,8 +783,6 @@ namespace odb
   query (database& db, const query_base_type& q)
   {
     using namespace sqlite;
-    using odb::details::shared;
-    using odb::details::shared_ptr;
 
     sqlite::connection& conn (
       sqlite::transaction::current ().connection (db));
@@ -811,8 +809,8 @@ namespace odb
     }
 
     q.init_parameters ();
-    shared_ptr<select_statement> st (
-      new (shared) select_statement (
+    std::shared_ptr<select_statement> st (
+      std::make_shared<select_statement> (
         conn,
         text,
         false,
@@ -822,11 +820,11 @@ namespace odb
 
     st->execute ();
 
-    shared_ptr< odb::object_result_impl<object_type> > r (
-      new (shared) sqlite::object_result_impl<object_type> (
-        q, st, sts, 0));
+    std::shared_ptr<odb::object_result_impl<object_type>> r (
+      std::make_shared<sqlite::object_result_impl<object_type>> (
+        q, std::move (st), sts, nullptr));
 
-    return result<object_type> (r);
+    return result<object_type> (std::move (r));
   }
 
   unsigned long long access::object_traits_impl< ::launcher::cached_file, id_sqlite >::
@@ -1307,7 +1305,7 @@ namespace odb
       callback (db, obj, callback_event::pre_load);
       init (obj, sts.image (), &db);
       load_ (sts, obj, false);
-      sts.load_delayed (0);
+      sts.load_delayed (nullptr);
       l.unlock ();
       callback (db, obj, callback_event::post_load);
       pointer_cache_traits::load (ig.position ());
@@ -1346,7 +1344,7 @@ namespace odb
     callback (db, obj, callback_event::pre_load);
     init (obj, sts.image (), &db);
     load_ (sts, obj, false);
-    sts.load_delayed (0);
+    sts.load_delayed (nullptr);
     l.unlock ();
     callback (db, obj, callback_event::post_load);
     reference_cache_traits::load (pos);
@@ -1377,7 +1375,7 @@ namespace odb
     callback (db, obj, callback_event::pre_load);
     init (obj, sts.image (), &db);
     load_ (sts, obj, true);
-    sts.load_delayed (0);
+    sts.load_delayed (nullptr);
     l.unlock ();
     callback (db, obj, callback_event::post_load);
     return true;
@@ -1439,8 +1437,6 @@ namespace odb
   query (database& db, const query_base_type& q)
   {
     using namespace sqlite;
-    using odb::details::shared;
-    using odb::details::shared_ptr;
 
     sqlite::connection& conn (
       sqlite::transaction::current ().connection (db));
@@ -1467,8 +1463,8 @@ namespace odb
     }
 
     q.init_parameters ();
-    shared_ptr<select_statement> st (
-      new (shared) select_statement (
+    std::shared_ptr<select_statement> st (
+      std::make_shared<select_statement> (
         conn,
         text,
         false,
@@ -1478,11 +1474,11 @@ namespace odb
 
     st->execute ();
 
-    shared_ptr< odb::object_result_impl<object_type> > r (
-      new (shared) sqlite::object_result_impl<object_type> (
-        q, st, sts, 0));
+    std::shared_ptr<odb::object_result_impl<object_type>> r (
+      std::make_shared<sqlite::object_result_impl<object_type>> (
+        q, std::move (st), sts, nullptr));
 
-    return result<object_type> (r);
+    return result<object_type> (std::move (r));
   }
 
   unsigned long long access::object_traits_impl< ::launcher::component_version, id_sqlite >::
@@ -1942,7 +1938,7 @@ namespace odb
       callback (db, obj, callback_event::pre_load);
       init (obj, sts.image (), &db);
       load_ (sts, obj, false);
-      sts.load_delayed (0);
+      sts.load_delayed (nullptr);
       l.unlock ();
       callback (db, obj, callback_event::post_load);
       pointer_cache_traits::load (ig.position ());
@@ -1981,7 +1977,7 @@ namespace odb
     callback (db, obj, callback_event::pre_load);
     init (obj, sts.image (), &db);
     load_ (sts, obj, false);
-    sts.load_delayed (0);
+    sts.load_delayed (nullptr);
     l.unlock ();
     callback (db, obj, callback_event::post_load);
     reference_cache_traits::load (pos);
@@ -2012,7 +2008,7 @@ namespace odb
     callback (db, obj, callback_event::pre_load);
     init (obj, sts.image (), &db);
     load_ (sts, obj, true);
-    sts.load_delayed (0);
+    sts.load_delayed (nullptr);
     l.unlock ();
     callback (db, obj, callback_event::post_load);
     return true;
@@ -2074,8 +2070,6 @@ namespace odb
   query (database& db, const query_base_type& q)
   {
     using namespace sqlite;
-    using odb::details::shared;
-    using odb::details::shared_ptr;
 
     sqlite::connection& conn (
       sqlite::transaction::current ().connection (db));
@@ -2102,8 +2096,8 @@ namespace odb
     }
 
     q.init_parameters ();
-    shared_ptr<select_statement> st (
-      new (shared) select_statement (
+    std::shared_ptr<select_statement> st (
+      std::make_shared<select_statement> (
         conn,
         text,
         false,
@@ -2113,11 +2107,11 @@ namespace odb
 
     st->execute ();
 
-    shared_ptr< odb::object_result_impl<object_type> > r (
-      new (shared) sqlite::object_result_impl<object_type> (
-        q, st, sts, 0));
+    std::shared_ptr<odb::object_result_impl<object_type>> r (
+      std::make_shared<sqlite::object_result_impl<object_type>> (
+        q, std::move (st), sts, nullptr));
 
-    return result<object_type> (r);
+    return result<object_type> (std::move (r));
   }
 
   unsigned long long access::object_traits_impl< ::launcher::user_setting, id_sqlite >::

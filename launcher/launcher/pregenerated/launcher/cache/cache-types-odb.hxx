@@ -25,6 +25,7 @@
 #include <odb/traits.hxx>
 #include <odb/callback.hxx>
 #include <odb/wrapper-traits.hxx>
+#include <odb/std-optional-traits.hxx>
 #include <odb/pointer-traits.hxx>
 #include <odb/container-traits.hxx>
 #include <odb/no-op-cache-traits.hxx>
@@ -32,7 +33,6 @@
 #include <odb/simple-object-result.hxx>
 
 #include <odb/details/unused.hxx>
-#include <odb/details/shared-ptr.hxx>
 
 namespace odb
 {
