@@ -24,6 +24,13 @@
 #include <odb/sqlite/exceptions.hxx>
 #include <odb/sqlite/simple-object-result.hxx>
 
+#include <odb/sqlite/details/config.hxx>
+
+#if SQLITE_VERSION_NUMBER < 3007004
+#error SQLite version 3.7.4 or later expected, override with --sqlite-version ODB compiler option
+#endif
+
+
 namespace odb
 {
   // cached_file
@@ -213,6 +220,7 @@ namespace odb
         o.path_;
 
       bool is_null (false);
+
       std::size_t cap (i.path_value.capacity ());
       sqlite::value_traits<
           ::std::string,
@@ -232,6 +240,7 @@ namespace odb
         o.mtime_;
 
       bool is_null (false);
+
       sqlite::value_traits<
           ::int64_t,
           sqlite::id_integer >::set_image (
@@ -248,6 +257,7 @@ namespace odb
         o.version_;
 
       bool is_null (false);
+
       std::size_t cap (i.version_value.capacity ());
       sqlite::value_traits<
           ::std::string,
@@ -267,6 +277,7 @@ namespace odb
         o.component_;
 
       bool is_null (false);
+
       sqlite::value_traits<
           ::launcher::component_type,
           sqlite::id_integer >::set_image (
@@ -283,6 +294,7 @@ namespace odb
         o.size_;
 
       bool is_null (false);
+
       sqlite::value_traits<
           ::uint64_t,
           sqlite::id_integer >::set_image (
@@ -299,6 +311,7 @@ namespace odb
         o.hash_;
 
       bool is_null (false);
+
       std::size_t cap (i.hash_value.capacity ());
       sqlite::value_traits<
           ::std::string,
@@ -417,6 +430,7 @@ namespace odb
     bool grew (false);
     {
       bool is_null (false);
+
       std::size_t cap (i.id_value.capacity ());
       sqlite::value_traits<
           ::std::string,
@@ -984,6 +998,7 @@ namespace odb
         o.component_;
 
       bool is_null (false);
+
       sqlite::value_traits<
           ::launcher::component_type,
           sqlite::id_integer >::set_image (
@@ -1000,6 +1015,7 @@ namespace odb
         o.tag_;
 
       bool is_null (false);
+
       std::size_t cap (i.tag_value.capacity ());
       sqlite::value_traits<
           ::std::string,
@@ -1019,6 +1035,7 @@ namespace odb
         o.installed_at_;
 
       bool is_null (false);
+
       sqlite::value_traits<
           ::int64_t,
           sqlite::id_integer >::set_image (
@@ -1089,6 +1106,7 @@ namespace odb
   {
     {
       bool is_null (false);
+
       sqlite::value_traits<
           ::launcher::component_type,
           sqlite::id_integer >::set_image (
@@ -1640,6 +1658,7 @@ namespace odb
         o.key_;
 
       bool is_null (false);
+
       std::size_t cap (i.key_value.capacity ());
       sqlite::value_traits<
           ::std::string,
@@ -1659,6 +1678,7 @@ namespace odb
         o.val_;
 
       bool is_null (false);
+
       std::size_t cap (i.val_value.capacity ());
       sqlite::value_traits<
           ::std::string,
@@ -1720,6 +1740,7 @@ namespace odb
     bool grew (false);
     {
       bool is_null (false);
+
       std::size_t cap (i.id_value.capacity ());
       sqlite::value_traits<
           ::std::string,
