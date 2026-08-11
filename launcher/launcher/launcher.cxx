@@ -1011,7 +1011,46 @@ try
     return 0;
   }
 
+  // Resolve a relative --path from the directory in which the launcher was
+  // invoked, before reanchor_cwd() changes the working directory.
+  //
+  path requested_root;
+
+  if (opt.path_specified ())
+  {
+    requested_root = from_utf8 (opt.path ());
+
+    if (requested_root.empty ())
+      throw invalid_argument ("--path cannot be empty");
+
+    error_code ec;
+    requested_root = absolute (requested_root, ec);
+
+    if (ec)
+      throw system_error (ec,
+                          "failed to resolve installation root: " +
+                            to_utf8 (requested_root));
+  }
+
   reanchor_cwd ();
+
+  if (!requested_root.empty ())
+  {
+    error_code ec;
+    requested_root = canonical (requested_root, ec);
+
+    if (ec)
+      throw system_error (ec,
+                          "failed to canonicalize installation root: " +
+                            to_utf8 (requested_root));
+
+    current_path (requested_root, ec);
+
+    if (ec)
+      throw system_error (ec,
+                          "failed to change to installation root: " +
+                            to_utf8 (requested_root));
+  }
 
   {
     error_code ec;
@@ -1061,8 +1100,8 @@ try
       return 0;
   }
 
-  // The installation root is the current working directory (which
-  // reanchor_cwd() has already set to the launcher binary's directory).
+  // The installation root is the current working directory, set above from
+  // --path when specified or to the launcher binary's directory otherwise.
   //
   path root (current_path ());
 

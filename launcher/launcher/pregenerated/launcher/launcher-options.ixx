@@ -299,6 +299,18 @@ namespace launcher
     return this->build2_metadata_;
   }
 
+  inline const std::string& options::
+  path () const
+  {
+    return this->path_;
+  }
+
+  inline bool options::
+  path_specified () const
+  {
+    return this->path_specified_;
+  }
+
   inline const bool& options::
   prerelease () const
   {
