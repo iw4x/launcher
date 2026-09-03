@@ -21,6 +21,8 @@ import libs += libodb-sqlite%lib{odb-sqlite}
 
 import libs += libquill%lib{quill}
 
+import libs += libzstd%lib{zstd}
+
 options = launcher-options
 schemas = cache/cache-types
 
