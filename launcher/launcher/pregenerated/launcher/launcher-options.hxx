@@ -519,6 +519,72 @@ namespace launcher
     const bool&
     skip_remote () const;
 
+    const bool&
+    install_game () const;
+
+    const bool&
+    install_game_only () const;
+
+    const std::string&
+    steam_user () const;
+
+    bool
+    steam_user_specified () const;
+
+    const bool&
+    steam_qr () const;
+
+    const bool&
+    steam_relogin () const;
+
+    const bool&
+    steam_forget () const;
+
+    const bool&
+    steam_no_remember () const;
+
+    const bool&
+    steam_reinstall () const;
+
+    const bool&
+    steam_no_verify () const;
+
+    const std::uint32_t&
+    steam_app_id () const;
+
+    bool
+    steam_app_id_specified () const;
+
+    const std::uint32_t&
+    steam_depot_id () const;
+
+    bool
+    steam_depot_id_specified () const;
+
+    const std::uint64_t&
+    steam_manifest_id () const;
+
+    bool
+    steam_manifest_id_specified () const;
+
+    const std::string&
+    steam_branch () const;
+
+    bool
+    steam_branch_specified () const;
+
+    const std::uint32_t&
+    steam_cell_id () const;
+
+    bool
+    steam_cell_id_specified () const;
+
+    const std::size_t&
+    steam_chunk_jobs () const;
+
+    bool
+    steam_chunk_jobs_specified () const;
+
     const std::string&
     proxy () const;
 
@@ -559,6 +625,28 @@ namespace launcher
     bool self_update_only_;
     bool skip_launch_;
     bool skip_remote_;
+    bool install_game_;
+    bool install_game_only_;
+    std::string steam_user_;
+    bool steam_user_specified_;
+    bool steam_qr_;
+    bool steam_relogin_;
+    bool steam_forget_;
+    bool steam_no_remember_;
+    bool steam_reinstall_;
+    bool steam_no_verify_;
+    std::uint32_t steam_app_id_;
+    bool steam_app_id_specified_;
+    std::uint32_t steam_depot_id_;
+    bool steam_depot_id_specified_;
+    std::uint64_t steam_manifest_id_;
+    bool steam_manifest_id_specified_;
+    std::string steam_branch_;
+    bool steam_branch_specified_;
+    std::uint32_t steam_cell_id_;
+    bool steam_cell_id_specified_;
+    std::size_t steam_chunk_jobs_;
+    bool steam_chunk_jobs_specified_;
     std::string proxy_;
     bool proxy_specified_;
   };

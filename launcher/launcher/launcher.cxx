@@ -30,6 +30,7 @@
 #include <launcher/launcher-manifest.hxx>
 #include <launcher/launcher-options.hxx>
 #include <launcher/launcher-progress.hxx>
+#include <launcher/launcher-steam.hxx>
 #include <launcher/launcher-update.hxx>
 
 #ifdef __linux__
@@ -254,6 +255,78 @@ namespace launcher
                           "failed to create cache directory: " + to_utf8 (d));
 
     return d;
+  }
+
+  steam_install_options
+  build_steam_options (const options& opt)
+  {
+    steam_install_options o;
+
+    o.targets = steam_default_targets ();
+
+    if (opt.steam_depot_id_specified () || opt.steam_manifest_id_specified ())
+    {
+      steam_depot_target t (o.targets.empty () ? steam_depot_target ()
+                                               : o.targets.front ());
+
+      if (opt.steam_depot_id_specified ())
+        t.depot_id = opt.steam_depot_id ();
+
+      if (opt.steam_manifest_id_specified ())
+        t.manifest_id = opt.steam_manifest_id ();
+
+      o.targets.assign (1, move (t));
+    }
+
+    for (steam_depot_target& t: o.targets)
+    {
+      if (opt.steam_app_id_specified ())
+        t.app_id = opt.steam_app_id ();
+
+      if (opt.steam_branch_specified ())
+        t.branch = opt.steam_branch ();
+    }
+
+    o.account_name   = opt.steam_user ();
+    o.use_qr         = opt.steam_qr ();
+    o.remember       = !opt.steam_no_remember ();
+    o.force_login    = opt.steam_relogin ();
+    o.force_download = opt.steam_reinstall ();
+    o.cell_id        = opt.steam_cell_id ();
+
+    o.depot.parallel_chunks = opt.steam_chunk_jobs ();
+    o.depot.verify_existing = !opt.steam_no_verify ();
+
+    return o;
+  }
+
+  asio::awaitable<void>
+  install_game (asio::io_context& io,
+                const options& opt,
+                const path& root,
+                progress_coordinator& pc)
+  {
+    http_client_traits ht;
+
+    if (!opt.proxy ().empty ())
+      ht.proxy_url = opt.proxy ();
+
+    steam_coordinator sc (io, ht, resolve_cache_root ());
+
+    info ("game files will be installed from Steam ({} is remembering the "
+          "session)",
+          to_string (sc.credential_backend_kind ()));
+
+    steam_depot_result r (
+      co_await sc.install (build_steam_options (opt), root, &pc));
+
+    info ("game installation complete: {} files written, {} skipped, "
+          "{} bytes downloaded",
+          r.files_written,
+          r.files_skipped,
+          r.bytes_downloaded);
+
+    co_return;
   }
 
   asio::awaitable<void>
@@ -1128,6 +1201,60 @@ try
 
       cache_database db2 (cr);
       db2.setting (scope_ver_key, current_ver);
+    }
+  }
+
+  if (opt.steam_forget ())
+  {
+    http_client_traits ht;
+
+    if (!opt.proxy ().empty ())
+      ht.proxy_url = opt.proxy ();
+
+    steam_coordinator sc (io, ht, resolve_cache_root ());
+    sc.forget (opt.steam_user ());
+
+    return 0;
+  }
+
+  if (opt.install_game () || opt.install_game_only ())
+  {
+    progress_coordinator pc (io);
+    exception_ptr        ex;
+
+    asio::co_spawn (
+      io,
+      [&io, &opt, &root, &pc] () -> asio::awaitable<void>
+    {
+      exception_ptr ep;
+
+      try
+      {
+        co_await install_game (io, opt, root, pc);
+      }
+      catch (...)
+      {
+        ep = current_exception ();
+      }
+
+      co_await pc.stop ();
+
+      if (ep)
+        rethrow_exception (ep);
+
+    } (), [&ex] (exception_ptr ep) { ex = ep; });
+
+    io.restart ();
+    io.run ();
+    io.restart ();
+
+    if (ex)
+      rethrow_exception (ex);
+
+    if (opt.install_game_only ())
+    {
+      info ("game installation complete, exiting as requested");
+      return 0;
     }
   }
 

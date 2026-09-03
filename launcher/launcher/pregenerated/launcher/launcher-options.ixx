@@ -371,6 +371,138 @@ namespace launcher
     return this->skip_remote_;
   }
 
+  inline const bool& options::
+  install_game () const
+  {
+    return this->install_game_;
+  }
+
+  inline const bool& options::
+  install_game_only () const
+  {
+    return this->install_game_only_;
+  }
+
+  inline const std::string& options::
+  steam_user () const
+  {
+    return this->steam_user_;
+  }
+
+  inline bool options::
+  steam_user_specified () const
+  {
+    return this->steam_user_specified_;
+  }
+
+  inline const bool& options::
+  steam_qr () const
+  {
+    return this->steam_qr_;
+  }
+
+  inline const bool& options::
+  steam_relogin () const
+  {
+    return this->steam_relogin_;
+  }
+
+  inline const bool& options::
+  steam_forget () const
+  {
+    return this->steam_forget_;
+  }
+
+  inline const bool& options::
+  steam_no_remember () const
+  {
+    return this->steam_no_remember_;
+  }
+
+  inline const bool& options::
+  steam_reinstall () const
+  {
+    return this->steam_reinstall_;
+  }
+
+  inline const bool& options::
+  steam_no_verify () const
+  {
+    return this->steam_no_verify_;
+  }
+
+  inline const std::uint32_t& options::
+  steam_app_id () const
+  {
+    return this->steam_app_id_;
+  }
+
+  inline bool options::
+  steam_app_id_specified () const
+  {
+    return this->steam_app_id_specified_;
+  }
+
+  inline const std::uint32_t& options::
+  steam_depot_id () const
+  {
+    return this->steam_depot_id_;
+  }
+
+  inline bool options::
+  steam_depot_id_specified () const
+  {
+    return this->steam_depot_id_specified_;
+  }
+
+  inline const std::uint64_t& options::
+  steam_manifest_id () const
+  {
+    return this->steam_manifest_id_;
+  }
+
+  inline bool options::
+  steam_manifest_id_specified () const
+  {
+    return this->steam_manifest_id_specified_;
+  }
+
+  inline const std::string& options::
+  steam_branch () const
+  {
+    return this->steam_branch_;
+  }
+
+  inline bool options::
+  steam_branch_specified () const
+  {
+    return this->steam_branch_specified_;
+  }
+
+  inline const std::uint32_t& options::
+  steam_cell_id () const
+  {
+    return this->steam_cell_id_;
+  }
+
+  inline bool options::
+  steam_cell_id_specified () const
+  {
+    return this->steam_cell_id_specified_;
+  }
+
+  inline const std::size_t& options::
+  steam_chunk_jobs () const
+  {
+    return this->steam_chunk_jobs_;
+  }
+
+  inline bool options::
+  steam_chunk_jobs_specified () const
+  {
+    return this->steam_chunk_jobs_specified_;
+  }
+
   inline const std::string& options::
   proxy () const
   {

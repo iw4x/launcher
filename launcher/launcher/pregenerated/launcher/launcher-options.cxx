@@ -776,6 +776,28 @@ namespace launcher
     self_update_only_ (),
     skip_launch_ (),
     skip_remote_ (),
+    install_game_ (),
+    install_game_only_ (),
+    steam_user_ (),
+    steam_user_specified_ (false),
+    steam_qr_ (),
+    steam_relogin_ (),
+    steam_forget_ (),
+    steam_no_remember_ (),
+    steam_reinstall_ (),
+    steam_no_verify_ (),
+    steam_app_id_ (),
+    steam_app_id_specified_ (false),
+    steam_depot_id_ (),
+    steam_depot_id_specified_ (false),
+    steam_manifest_id_ (),
+    steam_manifest_id_specified_ (false),
+    steam_branch_ ("public"),
+    steam_branch_specified_ (false),
+    steam_cell_id_ (),
+    steam_cell_id_specified_ (false),
+    steam_chunk_jobs_ (8),
+    steam_chunk_jobs_specified_ (false),
     proxy_ (),
     proxy_specified_ (false)
   {
@@ -802,6 +824,28 @@ namespace launcher
     self_update_only_ (),
     skip_launch_ (),
     skip_remote_ (),
+    install_game_ (),
+    install_game_only_ (),
+    steam_user_ (),
+    steam_user_specified_ (false),
+    steam_qr_ (),
+    steam_relogin_ (),
+    steam_forget_ (),
+    steam_no_remember_ (),
+    steam_reinstall_ (),
+    steam_no_verify_ (),
+    steam_app_id_ (),
+    steam_app_id_specified_ (false),
+    steam_depot_id_ (),
+    steam_depot_id_specified_ (false),
+    steam_manifest_id_ (),
+    steam_manifest_id_specified_ (false),
+    steam_branch_ ("public"),
+    steam_branch_specified_ (false),
+    steam_cell_id_ (),
+    steam_cell_id_specified_ (false),
+    steam_chunk_jobs_ (8),
+    steam_chunk_jobs_specified_ (false),
     proxy_ (),
     proxy_specified_ (false)
   {
@@ -831,6 +875,28 @@ namespace launcher
     self_update_only_ (),
     skip_launch_ (),
     skip_remote_ (),
+    install_game_ (),
+    install_game_only_ (),
+    steam_user_ (),
+    steam_user_specified_ (false),
+    steam_qr_ (),
+    steam_relogin_ (),
+    steam_forget_ (),
+    steam_no_remember_ (),
+    steam_reinstall_ (),
+    steam_no_verify_ (),
+    steam_app_id_ (),
+    steam_app_id_specified_ (false),
+    steam_depot_id_ (),
+    steam_depot_id_specified_ (false),
+    steam_manifest_id_ (),
+    steam_manifest_id_specified_ (false),
+    steam_branch_ ("public"),
+    steam_branch_specified_ (false),
+    steam_cell_id_ (),
+    steam_cell_id_specified_ (false),
+    steam_chunk_jobs_ (8),
+    steam_chunk_jobs_specified_ (false),
     proxy_ (),
     proxy_specified_ (false)
   {
@@ -860,6 +926,28 @@ namespace launcher
     self_update_only_ (),
     skip_launch_ (),
     skip_remote_ (),
+    install_game_ (),
+    install_game_only_ (),
+    steam_user_ (),
+    steam_user_specified_ (false),
+    steam_qr_ (),
+    steam_relogin_ (),
+    steam_forget_ (),
+    steam_no_remember_ (),
+    steam_reinstall_ (),
+    steam_no_verify_ (),
+    steam_app_id_ (),
+    steam_app_id_specified_ (false),
+    steam_depot_id_ (),
+    steam_depot_id_specified_ (false),
+    steam_manifest_id_ (),
+    steam_manifest_id_specified_ (false),
+    steam_branch_ ("public"),
+    steam_branch_specified_ (false),
+    steam_cell_id_ (),
+    steam_cell_id_specified_ (false),
+    steam_chunk_jobs_ (8),
+    steam_chunk_jobs_specified_ (false),
     proxy_ (),
     proxy_specified_ (false)
   {
@@ -891,6 +979,28 @@ namespace launcher
     self_update_only_ (),
     skip_launch_ (),
     skip_remote_ (),
+    install_game_ (),
+    install_game_only_ (),
+    steam_user_ (),
+    steam_user_specified_ (false),
+    steam_qr_ (),
+    steam_relogin_ (),
+    steam_forget_ (),
+    steam_no_remember_ (),
+    steam_reinstall_ (),
+    steam_no_verify_ (),
+    steam_app_id_ (),
+    steam_app_id_specified_ (false),
+    steam_depot_id_ (),
+    steam_depot_id_specified_ (false),
+    steam_manifest_id_ (),
+    steam_manifest_id_specified_ (false),
+    steam_branch_ ("public"),
+    steam_branch_specified_ (false),
+    steam_cell_id_ (),
+    steam_cell_id_specified_ (false),
+    steam_chunk_jobs_ (8),
+    steam_chunk_jobs_specified_ (false),
     proxy_ (),
     proxy_specified_ (false)
   {
@@ -918,6 +1028,28 @@ namespace launcher
     self_update_only_ (),
     skip_launch_ (),
     skip_remote_ (),
+    install_game_ (),
+    install_game_only_ (),
+    steam_user_ (),
+    steam_user_specified_ (false),
+    steam_qr_ (),
+    steam_relogin_ (),
+    steam_forget_ (),
+    steam_no_remember_ (),
+    steam_reinstall_ (),
+    steam_no_verify_ (),
+    steam_app_id_ (),
+    steam_app_id_specified_ (false),
+    steam_depot_id_ (),
+    steam_depot_id_specified_ (false),
+    steam_manifest_id_ (),
+    steam_manifest_id_specified_ (false),
+    steam_branch_ ("public"),
+    steam_branch_specified_ (false),
+    steam_cell_id_ (),
+    steam_cell_id_specified_ (false),
+    steam_chunk_jobs_ (8),
+    steam_chunk_jobs_specified_ (false),
     proxy_ (),
     proxy_specified_ (false)
   {
@@ -932,32 +1064,70 @@ namespace launcher
     if (p == ::launcher::cli::usage_para::text)
       os << ::std::endl;
 
-    os << "--help                Show this help message and exit." << ::std::endl;
+    os << "--help                   Show this help message and exit." << ::std::endl;
 
-    os << "--version             Show version information and exit." << ::std::endl;
+    os << "--version                Show version information and exit." << ::std::endl;
 
-    os << "--build2-metadata     Print the build2 metadata and exit." << ::std::endl;
+    os << "--build2-metadata        Print the build2 metadata and exit." << ::std::endl;
 
-    os << "--prerelease          Opt-in to pre-release (beta) updates." << ::std::endl;
+    os << "--prerelease             Opt-in to pre-release (beta) updates." << ::std::endl;
 
-    os << "--jobs|-j <num>       The number of parallel download jobs to run." << ::std::endl;
+    os << "--jobs|-j <num>          The number of parallel download jobs to run." << ::std::endl;
 
-    os << "--game-exe <file>     The game executable to launch." << ::std::endl;
+    os << "--game-exe <file>        The game executable to launch." << ::std::endl;
 
-    os << "--game-args <arg>     Additional arguments to pass to the game executable." << ::std::endl;
+    os << "--game-args <arg>        Additional arguments to pass to the game executable." << ::std::endl;
 
-    os << "--force-steam-runtime Use the Steam Linux Runtime container instead of the" << ::std::endl
-       << "                      standalone Proton." << ::std::endl;
+    os << "--force-steam-runtime    Use the Steam Linux Runtime container instead of the" << ::std::endl
+       << "                         standalone Proton." << ::std::endl;
 
-    os << "--no-self-update      Skip the automatic launcher self-update check." << ::std::endl;
+    os << "--no-self-update         Skip the automatic launcher self-update check." << ::std::endl;
 
-    os << "--self-update-only    Only check for and apply launcher updates, then exit." << ::std::endl;
+    os << "--self-update-only       Only check for and apply launcher updates, then exit." << ::std::endl;
 
-    os << "--skip-launch         Skip launching the game after updating/installing." << ::std::endl;
+    os << "--skip-launch            Skip launching the game after updating/installing." << ::std::endl;
 
-    os << "--skip-remote         Skip all remote checks and file reconciliation." << ::std::endl;
+    os << "--skip-remote            Skip all remote checks and file reconciliation." << ::std::endl;
 
-    os << "--proxy <url>         Route all HTTP/HTTPS traffic through the specified proxy." << ::std::endl;
+    os << "--install-game           Download and install from Steam before launching." << ::std::endl;
+
+    os << "--install-game-only      Install the game files from Steam and exit without" << ::std::endl
+       << "                         launching." << ::std::endl;
+
+    os << "--steam-user <name>      The Steam account to sign in as." << ::std::endl;
+
+    os << "--steam-qr               Sign in by scanning a QR code with the Steam mobile" << ::std::endl
+       << "                         app instead of typing a password." << ::std::endl;
+
+    os << "--steam-relogin          Ignore any remembered Steam session and sign in from" << ::std::endl
+       << "                         scratch." << ::std::endl;
+
+    os << "--steam-forget           Forget the remembered Steam session and exit." << ::std::endl;
+
+    os << "--steam-no-remember      Do not remember the Steam session; sign in again on" << ::std::endl
+       << "                         every run." << ::std::endl;
+
+    os << "--steam-reinstall        Re-download every game file even if the copy on disk" << ::std::endl
+       << "                         already matches the manifest." << ::std::endl;
+
+    os << "--steam-no-verify        Skip hashing files that already exist and assume any" << ::std::endl
+       << "                         file of the right size is correct." << ::std::endl;
+
+    os << "--steam-app-id <id>      Override the Steam application the depot is licensed" << ::std::endl
+       << "                         under." << ::std::endl;
+
+    os << "--steam-depot-id <id>    Override the Steam depot to install." << ::std::endl;
+
+    os << "--steam-manifest-id <id> Override the depot manifest to install." << ::std::endl;
+
+    os << "--steam-branch <name>    The application branch the manifest belongs to." << ::std::endl;
+
+    os << "--steam-cell-id <id>     Steam content cell to prefer, as a geographic hint." << ::std::endl;
+
+    os << "--steam-chunk-jobs <num> The number of depot chunks to download in parallel." << ::std::endl;
+
+    os << "--proxy <url>            Route all HTTP/HTTPS traffic through the specified" << ::std::endl
+       << "                         proxy." << ::std::endl;
 
     p = ::launcher::cli::usage_para::option;
 
@@ -1004,6 +1174,43 @@ namespace launcher
       &::launcher::cli::thunk< options, &options::skip_launch_ >;
       _cli_options_map_["--skip-remote"] =
       &::launcher::cli::thunk< options, &options::skip_remote_ >;
+      _cli_options_map_["--install-game"] =
+      &::launcher::cli::thunk< options, &options::install_game_ >;
+      _cli_options_map_["--install-game-only"] =
+      &::launcher::cli::thunk< options, &options::install_game_only_ >;
+      _cli_options_map_["--steam-user"] =
+      &::launcher::cli::thunk< options, std::string, &options::steam_user_,
+        &options::steam_user_specified_ >;
+      _cli_options_map_["--steam-qr"] =
+      &::launcher::cli::thunk< options, &options::steam_qr_ >;
+      _cli_options_map_["--steam-relogin"] =
+      &::launcher::cli::thunk< options, &options::steam_relogin_ >;
+      _cli_options_map_["--steam-forget"] =
+      &::launcher::cli::thunk< options, &options::steam_forget_ >;
+      _cli_options_map_["--steam-no-remember"] =
+      &::launcher::cli::thunk< options, &options::steam_no_remember_ >;
+      _cli_options_map_["--steam-reinstall"] =
+      &::launcher::cli::thunk< options, &options::steam_reinstall_ >;
+      _cli_options_map_["--steam-no-verify"] =
+      &::launcher::cli::thunk< options, &options::steam_no_verify_ >;
+      _cli_options_map_["--steam-app-id"] =
+      &::launcher::cli::thunk< options, std::uint32_t, &options::steam_app_id_,
+        &options::steam_app_id_specified_ >;
+      _cli_options_map_["--steam-depot-id"] =
+      &::launcher::cli::thunk< options, std::uint32_t, &options::steam_depot_id_,
+        &options::steam_depot_id_specified_ >;
+      _cli_options_map_["--steam-manifest-id"] =
+      &::launcher::cli::thunk< options, std::uint64_t, &options::steam_manifest_id_,
+        &options::steam_manifest_id_specified_ >;
+      _cli_options_map_["--steam-branch"] =
+      &::launcher::cli::thunk< options, std::string, &options::steam_branch_,
+        &options::steam_branch_specified_ >;
+      _cli_options_map_["--steam-cell-id"] =
+      &::launcher::cli::thunk< options, std::uint32_t, &options::steam_cell_id_,
+        &options::steam_cell_id_specified_ >;
+      _cli_options_map_["--steam-chunk-jobs"] =
+      &::launcher::cli::thunk< options, std::size_t, &options::steam_chunk_jobs_,
+        &options::steam_chunk_jobs_specified_ >;
       _cli_options_map_["--proxy"] =
       &::launcher::cli::thunk< options, std::string, &options::proxy_,
         &options::proxy_specified_ >;

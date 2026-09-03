@@ -80,6 +80,106 @@ namespace launcher
        GitHub and without verifying local files."
     };
 
+
+    bool --install-game
+    {
+      "Download and install from Steam before launching.
+
+       This requires signing in to a Steam account that owns
+       the game; the session is remembered afterwards, so you are normally
+       only asked once."
+    };
+
+    bool --install-game-only
+    {
+      "Install the game files from Steam and exit without launching."
+    };
+
+    std::string --steam-user
+    {
+      "<name>",
+      "The Steam account to sign in as. Defaults to the account used last;
+       you are prompted if there is none."
+    };
+
+    bool --steam-qr
+    {
+      "Sign in by scanning a QR code with the Steam mobile app instead of
+       typing a password. Preferable on a shared or remote terminal, where a
+       typed password is more exposed."
+    };
+
+    bool --steam-relogin
+    {
+      "Ignore any remembered Steam session and sign in from scratch. Use this
+       after changing your password or revoking the device."
+    };
+
+    bool --steam-forget
+    {
+      "Forget the remembered Steam session and exit. The account is removed
+       from the system keyring (or, where none is available, its encrypted
+       credential file is deleted)."
+    };
+
+    bool --steam-no-remember
+    {
+      "Do not remember the Steam session; sign in again on every run."
+    };
+
+    bool --steam-reinstall
+    {
+      "Re-download every game file even if the copy on disk already matches
+       the manifest."
+    };
+
+    bool --steam-no-verify
+    {
+      "Skip hashing files that already exist and assume any file of the right
+       size is correct. Faster, but it will not notice a file left truncated
+       by an interrupted install."
+    };
+
+    std::uint32_t --steam-app-id
+    {
+      "<id>",
+      "Override the Steam application the depot is licensed under. For
+       diagnostics; the default is correct for Modern Warfare 2."
+    };
+
+    std::uint32_t --steam-depot-id
+    {
+      "<id>",
+      "Override the Steam depot to install. For diagnostics; the default is
+       the depot holding the 32-bit build."
+    };
+
+    std::uint64_t --steam-manifest-id
+    {
+      "<id>",
+      "Override the depot manifest to install. For diagnostics; the default
+       is the last manifest containing the 32-bit build."
+    };
+
+    std::string --steam-branch = "public"
+    {
+      "<name>",
+      "The application branch the manifest belongs to. Defaults to public."
+    };
+
+    std::uint32_t --steam-cell-id
+    {
+      "<id>",
+      "Steam content cell to prefer, as a geographic hint. Steam chooses one
+       for you by default."
+    };
+
+    std::size_t --steam-chunk-jobs = 8
+    {
+      "<num>",
+      "The number of depot chunks to download in parallel. Defaults to 8."
+    };
+
     std::string --proxy
     {
       "<url>",
