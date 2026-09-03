@@ -1080,12 +1080,17 @@ try
   // Check if launcher version changed, if so wipe local cache directory.
   //
   {
-    path cr (resolve_cache_root ());
-    cache_database db (cr);
-
+    path   cr (resolve_cache_root ());
     string current_ver (HELLO_VERSION_ID);
     string scope_ver_key ("launcher_version");
-    string saved_ver (db.setting_value (scope_ver_key));
+
+    string saved_ver;
+
+    {
+      cache_database db (cr);
+
+      saved_ver = db.setting_value (scope_ver_key);
+    }
 
     if (saved_ver != current_ver)
     {
@@ -1101,19 +1106,26 @@ try
           current_ver,
           to_utf8 (cache_dir));
 
-        remove_all (cache_dir, ec);
+        for (const directory_entry& e: directory_iterator (cache_dir, ec))
+        {
+          if (e.path ().extension () == ".log")
+            continue;
+
+          error_code rc;
+
+          remove_all (e.path (), rc);
+
+          if (rc)
+            warning ("failed to remove cached {}: {}",
+                     to_utf8 (e.path ().filename ()),
+                     to_utf8_system_message (rc.message ()));
+        }
 
         if (ec)
-          warning ("failed to remove cache directory: {}",
+          warning ("failed to enumerate the cache directory: {}",
                    to_utf8_system_message (ec.message ()));
-
-        // Recreate it since the database was inside.
-        //
-        create_directories (cache_dir, ec);
       }
 
-      // Re-open the database after potential wipe and save new version.
-      //
       cache_database db2 (cr);
       db2.setting (scope_ver_key, current_ver);
     }
