@@ -78,6 +78,8 @@ exe{*.test -iw4x-launcher}:
 {
   test = true
   install = false
+
+  cc.poptions += -UNDEBUG
 }
 
 for t: cxx{**.test...}
@@ -100,11 +102,23 @@ cc.poptions =+ "-I$out_root" "-I$src_root"
 if ($develop)
   cxx.coptions =+ "-DLAUNCHER_DEVELOP"
 
-# On Windows, we need the advanced API library for registry access (used
-# for Steam path detection).
+# On Windows we need the advanced API library for registry access (used for
+# Steam path detection) and the cryptographic API library for DPAPI (used by
+# the credential store).
 #
-if ($tsys == 'win32-msvc')
-  cxx.libs += Advapi32.lib
+if ($tclass == 'windows')
+{
+  if ($tsys == 'win32-msvc')
+    cxx.libs += Advapi32.lib Crypt32.lib
+  else
+    cxx.libs += -ladvapi32 -lcrypt32
+}
+
+# On Linux the credential store dlopen()s libsecret and glibc prior to 2.34
+# keeps the dynamic linking interface in a separate library.
+#
+if ($tclass == 'linux')
+  cxx.libs += -ldl
 
 # CLI Options Generation (Development vs. Consumption)
 #
