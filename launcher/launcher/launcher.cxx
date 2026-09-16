@@ -1011,6 +1011,21 @@ try
     return 0;
   }
 
+#ifdef _WIN32
+  if (opt.wait_pid_specified () && !opt.wait_pid ().empty ())
+  {
+    unsigned long pid (std::strtoul (opt.wait_pid ().c_str (), nullptr, 10));
+    if (pid != 0)
+    {
+      if (HANDLE h = OpenProcess (SYNCHRONIZE, FALSE, pid))
+      {
+        WaitForSingleObject (h, 30000);
+        CloseHandle (h);
+      }
+    }
+  }
+#endif
+
   reanchor_cwd ();
 
   {

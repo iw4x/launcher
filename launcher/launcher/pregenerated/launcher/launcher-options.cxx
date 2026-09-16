@@ -777,7 +777,9 @@ namespace launcher
     skip_launch_ (),
     skip_remote_ (),
     proxy_ (),
-    proxy_specified_ (false)
+    proxy_specified_ (false),
+    wait_pid_ (),
+    wait_pid_specified_ (false)
   {
   }
 
@@ -803,7 +805,9 @@ namespace launcher
     skip_launch_ (),
     skip_remote_ (),
     proxy_ (),
-    proxy_specified_ (false)
+    proxy_specified_ (false),
+    wait_pid_ (),
+    wait_pid_specified_ (false)
   {
     ::launcher::cli::argv_scanner s (argc, argv, erase);
     _parse (s, opt, arg);
@@ -832,7 +836,9 @@ namespace launcher
     skip_launch_ (),
     skip_remote_ (),
     proxy_ (),
-    proxy_specified_ (false)
+    proxy_specified_ (false),
+    wait_pid_ (),
+    wait_pid_specified_ (false)
   {
     ::launcher::cli::argv_scanner s (start, argc, argv, erase);
     _parse (s, opt, arg);
@@ -861,7 +867,9 @@ namespace launcher
     skip_launch_ (),
     skip_remote_ (),
     proxy_ (),
-    proxy_specified_ (false)
+    proxy_specified_ (false),
+    wait_pid_ (),
+    wait_pid_specified_ (false)
   {
     ::launcher::cli::argv_scanner s (argc, argv, erase);
     _parse (s, opt, arg);
@@ -892,7 +900,9 @@ namespace launcher
     skip_launch_ (),
     skip_remote_ (),
     proxy_ (),
-    proxy_specified_ (false)
+    proxy_specified_ (false),
+    wait_pid_ (),
+    wait_pid_specified_ (false)
   {
     ::launcher::cli::argv_scanner s (start, argc, argv, erase);
     _parse (s, opt, arg);
@@ -919,7 +929,9 @@ namespace launcher
     skip_launch_ (),
     skip_remote_ (),
     proxy_ (),
-    proxy_specified_ (false)
+    proxy_specified_ (false),
+    wait_pid_ (),
+    wait_pid_specified_ (false)
   {
     _parse (s, opt, arg);
   }
@@ -958,6 +970,9 @@ namespace launcher
     os << "--skip-remote         Skip all remote checks and file reconciliation." << ::std::endl;
 
     os << "--proxy <url>         Route all HTTP/HTTPS traffic through the specified proxy." << ::std::endl;
+
+    os << "--wait-pid <pid>      Wait for the process with the given id to exit before" << ::std::endl
+       << "                      updating files." << ::std::endl;
 
     p = ::launcher::cli::usage_para::option;
 
@@ -1007,6 +1022,9 @@ namespace launcher
       _cli_options_map_["--proxy"] =
       &::launcher::cli::thunk< options, std::string, &options::proxy_,
         &options::proxy_specified_ >;
+      _cli_options_map_["--wait-pid"] =
+      &::launcher::cli::thunk< options, std::string, &options::wait_pid_,
+        &options::wait_pid_specified_ >;
     }
   };
 

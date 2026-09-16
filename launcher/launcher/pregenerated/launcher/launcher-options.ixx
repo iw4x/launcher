@@ -382,6 +382,18 @@ namespace launcher
   {
     return this->proxy_specified_;
   }
+
+  inline const std::string& options::
+  wait_pid () const
+  {
+    return this->wait_pid_;
+  }
+
+  inline bool options::
+  wait_pid_specified () const
+  {
+    return this->wait_pid_specified_;
+  }
 }
 
 // Begin epilogue.

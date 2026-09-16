@@ -88,5 +88,14 @@ namespace launcher
        \cb{socks5://host:port} URLs. For SOCKS5 proxies that require
        authentication use \cb{socks5://user:pass@host:port}."
     };
+
+    std::string --wait-pid
+    {
+      "<pid>",
+      "Wait for the process with the given id to exit before updating files.
+       Used when the launcher is started by the game so file replacement does
+       not race the still-running process, which Windows keeps locked while in
+       use."
+    };
   };
 }

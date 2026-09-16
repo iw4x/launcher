@@ -525,6 +525,12 @@ namespace launcher
     bool
     proxy_specified () const;
 
+    const std::string&
+    wait_pid () const;
+
+    bool
+    wait_pid_specified () const;
+
     // Print usage information.
     //
     static ::launcher::cli::usage_para
@@ -561,6 +567,8 @@ namespace launcher
     bool skip_remote_;
     std::string proxy_;
     bool proxy_specified_;
+    std::string wait_pid_;
+    bool wait_pid_specified_;
   };
 }
 
