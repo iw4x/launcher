@@ -17,6 +17,107 @@ using namespace std;
 
 namespace launcher
 {
+  namespace
+  {
+    // Where IW4x reads its fastfiles from.
+    //
+    // There are two zone trees to keep apart here. The installation
+    // owns "zone" and singleplayer still expects to find the files
+    // shipped by Steam there. IW4x owns "zone/iw4x/x86" and multiplayer
+    // is arranged to look there for the copies we convert.
+    //
+    // So once a fastfile becomes ours, it stays under the latter. In
+    // particular, conversion should never need to move something out of
+    // the stock tree or put a converted file back into it.
+    //
+    //
+    const string zone_root ("zone");
+    const string converted_root ("zone/iw4x/x86");
+
+    // IW4x has a similar private place for the rest of its resources.
+    //
+    // The old layout put these directly under "iw4x". Some manifests
+    // still use that spelling, so keep the old root around as the name
+    // we recognize and translate it to the directory the game now
+    // registers as its base game.
+    //
+    //
+    const string basegame_root ("main/iw4x/x86");
+    const string legacy_basegame_root ("iw4x");
+
+    // Turn the zone spelling used by a manifest into the spelling the
+    // game should actually see.
+    //
+    // A manifest normally names the source tree, for example
+    // "zone/english/iw4x.ff", and what we want in that case is the same
+    // suffix under "zone/iw4x/x86". There is one slightly awkward case
+    // in that manifests are allowed to name the destination directly.
+    // So accept both spellings and make this operation idempotent.
+    //
+    //
+    fs::path
+    zone_path (const string& p)
+    {
+      string s (p);
+      replace (s.begin (), s.end (), '\\', '/');
+
+      // Perhaps the manifest has already done the mapping for us. In
+      // that case there is nothing left to do. Apart from being useful
+      // for manifests that spell destinations, this means passing a
+      // mapped path through here for a second time does not grow
+      // another "zone/iw4x/x86" prefix.
+      //
+      if (s.compare (0, converted_root.size (), converted_root) == 0)
+        return fs::path (s);
+
+      // At this point the caller has established that this is a path
+      // under "zone". Keep everything following that root and hang it
+      // under our zone tree. For example, "zone/english/iw4x.ff"
+      // becomes "zone/iw4x/x86/english/iw4x.ff".
+      //
+      // Note that substr() starts at the end of "zone", not after its
+      // separator. The suffix begins with '/', which is exactly what
+      // joins the two strings.
+      //
+      return fs::path (converted_root + s.substr (zone_root.size ()));
+    }
+
+    // Do the corresponding mapping for files that live in the base game
+    // directory.
+    //
+    // Here the manifest spelling is the old "iw4x/..." layout. The
+    // destination spelling is "main/iw4x/x86/...". As with zone_path(),
+    // accept an already mapped path since there is no reason for
+    // callers to have to remember whether a particular manifest entry
+    // has passed through this translation.
+    //
+    //
+    fs::path
+    basegame_path (const string& p)
+    {
+      // Keep the textual comparison independent of which separator
+      // spelling the manifest used.
+      //
+      string s (p);
+      replace (s.begin (), s.end (), '\\', '/');
+
+      // An entry can already name the new base game tree. Leave it
+      // alone if so. This is particularly handy while old and new
+      // manifests can both exist.
+      //
+      if (s.compare (0, basegame_root.size (), basegame_root) == 0)
+        return fs::path (s);
+
+      // What remains is the old "iw4x" spelling. Drop that root and
+      // attach the same suffix to the directory registered by the game.
+      // So, for example, "iw4x/images/foo.iwi" becomes
+      // "main/iw4x/x86/images/foo.iwi".
+      //
+      return fs::path (
+        basegame_root + s.substr (legacy_basegame_root.size ()));
+    }
+  }
+
   manifest_coordinator::manifest_type manifest_coordinator::
   parse (const string& s, manifest_format f)
   {
@@ -101,22 +202,30 @@ namespace launcher
     if (f.path.find ("codo/") == 0 || f.path.find ("codo\\") == 0)
     {
       string s (f.path);
-      s.replace (0, 5, f.path[4] == '/' ? "zone/" : "zone\\");
-      return d / s;
+      s.replace (0, 5, "zone/");
+      return d / zone_path (s);
     }
 
-    // If the path has a known prefix, trust it.
+    // A manifest path under "zone" names the group the file belongs to.
+    // The installation's copy of that group stays where Steam put it,
+    // so resolve the path through zone_path() before joining it to the
+    // game directory.
     //
-    if (f.path.find ("zone/") == 0 || f.path.find ("zone\\") == 0 ||
-        f.path.find ("iw4x/") == 0 || f.path.find ("iw4x\\") == 0)
-    {
-      return d / f.path;
-    }
+    if (f.path.find ("zone/") == 0 || f.path.find ("zone\\") == 0)
+      return d / zone_path (f.path);
+
+    // The old base game spelling works the same way. Entries under
+    // "iw4x" refer to resources that now live below the base game
+    // directory registered by IW4x, so let basegame_path() translate
+    // that prefix before constructing the final path.
+    //
+    if (f.path.find ("iw4x/") == 0 || f.path.find ("iw4x\\") == 0)
+      return d / basegame_path (f.path);
 
     // Heuristics for loose files.
     //
-    if (ext == ".iwd") return d / "iw4x" / p.filename ();
-    if (ext == ".ff")  return d / "zone" / "dlc" / p.filename ();
+    if (ext == ".iwd") return d / basegame_path (legacy_basegame_root) / p.filename ();
+    if (ext == ".ff")  return d / zone_path ("zone/dlc") / p.filename ();
 
     return d / f.path;
   }
@@ -130,18 +239,19 @@ namespace launcher
     transform (ext.begin (), ext.end (), ext.begin (),
                [] (unsigned char c) { return tolower (c); });
 
-    // Trust known prefixes.
+    // Trust known prefixes, except that a zone directory only names the
+    // group: where the game reads that group from is ours to say.
     //
-    if (a.name.find ("zone/") == 0 || a.name.find ("zone\\") == 0 ||
-        a.name.find ("iw4x/") == 0 || a.name.find ("iw4x\\") == 0)
-    {
-      return d / a.name;
-    }
+    if (a.name.find ("zone/") == 0 || a.name.find ("zone\\") == 0)
+      return d / zone_path (a.name);
+
+    if (a.name.find ("iw4x/") == 0 || a.name.find ("iw4x\\") == 0)
+      return d / basegame_path (a.name);
 
     // Heuristics.
     //
-    if (ext == ".iwd") return d / "iw4x" / p.filename ();
-    if (ext == ".ff")  return d / "zone" / "dlc" / p.filename ();
+    if (ext == ".iwd") return d / basegame_path (legacy_basegame_root) / p.filename ();
+    if (ext == ".ff")  return d / zone_path ("zone/dlc") / p.filename ();
 
     // ZIP archives usually extract in-place at the root.
     //
