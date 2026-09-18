@@ -12,6 +12,8 @@ jobs=
 owd="$(pwd)"
 prog="$0"
 
+cppget_repo="https://pkg.cppget.org/1/testing"
+
 glibc_compat_version="2.41"
 glibc_compat_header="$owd/etc/private/glibc-compat/glibc-$glibc_compat_version.h"
 glibc_compat_poption="-include$glibc_compat_header"
@@ -289,6 +291,11 @@ if ! test -d "$bdir"; then
 else
   diag "info: using existing build configuration in $bdir/"
 fi
+
+# The repository set belongs to the bpkg configuration.
+#
+run bpkg rep-add -d "$bdir" "$cppget_repo"
+run bpkg rep-fetch -d "$bdir"
 
 # Build
 #
