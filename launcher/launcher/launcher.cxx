@@ -1228,7 +1228,7 @@ try
 }
 catch (const cli::exception& ex)
 {
-  error ("CLI exception caught in main: {}", ex.what ());
+  cerr << "error: " << ex << endl;
   return 1;
 }
 catch (const exception& ex)
