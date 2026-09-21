@@ -379,6 +379,10 @@ namespace launcher
           file_type f;
           f.path = st.m_filename;
 
+          if (find (a.exclude.begin (), a.exclude.end (), f.path) !=
+              a.exclude.end ())
+            continue;
+
           fs::path out (resolve_path (f, d));
 
           if (out.has_parent_path ())
