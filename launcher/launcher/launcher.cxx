@@ -63,6 +63,9 @@ namespace launcher
     constexpr const char* cdn_manifest_url    = "https://cdn.iw4x.io/update.json";
     constexpr const char* cdn_base_url        = "https://cdn.iw4x.io/";
 
+    constexpr const char* client_x64_org      = "iw4x-x64";
+    constexpr const char* client_x64_repo     = "Releases";
+
     // Steam application ID for the game (Call of Duty: Modern Warfare 2).
     //
     constexpr std::uint32_t steam_app_id = 10190;
@@ -690,6 +693,95 @@ namespace launcher
     cc.stamp (component_type::client, rel.tag_name);
   }
 
+  void
+  prune_client_x64 (cache_coordinator& cc, const string& tag)
+  {
+    for (const auto& f : cc.database ().files (component_type::client_x64))
+    {
+      if (f.version () == tag)
+        continue;
+
+      path p (from_utf8 (f.path ()));
+
+      error_code ec;
+      remove (p, ec);
+
+      if (ec)
+        warning ("failed to remove stale x64 client file {}: {}",
+                 f.path (),
+                 to_utf8_system_message (ec.message ()));
+      else
+        trace_l2 ("removed stale x64 client file: {}", f.path ());
+
+      cc.forget (p);
+    }
+  }
+
+  asio::awaitable<void>
+  sync_client_x64 (asio::io_context& io,
+                   github_coordinator& gh,
+                   download_coordinator& dc,
+                   progress_coordinator& pc,
+                   cache_coordinator& cc,
+                   const path& root,
+                   bool pre)
+  {
+    info ("synchronizing x64 client component...");
+
+    constexpr component_type comp (component_type::client_x64);
+
+    auto rel (co_await gh.fetch_latest_release (client_x64_org,
+                                                client_x64_repo,
+                                                pre));
+
+    bool out (cc.outdated (comp, rel.tag_name));
+
+    if (!out)
+    {
+      auto s (cc.audit (comp));
+
+      bool ok (!s.empty () &&
+               ranges::all_of (s | views::values, [] (auto st) {
+                 return st == file_state::valid; }));
+
+      if (ok)
+      {
+        info ("x64 client components are valid and up to date");
+        co_return;
+      }
+
+      warning ("x64 client physical audit failed, forcing reconcile");
+    }
+
+    auto it (ranges::find_if (rel.assets, [] (const auto& a)
+    {
+      return from_utf8 (a.name).extension () == ".zip";
+    }));
+
+    if (it == rel.assets.end ())
+      throw runtime_error ("x64 client release " + rel.tag_name +
+                           " carries no archive asset");
+
+    manifest m;
+
+    manifest_archive a;
+
+    a.name = it->name;
+    a.url = it->browser_download_url;
+    a.size = it->size;
+
+    a.exclude.push_back ("Unlinker.exe");
+
+    m.archives.push_back (std::move (a));
+
+    auto p (cc.plan (m, comp, rel.tag_name));
+
+    co_await execute_plan (io, dc, pc, cc, p, m, root);
+
+    prune_client_x64 (cc, rel.tag_name);
+    cc.stamp (comp, rel.tag_name);
+  }
+
   // Synchronize the rawfiles repository.
   //
   asio::awaitable<void>
@@ -1215,6 +1307,8 @@ try
       [&io, &gh, &hc, &dc, &pc, &cc, &root, &opt] () -> asio::awaitable<void>
     {
       co_await sync_client (io, gh, dc, pc, cc, root, opt.prerelease ());
+      co_await sync_client_x64 (io, gh, dc, pc, cc, root, true);
+
       co_await sync_rawfiles (io, gh, dc, pc, cc, root, opt.prerelease ());
       co_await sync_dlc (io, hc, dc, pc, cc, root);
 

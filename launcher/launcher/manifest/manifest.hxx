@@ -106,6 +106,8 @@ namespace launcher
     compression_type compression;
     std::vector<manifest_file> files;
 
+    std::vector<std::string> exclude;
+
     manifest_archive ()
       : size (0), compression (compression_type::none) {}
 

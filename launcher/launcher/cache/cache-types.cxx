@@ -39,6 +39,7 @@ namespace launcher
       case component_type::dlc:      return o << "dlc";
       case component_type::helper:   return o << "helper";
       case component_type::launcher: return o << "launcher";
+      case component_type::client_x64: return o << "client-x64";
     }
 
     return o;

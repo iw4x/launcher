@@ -40,7 +40,8 @@ namespace launcher
     rawfiles, // Content data.
     dlc,      // Zone files (external).
     helper,   // Platform-specific helpers (e.g., Steam integration).
-    launcher  // Our own executable.
+    launcher, // Our own executable.
+    client_x64
   };
 
   std::ostream&
