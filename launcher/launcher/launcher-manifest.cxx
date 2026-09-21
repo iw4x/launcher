@@ -263,7 +263,7 @@ namespace launcher
   // Extraction.
   //
 
-  asio::awaitable<void> manifest_coordinator::
+  asio::awaitable<vector<fs::path>> manifest_coordinator::
   extract_archive (const archive_type& a,
                    const fs::path& ap,
                    const fs::path& d)
@@ -276,6 +276,8 @@ namespace launcher
 
     if (!mz_zip_reader_init_file (&z, ap.string ().c_str (), 0))
       throw runtime_error ("failed to open archive: " + ap.string ());
+
+    vector<fs::path> r;
 
     try
     {
@@ -312,6 +314,8 @@ namespace launcher
           {
             throw runtime_error ("failed to extract file: " + f.path);
           }
+
+          r.push_back (move (out));
         }
       }
       else
@@ -350,6 +354,8 @@ namespace launcher
             throw runtime_error ("failed to extract file: " +
                                  string (st.m_filename));
           }
+
+          r.push_back (move (out));
         }
       }
 
@@ -363,7 +369,7 @@ namespace launcher
       throw;
     }
 
-    co_return;
+    co_return r;
   }
 
   // Metrics.
