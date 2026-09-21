@@ -406,7 +406,7 @@ namespace launcher
         //
         for (const auto& f : a.files)
         {
-          fs::path p (root_ / f.path);
+          fs::path p (path (f));
           string k (key (p));
           auto it (cm.find (k));
 
