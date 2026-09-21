@@ -22,7 +22,7 @@
 
 #include <boost/process.hpp>
 
-#include <launcher/arch/arch-types.hxx>
+#include <launcher/arch/arch.hxx>
 
 #include <launcher/launcher-cache.hxx>
 #include <launcher/launcher-download.hxx>
@@ -230,6 +230,35 @@ namespace launcher
         coord.discovery ().set_progress_callback (callback);
       else
         coord.set_progress_callback (callback);
+    }
+
+    optional<architecture>
+    resolve_architecture (const options& opt)
+    {
+      if (opt.arch_specified ())
+      {
+        info ("client selected on the command line: {}",
+              to_string (opt.arch ()));
+
+        return opt.arch ();
+      }
+
+      if (!interactive ())
+      {
+        warning ("no terminal to prompt on, assuming the {} client",
+                 to_string (architecture::x86));
+
+        return architecture::x86;
+      }
+
+      optional<architecture> a (prompt_architecture ());
+
+      if (a)
+        info ("client selected at the prompt: {}", to_string (*a));
+      else
+        info ("launch cancelled at the client prompt");
+
+      return a;
     }
 
     void
@@ -1344,9 +1373,14 @@ try
   string exe (opt.game_exe ());
 
   if (exe.empty ())
-    exe = architecture_executable (opt.arch_specified ()
-                                   ? opt.arch ()
-                                   : architecture::x86);
+  {
+    optional<architecture> arch (resolve_architecture (opt));
+
+    if (!arch)
+      return 0;
+
+    exe = architecture_executable (*arch);
+  }
 
   exception_ptr exec_ex;
 
