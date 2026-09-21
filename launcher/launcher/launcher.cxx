@@ -511,6 +511,20 @@ namespace launcher
 
     info ("validating and applying staged files...");
 
+    unordered_map<string, const manifest_archive*> am;
+
+    for (const auto& a : md.archives)
+      am[to_utf8 (manifest_coordinator::resolve_path (a, ir))] = &a;
+
+    auto archive ([&am] (const dl_info& d) -> const manifest_archive*
+    {
+      if (d.dst.extension () != ".zip" && d.dst.extension () != ".ZIP")
+        return nullptr;
+
+      auto i (am.find (to_utf8 (d.dst)));
+      return i != am.end () ? i->second : nullptr;
+    });
+
     for (const auto& d : ds)
     {
       // Validate that the file actually ended up on disk and matches our
@@ -530,6 +544,9 @@ namespace launcher
         throw runtime_error ("downloaded file failed size validation: " +
                              to_utf8 (d.tmp));
       }
+
+      if (archive (d) != nullptr)
+        continue;
 
       if (d.dst.has_parent_path ())
       {
@@ -568,34 +585,22 @@ namespace launcher
       }
     }
 
-    unordered_map<string, const manifest_archive*> am;
-
-    for (const auto& a : md.archives)
-      am[to_utf8 (manifest_coordinator::resolve_path (a, ir))] = &a;
-
     for (const auto& d : ds)
     {
       // If the item is a zip file and matches a known archive in our manifest,
       // extract it directly into the root and track its contents.
       //
-      if (d.dst.extension () == ".zip" || d.dst.extension () == ".ZIP")
+      if (const manifest_archive* a = archive (d))
       {
-        auto i (am.find (to_utf8 (d.dst)));
+        info ("extracting downloaded archive: {}", to_utf8 (d.tmp));
 
-        if (i != am.end ())
-        {
-          info ("extracting downloaded archive: {}", to_utf8 (d.dst));
+        vector<path> efs (
+          co_await manifest_coordinator::extract_archive (*a, d.tmp, ir));
 
-          vector<path> efs (
-            co_await manifest_coordinator::extract_archive (*i->second,
-                                                            d.dst,
-                                                            ir));
+        cc.track (efs, d.comp, d.ver);
+        remove (d.tmp, e);
 
-          cc.track (efs, d.comp, d.ver);
-          remove (d.dst, e);
-
-          continue;
-        }
+        continue;
       }
 
       cc.track (to_utf8 (d.dst), d.comp, d.ver, d.hash);
