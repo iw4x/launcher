@@ -198,6 +198,7 @@ if $develop
             --cli-namespace launcher::cli                              \
             --exclude-base                                          \
             --include-with-brackets                                 \
+            --cxx-prologue "#include <launcher/arch/arch-parsers.hxx>" \
             --output-suffix -options
 
   $cli $options --generate-dep --dep-file $t -o $d $path($<[0])

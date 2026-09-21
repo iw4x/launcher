@@ -6,6 +6,7 @@
 
 // Begin prologue.
 //
+#include <launcher/arch/arch-parsers.hxx>
 //
 // End prologue.
 
@@ -767,7 +768,9 @@ namespace launcher
     prerelease_ (),
     jobs_ (99),
     jobs_specified_ (false),
-    game_exe_ ("iw4x (x86).exe"),
+    arch_ (),
+    arch_specified_ (false),
+    game_exe_ (),
     game_exe_specified_ (false),
     game_args_ (),
     game_args_specified_ (false),
@@ -795,7 +798,9 @@ namespace launcher
     prerelease_ (),
     jobs_ (99),
     jobs_specified_ (false),
-    game_exe_ ("iw4x (x86).exe"),
+    arch_ (),
+    arch_specified_ (false),
+    game_exe_ (),
     game_exe_specified_ (false),
     game_args_ (),
     game_args_specified_ (false),
@@ -826,7 +831,9 @@ namespace launcher
     prerelease_ (),
     jobs_ (99),
     jobs_specified_ (false),
-    game_exe_ ("iw4x (x86).exe"),
+    arch_ (),
+    arch_specified_ (false),
+    game_exe_ (),
     game_exe_specified_ (false),
     game_args_ (),
     game_args_specified_ (false),
@@ -857,7 +864,9 @@ namespace launcher
     prerelease_ (),
     jobs_ (99),
     jobs_specified_ (false),
-    game_exe_ ("iw4x (x86).exe"),
+    arch_ (),
+    arch_specified_ (false),
+    game_exe_ (),
     game_exe_specified_ (false),
     game_args_ (),
     game_args_specified_ (false),
@@ -890,7 +899,9 @@ namespace launcher
     prerelease_ (),
     jobs_ (99),
     jobs_specified_ (false),
-    game_exe_ ("iw4x (x86).exe"),
+    arch_ (),
+    arch_specified_ (false),
+    game_exe_ (),
     game_exe_specified_ (false),
     game_args_ (),
     game_args_specified_ (false),
@@ -919,7 +930,9 @@ namespace launcher
     prerelease_ (),
     jobs_ (99),
     jobs_specified_ (false),
-    game_exe_ ("iw4x (x86).exe"),
+    arch_ (),
+    arch_specified_ (false),
+    game_exe_ (),
     game_exe_specified_ (false),
     game_args_ (),
     game_args_specified_ (false),
@@ -953,6 +966,8 @@ namespace launcher
     os << "--prerelease          Opt-in to pre-release (beta) updates." << ::std::endl;
 
     os << "--jobs|-j <num>       The number of parallel download jobs to run." << ::std::endl;
+
+    os << "--arch <arch>         The IW4x client to launch, either x86 or x64." << ::std::endl;
 
     os << "--game-exe <file>     The game executable to launch." << ::std::endl;
 
@@ -1003,6 +1018,9 @@ namespace launcher
       _cli_options_map_["-j"] =
       &::launcher::cli::thunk< options, std::size_t, &options::jobs_,
         &options::jobs_specified_ >;
+      _cli_options_map_["--arch"] =
+      &::launcher::cli::thunk< options, launcher::architecture, &options::arch_,
+        &options::arch_specified_ >;
       _cli_options_map_["--game-exe"] =
       &::launcher::cli::thunk< options, std::string, &options::game_exe_,
         &options::game_exe_specified_ >;
