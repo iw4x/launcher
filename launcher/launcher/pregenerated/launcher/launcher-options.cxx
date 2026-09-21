@@ -778,6 +778,7 @@ namespace launcher
     no_self_update_ (),
     self_update_only_ (),
     skip_launch_ (),
+    no_shortcuts_ (),
     skip_remote_ (),
     proxy_ (),
     proxy_specified_ (false),
@@ -808,6 +809,7 @@ namespace launcher
     no_self_update_ (),
     self_update_only_ (),
     skip_launch_ (),
+    no_shortcuts_ (),
     skip_remote_ (),
     proxy_ (),
     proxy_specified_ (false),
@@ -841,6 +843,7 @@ namespace launcher
     no_self_update_ (),
     self_update_only_ (),
     skip_launch_ (),
+    no_shortcuts_ (),
     skip_remote_ (),
     proxy_ (),
     proxy_specified_ (false),
@@ -874,6 +877,7 @@ namespace launcher
     no_self_update_ (),
     self_update_only_ (),
     skip_launch_ (),
+    no_shortcuts_ (),
     skip_remote_ (),
     proxy_ (),
     proxy_specified_ (false),
@@ -909,6 +913,7 @@ namespace launcher
     no_self_update_ (),
     self_update_only_ (),
     skip_launch_ (),
+    no_shortcuts_ (),
     skip_remote_ (),
     proxy_ (),
     proxy_specified_ (false),
@@ -940,6 +945,7 @@ namespace launcher
     no_self_update_ (),
     self_update_only_ (),
     skip_launch_ (),
+    no_shortcuts_ (),
     skip_remote_ (),
     proxy_ (),
     proxy_specified_ (false),
@@ -981,6 +987,8 @@ namespace launcher
     os << "--self-update-only    Only check for and apply launcher updates, then exit." << ::std::endl;
 
     os << "--skip-launch         Skip launching the game after updating/installing." << ::std::endl;
+
+    os << "--no-shortcuts        Skip the shortcut refresh." << ::std::endl;
 
     os << "--skip-remote         Skip all remote checks and file reconciliation." << ::std::endl;
 
@@ -1035,6 +1043,8 @@ namespace launcher
       &::launcher::cli::thunk< options, &options::self_update_only_ >;
       _cli_options_map_["--skip-launch"] =
       &::launcher::cli::thunk< options, &options::skip_launch_ >;
+      _cli_options_map_["--no-shortcuts"] =
+      &::launcher::cli::thunk< options, &options::no_shortcuts_ >;
       _cli_options_map_["--skip-remote"] =
       &::launcher::cli::thunk< options, &options::skip_remote_ >;
       _cli_options_map_["--proxy"] =

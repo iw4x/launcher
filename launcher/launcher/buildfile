@@ -40,34 +40,40 @@ schemas = cache/cache-types
 #
 # (Maybe ask boris wtf is going on)
 #
-exe{iw4x-launcher-u}: libue{iw4x-launcher-u}: \
-  {hxx ixx txx cxx}{** -steam/steam-proton    \
-                       -launcher-steam-proton \
-                       -version               \
-                       -*-options             \
-                       -*-odb                 \
-                       -**.test...            \
+exe{iw4x-launcher-u}: libue{iw4x-launcher-u}:      \
+  {hxx ixx txx cxx}{** -steam/steam-proton         \
+                       -launcher-steam-proton      \
+                       -shortcut/shortcut-writer-* \
+                       -version                    \
+                       -*-options                  \
+                       -*-odb                      \
+                       -**.test...                 \
                        -pregenerated/**}
 
 exe{iw4x-launcher-u}: libue{iw4x-launcher-u}: {h c}{**}
 exe{iw4x-launcher-u}: libue{iw4x-launcher-u}: {hxx}{version}
 exe{iw4x-launcher-u}: libue{iw4x-launcher-u}: {hxx cxx}{steam/steam-proton}: include = ($tclass == 'linux')
 exe{iw4x-launcher-u}: libue{iw4x-launcher-u}: {hxx cxx}{launcher-steam-proton}: include = ($tclass == 'linux')
+exe{iw4x-launcher-u}: libue{iw4x-launcher-u}: cxx{shortcut/shortcut-writer-linux}: include = ($tclass == 'linux')
+exe{iw4x-launcher-u}: libue{iw4x-launcher-u}: cxx{shortcut/shortcut-writer-windows}: include = ($tclass == 'windows')
 exe{iw4x-launcher-u}: libue{iw4x-launcher-u}: $libs testscript
 
-./: exe{iw4x-launcher}:                            \
-      {hxx ixx txx cxx}{** -steam/steam-proton     \
-                            -launcher-steam-proton \
-                            -version               \
-                            -*-options             \
-                            -*-odb                 \
-                            -**.test...            \
+./: exe{iw4x-launcher}:                                 \
+      {hxx ixx txx cxx}{** -steam/steam-proton          \
+                            -launcher-steam-proton      \
+                            -shortcut/shortcut-writer-* \
+                            -version                    \
+                            -*-options                  \
+                            -*-odb                      \
+                            -**.test...                 \
                             -pregenerated/**}
 
 exe{iw4x-launcher}: {h c}{**}
 exe{iw4x-launcher}: {hxx}{version}
 exe{iw4x-launcher}: {hxx cxx}{steam/steam-proton}: include = ($tclass == 'linux')
 exe{iw4x-launcher}: {hxx cxx}{launcher-steam-proton}: include = ($tclass == 'linux')
+exe{iw4x-launcher}: cxx{shortcut/shortcut-writer-linux}: include = ($tclass == 'linux')
+exe{iw4x-launcher}: cxx{shortcut/shortcut-writer-windows}: include = ($tclass == 'windows')
 exe{iw4x-launcher}: $libs
 
 # Unit tests.
@@ -101,8 +107,14 @@ if ($develop)
 # On Windows, we need the advanced API library for registry access (used
 # for Steam path detection).
 #
-if ($tsys == 'win32-msvc')
-  cxx.libs += Advapi32.lib
+switch $tsys
+{
+  case 'win32-msvc'
+    cxx.libs += Advapi32.lib Ole32.lib Uuid.lib Shell32.lib
+
+  case 'mingw32'
+    cxx.libs += -ladvapi32 -lole32 -luuid -lshell32
+}
 
 # CLI Options Generation (Development vs. Consumption)
 #

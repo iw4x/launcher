@@ -378,6 +378,12 @@ namespace launcher
   }
 
   inline const bool& options::
+  no_shortcuts () const
+  {
+    return this->no_shortcuts_;
+  }
+
+  inline const bool& options::
   skip_remote () const
   {
     return this->skip_remote_;

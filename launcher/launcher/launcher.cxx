@@ -32,6 +32,7 @@
 #include <launcher/launcher-manifest.hxx>
 #include <launcher/launcher-options.hxx>
 #include <launcher/launcher-progress.hxx>
+#include <launcher/launcher-shortcut.hxx>
 #include <launcher/launcher-update.hxx>
 
 #ifdef __linux__
@@ -151,8 +152,8 @@ namespace launcher
       return s;
     }
 
-    void
-    reanchor_cwd ()
+    path
+    self_path ()
     {
       error_code ec;
 
@@ -167,7 +168,7 @@ namespace launcher
                             system_category (),
                             "GetModuleFileNameW failed");
 
-      fs::path p (wstring_view (b.data (), n));
+      path p (wstring_view (b.data (), n));
 #else
       path p (canonical ("/proc/self/exe", ec));
 
@@ -178,7 +179,15 @@ namespace launcher
       if (p.empty ())
         throw runtime_error ("executable path resolved to an empty string");
 
-      path d (p.parent_path ());
+      return p;
+    }
+
+    void
+    reanchor_cwd ()
+    {
+      error_code ec;
+
+      path d (self_path ().parent_path ());
       current_path (d, ec);
 
       if (ec)
@@ -1299,6 +1308,12 @@ try
       cache_database db (root);
       db.setting (scope_ver_key, current_ver);
     }
+  }
+
+  if (!opt.no_shortcuts ())
+  {
+    shortcut_coordinator sc (self_path (), root);
+    sc.refresh ();
   }
 
   migrate_client_executables (root);

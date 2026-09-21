@@ -20,6 +20,7 @@ namespace launcher
     struct http {};
     struct manifest {};
     struct progress {};
+    struct shortcut {};
     struct steam {};
     struct update {};
   }
@@ -74,6 +75,13 @@ namespace launcher
     struct policy<categories::progress>
     {
       static constexpr std::string_view name      = "progress";
+      static constexpr quill::LogLevel  threshold = quill::LogLevel::Info;
+    };
+
+    template <>
+    struct policy<categories::shortcut>
+    {
+      static constexpr std::string_view name      = "shortcut";
       static constexpr quill::LogLevel  threshold = quill::LogLevel::Info;
     };
 
