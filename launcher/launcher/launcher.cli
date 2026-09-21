@@ -2,6 +2,8 @@ include <cstdint>; // std::uint64_t
 include <string>;
 include <vector>;
 
+include <launcher/arch/arch-types.hxx>;
+
 namespace launcher
 {
   class options
@@ -37,10 +39,27 @@ namespace launcher
       "The number of parallel download jobs to run. Defaults to 99."
     };
 
-    std::string --game-exe = "iw4x (x86).exe"
+    launcher::architecture --arch
+    {
+      "<arch>",
+      "The IW4x client to launch, either \cb{x86} or \cb{x64}.
+
+       \cb{x86} is built around community-hosted dedicated servers. Each
+       server can have its own rules and mods. \cb{x64} is built around
+       matchmaking, with friends and parties available directly in the
+       client.
+
+       Both are installed next to each other regardless, so this only selects
+       which of the two to start. If it is not specified the launcher asks,
+       which is what the shortcuts it installs are for: each passes the
+       architecture it stands for."
+    };
+
+    std::string --game-exe
     {
       "<file>",
-      "The game executable to launch. Defaults to iw4x (x86).exe."
+      "The game executable to launch. Defaults to the executable belonging to
+       the selected \cb{--arch}."
     };
 
     std::vector<std::string> --game-args

@@ -317,6 +317,18 @@ namespace launcher
     return this->jobs_specified_;
   }
 
+  inline const launcher::architecture& options::
+  arch () const
+  {
+    return this->arch_;
+  }
+
+  inline bool options::
+  arch_specified () const
+  {
+    return this->arch_specified_;
+  }
+
   inline const std::string& options::
   game_exe () const
   {

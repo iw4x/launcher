@@ -433,6 +433,8 @@ namespace launcher
 
 #include <vector>
 
+#include <launcher/arch/arch-types.hxx>
+
 namespace launcher
 {
   class options
@@ -491,6 +493,12 @@ namespace launcher
 
     bool
     jobs_specified () const;
+
+    const launcher::architecture&
+    arch () const;
+
+    bool
+    arch_specified () const;
 
     const std::string&
     game_exe () const;
@@ -556,6 +564,8 @@ namespace launcher
     bool prerelease_;
     std::size_t jobs_;
     bool jobs_specified_;
+    launcher::architecture arch_;
+    bool arch_specified_;
     std::string game_exe_;
     bool game_exe_specified_;
     std::vector<std::string> game_args_;

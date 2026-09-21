@@ -1341,16 +1341,23 @@ try
     return 0;
   }
 
+  string exe (opt.game_exe ());
+
+  if (exe.empty ())
+    exe = architecture_executable (opt.arch_specified ()
+                                   ? opt.arch ()
+                                   : architecture::x86);
+
   exception_ptr exec_ex;
 
   asio::co_spawn (
     io,
-    [&io, &root, &opt] () -> asio::awaitable<void>
+    [&io, &root, &opt, &exe] () -> asio::awaitable<void>
   {
     co_await execute (
         io,
         root,
-        opt.game_exe (),
+        exe,
         opt.game_args (),
         opt.force_steam_runtime ());
 
