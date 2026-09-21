@@ -1095,12 +1095,14 @@ try
   // Check if launcher version changed, if so wipe local cache directory.
   //
   {
-    path cr (resolve_cache_root ());
-    cache_database db (cr);
-
     string current_ver (HELLO_VERSION_ID);
     string scope_ver_key ("launcher_version");
-    string saved_ver (db.setting_value (scope_ver_key));
+
+    string saved_ver;
+    {
+      cache_database db (root);
+      saved_ver = db.setting_value (scope_ver_key);
+    }
 
     if (saved_ver != current_ver)
     {
@@ -1129,8 +1131,8 @@ try
 
       // Re-open the database after potential wipe and save new version.
       //
-      cache_database db2 (cr);
-      db2.setting (scope_ver_key, current_ver);
+      cache_database db (root);
+      db.setting (scope_ver_key, current_ver);
     }
   }
 
