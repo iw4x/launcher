@@ -1,12 +1,15 @@
 #include <launcher/launcher-shortcut.hxx>
 
+#include <cstring>
 #include <exception>
+#include <fstream>
+#include <iterator>
 #include <string>
+#include <system_error>
 #include <utility>
 #include <vector>
 
 #include <launcher/launcher-log.hxx>
-#include <launcher/launcher-manifest.hxx>
 
 using namespace std;
 
@@ -39,6 +42,62 @@ namespace launcher
       shortcut_scope::desktop,
       shortcut_scope::menu
     };
+
+    const char* artwork_dir = "cache/shortcut";
+
+    void
+    write_image (const fs::path& p, artwork::image i)
+    {
+      {
+        ifstream is (p, ios::binary);
+
+        if (is)
+        {
+          string c ((istreambuf_iterator<char> (is)),
+                    istreambuf_iterator<char> ());
+
+          if (c.size () == i.size () &&
+              memcmp (c.data (), i.data (), i.size ()) == 0)
+            return;
+        }
+      }
+
+      error_code ec;
+
+      fs::create_directories (p.parent_path (), ec);
+
+      if (ec)
+        throw system_error (ec,
+                            "failed to create artwork directory: " +
+                              p.parent_path ().string ());
+
+      fs::path t (p);
+      t += ".new";
+
+      {
+        ofstream os (t, ios::binary | ios::trunc);
+
+        if (!os)
+          throw runtime_error ("failed to create " + t.string ());
+
+        os.write (reinterpret_cast<const char*> (i.data ()),
+                  static_cast<streamsize> (i.size ()));
+        os.flush ();
+
+        if (!os)
+          throw runtime_error ("failed to write " + t.string ());
+      }
+
+      fs::rename (t, p, ec);
+
+      if (ec)
+      {
+        error_code ic;
+        fs::remove (t, ic);
+
+        throw system_error (ec, "failed to install " + p.string ());
+      }
+    }
   }
 
   shortcut_coordinator::
@@ -61,13 +120,18 @@ namespace launcher
     s.arguments = {"--arch", string (to_string (a))};
     s.working_directory = root_;
 
+    fs::path d (root_ / artwork_dir);
+
+    s.image = d / (s.id + "-icon.png");
+    s.library.cover = d / (s.id + "-cover.png");
+    s.library.wide = d / (s.id + "-wide.png");
+    s.library.hero = d / (s.id + "-hero.png");
+    s.library.logo = d / (s.id + "-logo.png");
+
 #ifdef _WIN32
     s.icon = root_ / fs::path (architecture_executable (a));
 #else
-    manifest_file f;
-    f.path = "iw4x/images/icon.png";
-
-    s.icon = manifest_coordinator::resolve_path (f, root_);
+    s.icon = s.image;
 #endif
 
     return s;
@@ -80,7 +144,26 @@ namespace launcher
     ss.reserve (size (architectures));
 
     for (architecture a : architectures)
-      ss.push_back (spec (a));
+    {
+      shortcut_spec s (spec (a));
+
+      try
+      {
+        const artwork& w (artwork_for (a));
+
+        write_image (s.image, w.icon);
+        write_image (s.library.cover, w.cover);
+        write_image (s.library.wide, w.wide);
+        write_image (s.library.hero, w.hero);
+        write_image (s.library.logo, w.logo);
+      }
+      catch (const exception& e)
+      {
+        warning ("failed to write artwork for {}: {}", s.name, e.what ());
+      }
+
+      ss.push_back (std::move (s));
+    }
 
     for (const shortcut_spec& s : ss)
     {

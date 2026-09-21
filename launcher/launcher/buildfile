@@ -24,6 +24,13 @@ import libs += libquill%lib{quill}
 options = launcher-options
 schemas = cache/cache-types
 
+define png: hxx
+png{*}: extension = png
+
+png{*}: install = false
+
+artwork = shortcut/artwork/png{**}
+
 # HACK:
 #
 # We have a conflict between libue integration and our directory-anchored
@@ -75,6 +82,8 @@ exe{iw4x-launcher}: {hxx cxx}{launcher-steam-proton}: include = ($tclass == 'lin
 exe{iw4x-launcher}: cxx{shortcut/shortcut-writer-linux}: include = ($tclass == 'linux')
 exe{iw4x-launcher}: cxx{shortcut/shortcut-writer-windows}: include = ($tclass == 'windows')
 exe{iw4x-launcher}: $libs
+
+shortcut/obje{shortcut-artwork}: shortcut/cxx{shortcut-artwork} $artwork
 
 # Unit tests.
 #
