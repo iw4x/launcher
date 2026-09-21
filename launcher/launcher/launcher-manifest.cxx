@@ -13,6 +13,8 @@
 
 #include <miniz.h>
 
+#include <launcher/arch/arch-types.hxx>
+
 using namespace std;
 
 namespace launcher
@@ -116,6 +118,46 @@ namespace launcher
       return fs::path (
         basegame_root + s.substr (legacy_basegame_root.size ()));
     }
+
+    bool
+    same_name (const string& l, const string& r)
+    {
+      if (l.size () != r.size ())
+        return false;
+
+      for (size_t i (0); i != l.size (); ++i)
+      {
+        if (tolower (static_cast<unsigned char> (l[i])) !=
+            tolower (static_cast<unsigned char> (r[i])))
+          return false;
+      }
+
+      return true;
+    }
+
+    optional<string>
+    client_path (const string& p)
+    {
+      string s (p);
+      replace (s.begin (), s.end (), '\\', '/');
+
+      if (s.find ('/') != string::npos)
+        return nullopt;
+
+      for (architecture a : architectures)
+      {
+        if (same_name (s, string (architecture_executable (a))))
+          return s;
+      }
+
+      if (same_name (s, "iw4x.exe"))
+        return string (architecture_executable (architecture::x86));
+
+      if (same_name (s, "iw4mp.exe"))
+        return string (architecture_executable (architecture::x64));
+
+      return nullopt;
+    }
   }
 
   manifest_coordinator::manifest_type manifest_coordinator::
@@ -196,6 +238,9 @@ namespace launcher
     string ext (p.extension ().string ());
     transform (ext.begin (), ext.end (), ext.begin (),
                [] (unsigned char c) { return tolower (c); });
+
+    if (optional<string> c = client_path (f.path))
+      return d / *c;
 
     // Handle "codo/" remapping. This is a legacy artifact.
     //

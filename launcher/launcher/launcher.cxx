@@ -22,6 +22,8 @@
 
 #include <boost/process.hpp>
 
+#include <launcher/arch/arch-types.hxx>
+
 #include <launcher/launcher-cache.hxx>
 #include <launcher/launcher-download.hxx>
 #include <launcher/launcher-github.hxx>
@@ -225,6 +227,29 @@ namespace launcher
         coord.discovery ().set_progress_callback (callback);
       else
         coord.set_progress_callback (callback);
+    }
+
+    void
+    migrate_client_executables (const path& root)
+    {
+      path f (root / "iw4x.exe");
+      path t (root /
+              from_utf8 (architecture_executable (architecture::x86)));
+
+      error_code ec;
+
+      if (!exists (f, ec) || exists (t, ec))
+        return;
+
+      rename (f, t, ec);
+
+      if (ec)
+        warning ("failed to rename {} to {}: {}",
+                 to_utf8 (f),
+                 to_utf8 (t),
+                 to_utf8_system_message (ec.message ()));
+      else
+        info ("renamed {} to {}", to_utf8 (f), to_utf8 (t));
     }
   }
 
@@ -707,22 +732,43 @@ namespace launcher
 
     auto p (cc.plan (m, component_type::rawfiles, rel.tag_name));
 
+    unordered_map<string, const manifest_file*> fm;
+
+    for (const auto& f : m.files)
+      fm.emplace (to_utf8 (manifest_coordinator::resolve_path (f, root)), &f);
+
     for (auto& i : p | views::filter ([] (const auto& x) {
       return x.action == reconcile_action::download && x.url.empty (); }))
     {
-      string fn (to_utf8 (from_utf8 (i.path).filename ()));
+      auto fi (fm.find (i.path));
 
-      auto it (ranges::find_if (rel.assets, [&fn] (const auto& a) {
-        return a.name == fn; }));
+      string fn (fi != fm.end ()
+                 ? to_utf8 (from_utf8 (fi->second->path).filename ())
+                 : to_utf8 (from_utf8 (i.path).filename ()));
+
+      string an (fi != fm.end () && fi->second->asset_name
+                 ? *fi->second->asset_name
+                 : string ());
+
+      auto by_name ([&rel] (const string& n)
+      {
+        return ranges::find_if (rel.assets, [&n] (const auto& a)
+        {
+          return a.name == n;
+        });
+      });
+
+      auto it (an.empty () ? rel.assets.end () : by_name (an));
+
+      if (it == rel.assets.end ())
+        it = by_name (fn);
 
       if (it == rel.assets.end ())
       {
-        string asset_name = fn;
-        replace (asset_name.begin (), asset_name.end (), '.', '_');
-        asset_name = "__launcher_" + asset_name + ".bin";
+        string mn (fn);
+        replace (mn.begin (), mn.end (), '.', '_');
 
-        it = ranges::find_if (rel.assets, [&asset_name] (const auto& a) {
-          return a.name == asset_name; });
+        it = by_name ("__launcher_" + mn + ".bin");
       }
 
       if (it != rel.assets.end ())
@@ -1133,6 +1179,8 @@ try
       db.setting (scope_ver_key, current_ver);
     }
   }
+
+  migrate_client_executables (root);
 
   if (!opt.skip_remote ())
   {
