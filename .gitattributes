@@ -16,7 +16,7 @@
 
 # Use `binary` to make sure certain files are never auto-detected as text.
 #
-# *.png binary
+*.png binary
 
 # Use `linguist-generated` attribute to mark or unmark paths to be ignored for
 # the repository's language statistics and hidden by default in diffs.

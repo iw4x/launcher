@@ -33,5 +33,16 @@ namespace launcher
     fs::path working_directory;
 
     fs::path icon;
+    fs::path image;
+
+    struct library_artwork
+    {
+      fs::path cover;
+      fs::path wide;
+      fs::path hero;
+      fs::path logo;
+    };
+
+    library_artwork library;
   };
 }

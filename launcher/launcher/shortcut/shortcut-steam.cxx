@@ -176,6 +176,13 @@ namespace launcher
       return nullptr;
     }
 
+    uint32_t
+    entry_app_id (const vdf_object& e)
+    {
+      const int32_t* v (e.number (field_app_id));
+      return v != nullptr ? static_cast<uint32_t> (*v) : 0;
+    }
+
     struct steam_program
     {
       string file;
@@ -242,8 +249,92 @@ namespace launcher
       return !steam_shortcuts::running ();
     }
 
+    struct entry_id
+    {
+      const shortcut_spec* spec;
+      uint32_t app_id;
+    };
+
     bool
-    reconcile (vdf_object& l, const vector<shortcut_spec>& cs)
+    install_image (const fs::path& from, const fs::path& to, bool apply)
+    {
+      error_code ec;
+
+      if (from.empty () || !fs::exists (from, ec))
+        return false;
+
+      if (fs::exists (to, ec) &&
+          fs::file_size (from, ec) == fs::file_size (to, ec) &&
+          !ec)
+      {
+        ifstream a (from, ios::binary), b (to, ios::binary);
+
+        if (a && b)
+        {
+          string x ((istreambuf_iterator<char> (a)),
+                    istreambuf_iterator<char> ());
+          string y ((istreambuf_iterator<char> (b)),
+                    istreambuf_iterator<char> ());
+
+          if (x == y)
+            return false;
+        }
+      }
+
+      if (!apply)
+        return true;
+
+      fs::create_directories (to.parent_path (), ec);
+
+      if (ec)
+        throw system_error (ec,
+                            "failed to create " + to.parent_path ().string ());
+
+      fs::path t (to);
+      t += ".new";
+
+      fs::copy_file (from, t, fs::copy_options::overwrite_existing, ec);
+
+      if (ec)
+        throw system_error (ec, "failed to copy artwork to " + t.string ());
+
+      fs::rename (t, to, ec);
+
+      if (ec)
+      {
+        error_code ic;
+        fs::remove (t, ic);
+
+        throw system_error (ec, "failed to install " + to.string ());
+      }
+
+      return true;
+    }
+
+    bool
+    install_artwork (const fs::path& grid, const entry_id& e, bool apply)
+    {
+      if (e.app_id == 0)
+        return false;
+
+      std::string id (std::to_string (e.app_id));
+
+      const shortcut_spec& c (*e.spec);
+
+      bool r (false);
+
+      r |= install_image (c.library.wide, grid / (id + ".png"), apply);
+      r |= install_image (c.library.cover, grid / (id + "p.png"), apply);
+      r |= install_image (c.library.hero, grid / (id + "_hero.png"), apply);
+      r |= install_image (c.library.logo, grid / (id + "_logo.png"), apply);
+
+      return r;
+    }
+
+    bool
+    reconcile (vdf_object& l,
+               const vector<shortcut_spec>& cs,
+               vector<entry_id>& ids)
     {
       bool changed (false);
 
@@ -254,8 +345,8 @@ namespace launcher
         string opt (command_line (c.arguments));
 
         error_code ec;
-        string icon (!c.icon.empty () && fs::exists (c.icon, ec)
-                     ? c.icon.string ()
+        string icon (!c.image.empty () && fs::exists (c.image, ec)
+                     ? c.image.string ()
                      : string ());
 
         vdf_object* e (find_entry (l, c.name));
@@ -265,6 +356,7 @@ namespace launcher
           e = &l.set_object (next_key (l));
 
           e->set (field_app_id, steam_shortcuts::app_id (exe, c.name));
+          ids.push_back ({&c, entry_app_id (*e)});
           e->set (field_name, c.name);
           e->set (field_exe, exe);
           e->set (field_dir, dir);
@@ -305,6 +397,7 @@ namespace launcher
         if (!icon.empty ())
           correct (field_icon, icon);
 
+        ids.push_back ({&c, entry_app_id (*e)});
       }
 
       return changed;
@@ -439,10 +532,20 @@ namespace launcher
       if (l == nullptr)
         l = &doc.set_object (shortcuts_key);
 
-      bool changed (reconcile (*l, cs));
+      vector<entry_id> ids;
+
+      bool changed (reconcile (*l, cs, ids));
 
       if (changed && apply)
         write_file (p, doc.serialize ());
+
+      fs::path grid (p.parent_path () / "grid");
+
+      for (const entry_id& e : ids)
+      {
+        if (install_artwork (grid, e, apply))
+          changed = true;
+      }
 
       return changed;
     });
