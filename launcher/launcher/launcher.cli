@@ -37,10 +37,10 @@ namespace launcher
       "The number of parallel download jobs to run. Defaults to 99."
     };
 
-    std::string --game-exe = "iw4x.exe"
+    std::string --game-exe = "iw4x (x86).exe"
     {
       "<file>",
-      "The game executable to launch. Defaults to iw4x.exe."
+      "The game executable to launch. Defaults to iw4x (x86).exe."
     };
 
     std::vector<std::string> --game-args
