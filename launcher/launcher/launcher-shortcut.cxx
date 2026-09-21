@@ -107,5 +107,42 @@ namespace launcher
         }
       }
     }
+
+    try
+    {
+      steam_status t (steam_shortcuts::write (ss));
+
+      switch (t)
+      {
+      case steam_status::updated:
+        info ("updated steam library entries");
+        break;
+
+      case steam_status::restarted:
+        info ("updated steam library entries; steam was closed and "
+              "reopened, since it writes its own copy of the list out as "
+              "it exits and would otherwise have undone the change");
+        break;
+
+      case steam_status::running:
+        warning ("steam would not close, so its library entries were left "
+                 "alone; close steam and run the launcher again to add "
+                 "them");
+        break;
+
+      case steam_status::unreadable:
+        warning ("steam's shortcut list is in a form this launcher does not "
+                 "recognize and was left untouched");
+        break;
+
+      default:
+        trace_l2 ("steam library entries: {}", to_string (t));
+        break;
+      }
+    }
+    catch (const exception& e)
+    {
+      warning ("failed to update steam library entries: {}", e.what ());
+    }
   }
 }
