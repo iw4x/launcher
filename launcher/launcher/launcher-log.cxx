@@ -103,6 +103,12 @@ namespace launcher
                          pf,
                          log::policy<progress>::threshold);
 
+    log::detail::logger<shortcut> () =
+      register_category (string (log::policy<shortcut>::name),
+                         {cs, fs},
+                         pf,
+                         log::policy<shortcut>::threshold);
+
     log::detail::logger<steam> () =
       register_category (string (log::policy<steam>::name),
                          {fs},
@@ -127,6 +133,7 @@ namespace launcher
     log::detail::logger<http>     ()->set_log_level (LogLevel::TraceL3);
     log::detail::logger<manifest> ()->set_log_level (LogLevel::TraceL3);
     log::detail::logger<progress> ()->set_log_level (LogLevel::TraceL3);
+    log::detail::logger<shortcut> ()->set_log_level (LogLevel::TraceL3);
     log::detail::logger<steam>    ()->set_log_level (LogLevel::TraceL3);
     log::detail::logger<update>   ()->set_log_level (LogLevel::TraceL3);
 #endif
@@ -144,6 +151,7 @@ namespace launcher
     log::detail::logger<http>     () = nullptr;
     log::detail::logger<manifest> () = nullptr;
     log::detail::logger<progress> () = nullptr;
+    log::detail::logger<shortcut> () = nullptr;
     log::detail::logger<steam>    () = nullptr;
     log::detail::logger<update>   () = nullptr;
 
