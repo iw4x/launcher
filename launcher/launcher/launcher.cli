@@ -95,8 +95,9 @@ namespace launcher
     bool --no-shortcuts
     {
       "Skip the shortcut refresh. The launcher normally rewrites its desktop
-       and application menu entries on every run, so that they keep working
-       after the installation has been moved."
+       and application menu entries on every run, and adds both clients to
+       Steam's library as non-Steam games, so that they keep working after
+       the installation has been moved."
     };
 
     bool --skip-remote
