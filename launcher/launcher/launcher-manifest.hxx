@@ -74,7 +74,7 @@ namespace launcher
     //
     // Throws if extraction fails or if archive format is unsupported.
     //
-    static asio::awaitable<void>
+    static asio::awaitable<std::vector<fs::path>>
     extract_archive (const archive_type& archive,
                      const fs::path& archive_path,
                      const fs::path& install_dir);

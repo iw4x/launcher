@@ -585,18 +585,11 @@ namespace launcher
         if (i != am.end ())
         {
           info ("extracting downloaded archive: {}", to_utf8 (d.dst));
-          co_await manifest_coordinator::extract_archive (*i->second,
-                                                          d.dst,
-                                                          ir);
 
-          auto resolve_p ([&ir] (const auto& s)
-          {
-            return manifest_coordinator::resolve_path (s, ir);
-          });
-
-          vector<path> efs;
-          for (auto&& x : i->second->files | views::transform (resolve_p))
-            efs.push_back (std::move (x));
+          vector<path> efs (
+            co_await manifest_coordinator::extract_archive (*i->second,
+                                                            d.dst,
+                                                            ir));
 
           cc.track (efs, d.comp, d.ver);
           remove (d.dst, e);
