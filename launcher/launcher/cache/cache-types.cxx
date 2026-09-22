@@ -40,6 +40,7 @@ namespace launcher
       case component_type::helper:   return o << "helper";
       case component_type::launcher: return o << "launcher";
       case component_type::client_x64: return o << "client-x64";
+      case component_type::assets_x64: return o << "assets-x64";
     }
 
     return o;

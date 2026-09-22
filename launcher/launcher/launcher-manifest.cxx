@@ -32,8 +32,14 @@ namespace launcher
     // particular, conversion should never need to move something out of
     // the stock tree or put a converted file back into it.
     //
+    // The x64 client has a tree of its own next to it, "zone/iw4x/x64".
+    // Nothing is converted into that one: its fastfiles are built for
+    // that client and always arrive already spelled with their
+    // destination.
+    //
     //
     const string zone_root ("zone");
+    const string iw4x_zone_root ("zone/iw4x/");
     const string converted_root ("zone/iw4x/x86");
 
     // IW4x has a similar private place for the rest of its resources.
@@ -69,8 +75,15 @@ namespace launcher
       // mapped path through here for a second time does not grow
       // another "zone/iw4x/x86" prefix.
       //
-      if (s.compare (0, converted_root.size (), converted_root) == 0)
-        return fs::path (s);
+      // The same goes for the tree of any other architecture.
+      //
+      for (architecture a : architectures)
+      {
+        string r (iw4x_zone_root + string (to_string (a)));
+
+        if (s.compare (0, r.size (), r) == 0)
+          return fs::path (s);
+      }
 
       // At this point the caller has established that this is a path
       // under "zone". Keep everything following that root and hang it

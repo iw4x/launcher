@@ -66,6 +66,7 @@ namespace launcher
 
     constexpr const char* client_x64_org      = "iw4x-x64";
     constexpr const char* client_x64_repo     = "Releases";
+    constexpr const char* assets_x64_repo     = "assets";
 
     // Steam application ID for the game (Call of Duty: Modern Warfare 2).
     //
@@ -731,10 +732,16 @@ namespace launcher
     cc.stamp (component_type::client, rel.tag_name);
   }
 
+  // Remove the files of a component that were installed by a release
+  // other than the given one.
+  //
   void
-  prune_client_x64 (cache_coordinator& cc, const string& tag)
+  prune_component (cache_coordinator& cc,
+                   component_type comp,
+                   const string& what,
+                   const string& tag)
   {
-    for (const auto& f : cc.database ().files (component_type::client_x64))
+    for (const auto& f : cc.database ().files (comp))
     {
       if (f.version () == tag)
         continue;
@@ -745,32 +752,37 @@ namespace launcher
       remove (p, ec);
 
       if (ec)
-        warning ("failed to remove stale x64 client file {}: {}",
+        warning ("failed to remove stale {} file {}: {}",
+                 what,
                  f.path (),
                  to_utf8_system_message (ec.message ()));
       else
-        trace_l2 ("removed stale x64 client file: {}", f.path ());
+        trace_l2 ("removed stale {} file: {}", what, f.path ());
 
       cc.forget (p);
     }
   }
 
+  // Synchronize a component that is released as a single archive which
+  // extracts into the installation root.
+  //
   asio::awaitable<void>
-  sync_client_x64 (asio::io_context& io,
-                   github_coordinator& gh,
-                   download_coordinator& dc,
-                   progress_coordinator& pc,
-                   cache_coordinator& cc,
-                   const path& root,
-                   bool pre)
+  sync_archive_release (asio::io_context& io,
+                        github_coordinator& gh,
+                        download_coordinator& dc,
+                        progress_coordinator& pc,
+                        cache_coordinator& cc,
+                        const path& root,
+                        bool pre,
+                        component_type comp,
+                        const string& what,
+                        const string& org,
+                        const string& repo,
+                        vector<string> exclude = {})
   {
-    info ("synchronizing x64 client component...");
+    info ("synchronizing {} component...", what);
 
-    constexpr component_type comp (component_type::client_x64);
-
-    auto rel (co_await gh.fetch_latest_release (client_x64_org,
-                                                client_x64_repo,
-                                                pre));
+    auto rel (co_await gh.fetch_latest_release (org, repo, pre));
 
     bool out (cc.outdated (comp, rel.tag_name));
 
@@ -784,11 +796,11 @@ namespace launcher
 
       if (ok)
       {
-        info ("x64 client components are valid and up to date");
+        info ("{} components are valid and up to date", what);
         co_return;
       }
 
-      warning ("x64 client physical audit failed, forcing reconcile");
+      warning ("{} physical audit failed, forcing reconcile", what);
     }
 
     auto it (ranges::find_if (rel.assets, [] (const auto& a)
@@ -797,7 +809,7 @@ namespace launcher
     }));
 
     if (it == rel.assets.end ())
-      throw runtime_error ("x64 client release " + rel.tag_name +
+      throw runtime_error (what + " release " + rel.tag_name +
                            " carries no archive asset");
 
     manifest m;
@@ -807,8 +819,7 @@ namespace launcher
     a.name = it->name;
     a.url = it->browser_download_url;
     a.size = it->size;
-
-    a.exclude.push_back ("Unlinker.exe");
+    a.exclude = std::move (exclude);
 
     m.archives.push_back (std::move (a));
 
@@ -816,8 +827,44 @@ namespace launcher
 
     co_await execute_plan (io, dc, pc, cc, p, m, root);
 
-    prune_client_x64 (cc, rel.tag_name);
+    prune_component (cc, comp, what, rel.tag_name);
     cc.stamp (comp, rel.tag_name);
+  }
+
+  asio::awaitable<void>
+  sync_client_x64 (asio::io_context& io,
+                   github_coordinator& gh,
+                   download_coordinator& dc,
+                   progress_coordinator& pc,
+                   cache_coordinator& cc,
+                   const path& root,
+                   bool pre)
+  {
+    co_await sync_archive_release (io, gh, dc, pc, cc, root, pre,
+                                   component_type::client_x64,
+                                   "x64 client",
+                                   client_x64_org,
+                                   client_x64_repo,
+                                   {"Unlinker.exe"});
+  }
+
+  // Synchronize the fastfiles built for the x64 client. The release
+  // archive holds nothing but "zone/iw4x/x64", laid out as installed.
+  //
+  asio::awaitable<void>
+  sync_assets_x64 (asio::io_context& io,
+                   github_coordinator& gh,
+                   download_coordinator& dc,
+                   progress_coordinator& pc,
+                   cache_coordinator& cc,
+                   const path& root,
+                   bool pre)
+  {
+    co_await sync_archive_release (io, gh, dc, pc, cc, root, pre,
+                                   component_type::assets_x64,
+                                   "x64 assets",
+                                   client_x64_org,
+                                   assets_x64_repo);
   }
 
   // Synchronize the rawfiles repository.
@@ -1352,6 +1399,7 @@ try
     {
       co_await sync_client (io, gh, dc, pc, cc, root, opt.prerelease ());
       co_await sync_client_x64 (io, gh, dc, pc, cc, root, true);
+      co_await sync_assets_x64 (io, gh, dc, pc, cc, root, true);
 
       co_await sync_rawfiles (io, gh, dc, pc, cc, root, opt.prerelease ());
       co_await sync_dlc (io, hc, dc, pc, cc, root);
