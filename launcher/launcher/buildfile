@@ -24,12 +24,10 @@ import libs += libquill%lib{quill}
 options = launcher-options
 schemas = cache/cache-types
 
-define png: hxx
+define png: file
 png{*}: extension = png
 
 png{*}: install = false
-
-artwork = shortcut/artwork/png{**}
 
 # HACK:
 #
@@ -82,8 +80,6 @@ exe{iw4x-launcher}: {hxx cxx}{launcher-steam-proton}: include = ($tclass == 'lin
 exe{iw4x-launcher}: cxx{shortcut/shortcut-writer-linux}: include = ($tclass == 'linux')
 exe{iw4x-launcher}: cxx{shortcut/shortcut-writer-windows}: include = ($tclass == 'windows')
 exe{iw4x-launcher}: $libs
-
-shortcut/obje{shortcut-artwork}: shortcut/cxx{shortcut-artwork} $artwork
 
 # Unit tests.
 #
@@ -303,6 +299,61 @@ if $develop
   cp $h $dh
   cp $i $di
   cp $c $dc
+}}
+
+## Artwork
+#
+
+# Shortcut artwork is compiled into the launcher as byte arrays, one
+# header per image, each holding the xxd -i dump of that image.
+#
+# We used to #embed the images directly but not every compiler we build
+# with supports it. So instead we follow the same scheme as the CLI and
+# ODB output above: xxd only runs in the development build and its result
+# is copied to 'pregenerated/', which is what the consumption build uses.
+#
+shortcut/obje{shortcut-artwork}: shortcut/cxx{shortcut-artwork}
+
+for p: shortcut/artwork/png{*}
+{
+  n = $name($p)
+
+  shortcut/obje{shortcut-artwork}: shortcut/artwork/hxx{$n-png}: include = $develop
+
+  shortcut/artwork/hxx{$n-png}: shortcut/artwork/png{$n}
+  {
+    dist = ($develop ? $relative([dir_path] "pregenerated/launcher/shortcut/artwork", [dir_path] shortcut/artwork) : false)
+  }
+}
+
+hxx{~'/(.+)-png/'}: png{~'/\1/'}
+%
+if $develop
+{{
+  diag xxd ($<[0])
+
+  h = $path($>[0])
+
+  # Read the image from stdin so that xxd writes out just the array
+  # initializer, without naming a variable after the input path.
+  #
+  xxd -i <=$path($<[0]) >=$h
+
+  # If the result differs from the pregenerated version, copy it over.
+  #
+  d = [dir_path] $src_base/pregenerated/$leaf($directory($h), $out_root)
+  dh = $d/$leaf($h)
+
+  if test -f $dh && diff $dh $h >-
+  {
+    exit
+  }
+
+  # The pregenerated directory may not exist yet, the first time around.
+  # Note that we don't want either of these cleaned up afterwards.
+  #
+  mkdir --no-cleanup -p $d
+  cp --no-cleanup $h $dh
 }}
 
 #

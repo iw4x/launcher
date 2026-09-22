@@ -8,52 +8,52 @@ namespace launcher
   {
     constexpr unsigned char x86_icon_png[] =
     {
-#embed "artwork/x86-icon.png"
+#include <launcher/shortcut/artwork/x86-icon-png.hxx>
     };
 
     constexpr unsigned char x86_cover_png[] =
     {
-#embed "artwork/x86-cover.png"
+#include <launcher/shortcut/artwork/x86-cover-png.hxx>
     };
 
     constexpr unsigned char x86_wide_png[] =
     {
-#embed "artwork/x86-wide.png"
+#include <launcher/shortcut/artwork/x86-wide-png.hxx>
     };
 
     constexpr unsigned char x86_hero_png[] =
     {
-#embed "artwork/x86-hero.png"
+#include <launcher/shortcut/artwork/x86-hero-png.hxx>
     };
 
     constexpr unsigned char x86_logo_png[] =
     {
-#embed "artwork/x86-logo.png"
+#include <launcher/shortcut/artwork/x86-logo-png.hxx>
     };
 
     constexpr unsigned char x64_icon_png[] =
     {
-#embed "artwork/x64-icon.png"
+#include <launcher/shortcut/artwork/x64-icon-png.hxx>
     };
 
     constexpr unsigned char x64_cover_png[] =
     {
-#embed "artwork/x64-cover.png"
+#include <launcher/shortcut/artwork/x64-cover-png.hxx>
     };
 
     constexpr unsigned char x64_wide_png[] =
     {
-#embed "artwork/x64-wide.png"
+#include <launcher/shortcut/artwork/x64-wide-png.hxx>
     };
 
     constexpr unsigned char x64_hero_png[] =
     {
-#embed "artwork/x64-hero.png"
+#include <launcher/shortcut/artwork/x64-hero-png.hxx>
     };
 
     constexpr unsigned char x64_logo_png[] =
     {
-#embed "artwork/x64-logo.png"
+#include <launcher/shortcut/artwork/x64-logo-png.hxx>
     };
 
     constinit const artwork x86_artwork
