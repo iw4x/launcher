@@ -380,6 +380,29 @@ namespace launcher
       {
         mz_uint n (mz_zip_reader_get_num_files (&z));
 
+        // Some release archives wrap their contents in a top-level directory
+        // named after the archive itself (for example, libiw4x-X.Y.Z.zip
+        // holding libiw4x-X.Y.Z/).
+        //
+        // Note that we only strip a directory that matches the archive stem.
+        // Archives such as the x64 assets legitimately hold a single
+        // top-level directory ("zone/") that must be preserved.
+        //
+        string pfx (fs::path (a.name).stem ().string () + '/');
+
+        for (mz_uint i (0); i < n && !pfx.empty (); ++i)
+        {
+          mz_zip_archive_file_stat st;
+          if (!mz_zip_reader_file_stat (&z, i, &st))
+            throw runtime_error ("failed to read file stat from archive");
+
+          string s (st.m_filename);
+          replace (s.begin (), s.end (), '\\', '/');
+
+          if (s.compare (0, pfx.size (), pfx) != 0 && s + '/' != pfx)
+            pfx.clear ();
+        }
+
         for (mz_uint i (0); i < n; ++i)
         {
           mz_zip_archive_file_stat st;
@@ -391,6 +414,10 @@ namespace launcher
 
           file_type f;
           f.path = st.m_filename;
+          replace (f.path.begin (), f.path.end (), '\\', '/');
+
+          if (!pfx.empty ())
+            f.path.erase (0, pfx.size ());
 
           if (find (a.exclude.begin (), a.exclude.end (), f.path) !=
               a.exclude.end ())
