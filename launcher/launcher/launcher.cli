@@ -101,6 +101,11 @@ namespace launcher
        the installation has been moved."
     };
 
+    bool --no-connect-protocol
+    {
+      "Skip refreshing the iw4x:// protocol association."
+    };
+
     bool --skip-remote
     {
       "Skip all remote checks and file reconciliation. The launcher will

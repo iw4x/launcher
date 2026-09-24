@@ -528,6 +528,9 @@ namespace launcher
     no_shortcuts () const;
 
     const bool&
+    no_connect_protocol () const;
+
+    const bool&
     skip_remote () const;
 
     const std::string&
@@ -578,6 +581,7 @@ namespace launcher
     bool self_update_only_;
     bool skip_launch_;
     bool no_shortcuts_;
+    bool no_connect_protocol_;
     bool skip_remote_;
     std::string proxy_;
     bool proxy_specified_;

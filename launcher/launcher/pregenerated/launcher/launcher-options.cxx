@@ -779,6 +779,7 @@ namespace launcher
     self_update_only_ (),
     skip_launch_ (),
     no_shortcuts_ (),
+    no_connect_protocol_ (),
     skip_remote_ (),
     proxy_ (),
     proxy_specified_ (false),
@@ -810,6 +811,7 @@ namespace launcher
     self_update_only_ (),
     skip_launch_ (),
     no_shortcuts_ (),
+    no_connect_protocol_ (),
     skip_remote_ (),
     proxy_ (),
     proxy_specified_ (false),
@@ -844,6 +846,7 @@ namespace launcher
     self_update_only_ (),
     skip_launch_ (),
     no_shortcuts_ (),
+    no_connect_protocol_ (),
     skip_remote_ (),
     proxy_ (),
     proxy_specified_ (false),
@@ -878,6 +881,7 @@ namespace launcher
     self_update_only_ (),
     skip_launch_ (),
     no_shortcuts_ (),
+    no_connect_protocol_ (),
     skip_remote_ (),
     proxy_ (),
     proxy_specified_ (false),
@@ -914,6 +918,7 @@ namespace launcher
     self_update_only_ (),
     skip_launch_ (),
     no_shortcuts_ (),
+    no_connect_protocol_ (),
     skip_remote_ (),
     proxy_ (),
     proxy_specified_ (false),
@@ -946,6 +951,7 @@ namespace launcher
     self_update_only_ (),
     skip_launch_ (),
     no_shortcuts_ (),
+    no_connect_protocol_ (),
     skip_remote_ (),
     proxy_ (),
     proxy_specified_ (false),
@@ -990,6 +996,8 @@ namespace launcher
     os << "--skip-launch         Skip launching the game after updating/installing." << ::std::endl;
 
     os << "--no-shortcuts        Skip the shortcut refresh." << ::std::endl;
+
+    os << "--no-connect-protocol Skip refreshing the iw4x:// protocol association." << ::std::endl;
 
     os << "--skip-remote         Skip all remote checks and file reconciliation." << ::std::endl;
 
@@ -1046,6 +1054,8 @@ namespace launcher
       &::launcher::cli::thunk< options, &options::skip_launch_ >;
       _cli_options_map_["--no-shortcuts"] =
       &::launcher::cli::thunk< options, &options::no_shortcuts_ >;
+      _cli_options_map_["--no-connect-protocol"] =
+      &::launcher::cli::thunk< options, &options::no_connect_protocol_ >;
       _cli_options_map_["--skip-remote"] =
       &::launcher::cli::thunk< options, &options::skip_remote_ >;
       _cli_options_map_["--proxy"] =
