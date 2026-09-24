@@ -30,6 +30,10 @@
 #define GLIBC_COMPAT_SYMVER__(a,b)      __asm__(".symver " GLIBC_COMPAT_STR__(a) "," GLIBC_COMPAT_STR__(b))
 #endif
 
+#if defined(__x86_64__)
+  __asm__(".symver sqrtf, sqrtf@GLIBC_2.2.5");
+#endif
+
 GLIBC_COMPAT_SYMVER__(_Exit,_Exit@GLIBC_2.2.5);
 GLIBC_COMPAT_SYMVER__(_Fork,_Fork@GLIBC_2.34);
 GLIBC_COMPAT_SYMVER__(_IO_2_1_stderr_,_IO_2_1_stderr_@GLIBC_2.2.5);
