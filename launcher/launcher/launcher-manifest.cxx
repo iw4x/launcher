@@ -165,11 +165,12 @@ namespace launcher
 
       // Names the clients were published or installed under before.
       //
+      // Note that there is no such mapping for the IW4x (mm) client: it is
+      // only ever installed from its own release archive, which renames
+      // the executable it carries (see sync_client_x64()).
+      //
       if (same_name (s, "iw4x (x86).exe"))
         return string (architecture_executable (architecture::x86));
-
-      if (same_name (s, "iw4mp.exe") || same_name (s, "iw4x (x64).exe"))
-        return string (architecture_executable (architecture::x64));
 
       return nullopt;
     }
@@ -424,6 +425,15 @@ namespace launcher
           if (find (a.exclude.begin (), a.exclude.end (), f.path) !=
               a.exclude.end ())
             continue;
+
+          for (const auto& [from, to] : a.rename)
+          {
+            if (f.path == from)
+            {
+              f.path = to;
+              break;
+            }
+          }
 
           fs::path out (resolve_path (f, d));
 

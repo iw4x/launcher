@@ -5,6 +5,7 @@
 #include <filesystem>
 #include <functional>
 #include <string>
+#include <vector>
 
 #include <launcher/launcher-progress.hxx>
 #include <launcher/progress/progress.hxx>
@@ -125,10 +126,11 @@ namespace launcher
     asio::awaitable<update_result>
     install_update (const info_type& info);
 
-    // Restart the launcher to run the new version.
+    // Restart the launcher to run the new version, passing it the given
+    // arguments.
     //
     bool
-    restart ();
+    restart (const std::vector<std::string>& args);
 
     // Accessors.
     //
