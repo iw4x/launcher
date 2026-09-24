@@ -1412,9 +1412,6 @@ try
 
   migrate_client_executables (root);
 
-  refresh_connect_protocol (
-    root / from_utf8 (architecture_executable (architecture::x86)));
-
   if (!opt.skip_remote ())
   {
     // Build proxy-aware HTTP traits if --proxy was specified.
@@ -1475,6 +1472,12 @@ try
   else
   {
     info ("skipping remote checks and reconciliation (--skip-remote)");
+  }
+
+  if (!opt.no_connect_protocol ())
+  {
+    refresh_connect_protocol (
+      root / from_utf8 (architecture_executable (architecture::x86)));
   }
 
   if (opt.skip_launch ())

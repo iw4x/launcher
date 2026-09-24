@@ -15,6 +15,13 @@ namespace launcher
 #ifdef _WIN32
   namespace
   {
+    string
+    to_utf8 (const filesystem::path& p)
+    {
+      auto s (p.u8string ());
+      return string (s.begin (), s.end ());
+    }
+
     bool
     set_registry_string (const wchar_t* key_path,
                          const wchar_t* value_name,
@@ -66,7 +73,7 @@ namespace launcher
                            L"") &&
       set_registry_string (L"SOFTWARE\\Classes\\iw4x\\DefaultIcon",
                            nullptr,
-                           quoted + L",1") &&
+                           quoted + L",0") &&
       set_registry_string (L"SOFTWARE\\Classes\\iw4x\\shell\\open\\command",
                            nullptr,
                            quoted + L" \"%1\""));
@@ -74,7 +81,7 @@ namespace launcher
     if (r)
       log::trace_l2 (categories::launcher (),
                      "refreshed iw4x URL protocol association: {}",
-                     executable.string ());
+                     to_utf8 (executable));
     else
       log::warning (categories::launcher (),
                     "failed to refresh iw4x URL protocol association");

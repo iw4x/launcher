@@ -384,6 +384,12 @@ namespace launcher
   }
 
   inline const bool& options::
+  no_connect_protocol () const
+  {
+    return this->no_connect_protocol_;
+  }
+
+  inline const bool& options::
   skip_remote () const
   {
     return this->skip_remote_;
