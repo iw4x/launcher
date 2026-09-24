@@ -25,6 +25,7 @@
 #include <launcher/arch/arch.hxx>
 
 #include <launcher/launcher-cache.hxx>
+#include <launcher/launcher-connect-protocol.hxx>
 #include <launcher/launcher-download.hxx>
 #include <launcher/launcher-github.hxx>
 #include <launcher/launcher-http.hxx>
@@ -1410,6 +1411,9 @@ try
   }
 
   migrate_client_executables (root);
+
+  refresh_connect_protocol (
+    root / from_utf8 (architecture_executable (architecture::x86)));
 
   if (!opt.skip_remote ())
   {
