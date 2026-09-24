@@ -61,8 +61,8 @@ main ()
     assert (!architecture_executable (a).empty ());
   }
 
-  assert (architecture_executable (architecture::x86) !=
-          architecture_executable (architecture::x64));
+  assert (architecture_executable (architecture::x86) == "iw4x.exe");
+  assert (architecture_executable (architecture::x64) == "iw4x (mm).exe");
 
   assert (architecture_label (architecture::x86) !=
           architecture_label (architecture::x64));

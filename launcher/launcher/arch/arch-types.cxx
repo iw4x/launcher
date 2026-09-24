@@ -62,8 +62,8 @@ namespace launcher
   {
     switch (a)
     {
-      case architecture::x86: return "IW4x (x86)";
-      case architecture::x64: return "IW4x (x64)";
+      case architecture::x86: return "IW4x";
+      case architecture::x64: return "IW4x (mm)";
     }
 
     return "IW4x";
@@ -75,11 +75,11 @@ namespace launcher
     switch (a)
     {
     case architecture::x86:
-      return "IW4x (x86) is built around community-hosted dedicated servers. "
+      return "IW4x is built around community-hosted dedicated servers. "
              "Each server can have its own rules and mods.";
 
     case architecture::x64:
-      return "IW4x (x64) is built around matchmaking, with friends and "
+      return "IW4x (mm) is built around matchmaking, with friends and "
              "parties available directly in the client.";
     }
 
@@ -91,10 +91,10 @@ namespace launcher
   {
     switch (a)
     {
-      case architecture::x86: return "iw4x (x86).exe";
-      case architecture::x64: return "iw4x (x64).exe";
+      case architecture::x86: return "iw4x.exe";
+      case architecture::x64: return "iw4x (mm).exe";
     }
 
-    return "iw4x (x86).exe";
+    return "iw4x.exe";
   }
 }

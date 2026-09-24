@@ -42,10 +42,11 @@ namespace launcher
     launcher::architecture --arch
     {
       "<arch>",
-      "The IW4x client to launch, either \cb{x86} or \cb{x64}.
+      "The IW4x client to launch, either \cb{x86} for IW4x or \cb{x64} for
+       IW4x (mm).
 
-       \cb{x86} is built around community-hosted dedicated servers. Each
-       server can have its own rules and mods. \cb{x64} is built around
+       IW4x is built around community-hosted dedicated servers. Each server
+       can have its own rules and mods. IW4x (mm) is built around
        matchmaking, with friends and parties available directly in the
        client.
 
