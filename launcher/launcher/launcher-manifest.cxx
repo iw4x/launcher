@@ -163,10 +163,12 @@ namespace launcher
           return s;
       }
 
-      if (same_name (s, "iw4x.exe"))
+      // Names the clients were published or installed under before.
+      //
+      if (same_name (s, "iw4x (x86).exe"))
         return string (architecture_executable (architecture::x86));
 
-      if (same_name (s, "iw4mp.exe"))
+      if (same_name (s, "iw4mp.exe") || same_name (s, "iw4x (x64).exe"))
         return string (architecture_executable (architecture::x64));
 
       return nullopt;

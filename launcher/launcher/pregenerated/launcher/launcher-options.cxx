@@ -973,7 +973,8 @@ namespace launcher
 
     os << "--jobs|-j <num>       The number of parallel download jobs to run." << ::std::endl;
 
-    os << "--arch <arch>         The IW4x client to launch, either x86 or x64." << ::std::endl;
+    os << "--arch <arch>         The IW4x client to launch, either x86 for IW4x or x64 for" << ::std::endl
+       << "                      IW4x (mm)." << ::std::endl;
 
     os << "--game-exe <file>     The game executable to launch." << ::std::endl;
 

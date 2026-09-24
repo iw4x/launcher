@@ -12,9 +12,10 @@
 #
 # Plus the small icon Steam shows in lists, which is the rounded mark.
 #
-# The two clients get their own set, differing in the architecture they name
-# and in their accent colour. They sit side by side in the library and a
-# player has to be able to tell at a glance which is which.
+# The two clients get their own set, differing in their accent colour and in
+# the tag under the wordmark: IW4x has none, IW4x (mm) is tagged MM. They sit
+# side by side in the library and a player has to be able to tell at a glance
+# which is which.
 #
 # The results are committed under launcher/shortcut/artwork/ and embedded
 # into the launcher, so this is only run when the branding changes. From the
@@ -45,6 +46,13 @@ accent ()
   esac
 }
 
+tag ()
+{
+  case "$1" in
+    x64) echo 'MM' ;;
+  esac
+}
+
 GREENS='#89BD24 #86BC25'
 
 FONT="$B/BankGothic Bold.ttf"
@@ -60,8 +68,12 @@ recolour () # <in> <out> <accent>
 }
 
 for a in x86 x64; do
-  L=$(echo "$a" | tr '[:lower:]' '[:upper:]')
+  L=$(tag "$a")
   FG=$(accent "$a")
+
+  # Without a tag, render an empty label so the layout stays the same.
+  #
+  test -n "$L" || L=' '
 
   recolour "$B/iw4x-logo.svg"               mark.svg  "$FG"
   recolour "$B/iw4x-banner.svg"             word.svg  "$FG"

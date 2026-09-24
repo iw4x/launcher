@@ -272,11 +272,12 @@ namespace launcher
     }
 
     void
-    migrate_client_executables (const path& root)
+    migrate_client_executable (const path& root,
+                               const char* legacy,
+                               architecture a)
     {
-      path f (root / "iw4x.exe");
-      path t (root /
-              from_utf8 (architecture_executable (architecture::x86)));
+      path f (root / from_utf8 (legacy));
+      path t (root / from_utf8 (architecture_executable (a)));
 
       error_code ec;
 
@@ -292,6 +293,16 @@ namespace launcher
                  to_utf8_system_message (ec.message ()));
       else
         info ("renamed {} to {}", to_utf8 (f), to_utf8 (t));
+    }
+
+    // Earlier launchers installed the clients as "iw4x (x86).exe" and
+    // "iw4x (x64).exe". Move them to their current names.
+    //
+    void
+    migrate_client_executables (const path& root)
+    {
+      migrate_client_executable (root, "iw4x (x86).exe", architecture::x86);
+      migrate_client_executable (root, "iw4x (x64).exe", architecture::x64);
     }
   }
 
@@ -842,7 +853,7 @@ namespace launcher
   {
     co_await sync_archive_release (io, gh, dc, pc, cc, root, pre,
                                    component_type::client_x64,
-                                   "x64 client",
+                                   "IW4x (mm) client",
                                    client_x64_org,
                                    client_x64_repo,
                                    {"Unlinker.exe"});
@@ -862,7 +873,7 @@ namespace launcher
   {
     co_await sync_archive_release (io, gh, dc, pc, cc, root, pre,
                                    component_type::assets_x64,
-                                   "x64 assets",
+                                   "IW4x (mm) assets",
                                    client_x64_org,
                                    assets_x64_repo);
   }
