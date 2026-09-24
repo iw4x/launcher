@@ -229,7 +229,7 @@ namespace launcher
   }
 
   bool update_installer::
-  schedule_restart (const fs::path& n)
+  schedule_restart (const fs::path& n, const vector<string>& args)
   {
     launcher::log::info (categories::update{}, "scheduling restart into {}", n.string ());
 
@@ -257,7 +257,28 @@ namespace launcher
       ofstream os (s);
       os << "@echo off\n";
       os << "timeout /t 2 /nobreak > nul\n";
-      os << "start \"\" \"" << n.string () << "\"\n";
+      os << "start \"\" \"" << n.string () << "\"";
+
+      // Quote each argument and double any '%' so that cmd.exe does not
+      // expand it as a variable reference. Note that an argument that
+      // itself contains '"' cannot be passed through this way.
+      //
+      for (const string& a : args)
+      {
+        os << " \"";
+
+        for (char c : a)
+        {
+          if (c == '%')
+            os << '%';
+
+          os << c;
+        }
+
+        os << '"';
+      }
+
+      os << "\n";
       os << "del \"%~f0\"\n";
     }
 
@@ -310,15 +331,22 @@ namespace launcher
     }
 
     launcher::log::info (categories::update{}, "executing new binary: {}", n.string ());
-    // We assume the new binary takes no arguments for the restart.
-    //
-    execl (n.c_str (),
-           n.filename ().c_str (),
-           nullptr);
+    vector<char*> av;
+    av.reserve (args.size () + 2);
 
-    // If we return, execl failed.
+    string a0 (n.filename ().string ());
+    av.push_back (a0.data ());
+
+    for (const string& a : args)
+      av.push_back (const_cast<char*> (a.c_str ()));
+
+    av.push_back (nullptr);
+
+    execv (n.c_str (), av.data ());
+
+    // If we return, execv failed.
     //
-    launcher::log::error (categories::update{}, "execl failed, errno: {}", errno);
+    launcher::log::error (categories::update{}, "execv failed, errno: {}", errno);
     return false;
 #endif
   }

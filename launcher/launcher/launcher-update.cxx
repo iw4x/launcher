@@ -201,7 +201,7 @@ namespace launcher
   }
 
   bool update_coordinator::
-  restart ()
+  restart (const vector<string>& args)
   {
     // On some platforms (Windows), the installer might have moved the
     // currently running executable to a temporary location (e.g., .backup) to
@@ -220,7 +220,7 @@ namespace launcher
     state_ = update_state::restarting;
     report_progress (update_state::restarting, 0.0, "Restarting...");
 
-    return installer_.schedule_restart (t);
+    return installer_.schedule_restart (t, args);
   }
 
   update_state update_coordinator::

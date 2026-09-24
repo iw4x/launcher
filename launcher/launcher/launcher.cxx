@@ -334,11 +334,15 @@ namespace launcher
     return d;
   }
 
-  asio::awaitable<void>
+  // Return true if the new version was started and this process should
+  // exit.
+  //
+  asio::awaitable<bool>
   check_self_update (asio::io_context& io,
                       bool p,
                       bool o,
-                      progress_coordinator& pc)
+                      progress_coordinator& pc,
+                      const vector<string>& args)
   {
     info ("checking for launcher updates (prerelease: {}, update_only: {})",
           p,
@@ -358,7 +362,7 @@ namespace launcher
     if (s == update_status::up_to_date)
     {
       info ("launcher is up to date");
-      co_return;
+      co_return false;
     }
 
     info ("launcher update available, proceeding with installation");
@@ -374,7 +378,19 @@ namespace launcher
       throw runtime_error ("update failed to install: " + r.error_message);
 
     info ("restarting into new launcher version");
-    uc->restart ();
+
+    // Pass our arguments on. Otherwise, for example, a shortcut's --arch
+    // would be lost and the new launcher would fall back to the default
+    // client.
+    //
+    if (!uc->restart (args))
+    {
+      warning ("failed to restart into new launcher version, continuing "
+               "with this one");
+      co_return false;
+    }
+
+    co_return true;
   }
 
   asio::awaitable<void>
@@ -789,7 +805,8 @@ namespace launcher
                         const string& what,
                         const string& org,
                         const string& repo,
-                        vector<string> exclude = {})
+                        vector<string> exclude = {},
+                        vector<pair<string, string>> rename = {})
   {
     info ("synchronizing {} component...", what);
 
@@ -831,6 +848,7 @@ namespace launcher
     a.url = it->browser_download_url;
     a.size = it->size;
     a.exclude = std::move (exclude);
+    a.rename = std::move (rename);
 
     m.archives.push_back (std::move (a));
 
@@ -856,7 +874,14 @@ namespace launcher
                                    "IW4x (mm) client",
                                    client_x64_org,
                                    client_x64_repo,
-                                   {"Unlinker.exe"});
+                                   {"Unlinker.exe"},
+
+                                   // The archive carries the client as
+                                   // iw4mp.exe. Install it as IW4x (mm).
+                                   //
+                                   {{"iw4mp.exe",
+                                     string (architecture_executable (
+                                       architecture::x64))}});
   }
 
   // Synchronize the fastfiles built for the x64 client. The release
@@ -1273,17 +1298,23 @@ try
   {
     progress_coordinator pc (io);
     exception_ptr ex;
+    bool restarted (false);
 
-    asio::co_spawn (io,[&io, &opt, &pc] () -> asio::awaitable<void>
+    vector<string> args (argv + 1, argv + argc);
+
+    asio::co_spawn (io,
+                    [&io, &opt, &pc, &args, &restarted] ()
+                      -> asio::awaitable<void>
     {
       exception_ptr ep;
 
       try
       {
-        co_await check_self_update (io,
-                                    opt.prerelease (),
-                                    opt.self_update_only (),
-                                    pc);
+        restarted = co_await check_self_update (io,
+                                                opt.prerelease (),
+                                                opt.self_update_only (),
+                                                pc,
+                                                args);
       }
       catch (...)
       {
@@ -1304,7 +1335,9 @@ try
     if (ex)
       rethrow_exception (ex);
 
-    if (opt.self_update_only ())
+    // The new launcher carries on from here.
+    //
+    if (restarted || opt.self_update_only ())
       return 0;
   }
 

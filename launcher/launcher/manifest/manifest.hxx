@@ -108,6 +108,11 @@ namespace launcher
 
     std::vector<std::string> exclude;
 
+    // Files to install under another name, as pairs of the path in the
+    // archive and the path to install it as.
+    //
+    std::vector<std::pair<std::string, std::string>> rename;
+
     manifest_archive ()
       : size (0), compression (compression_type::none) {}
 

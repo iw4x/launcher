@@ -6,6 +6,7 @@
 #include <functional>
 #include <optional>
 #include <string>
+#include <vector>
 
 #include <launcher/download/download.hxx>
 #include <launcher/http/http.hxx>
@@ -106,8 +107,13 @@ namespace launcher
     // exec(), but on Windows we need to spawn a batch script to handle the
     // delay while this process dies.
     //
+    // The new launcher is started with the given arguments, normally the
+    // ones this process was started with, so that options such as --arch
+    // survive the update.
+    //
     bool
-    schedule_restart (const fs::path& new_launcher_path);
+    schedule_restart (const fs::path& new_launcher_path,
+                      const std::vector<std::string>& args);
 
     // Path.
     //
