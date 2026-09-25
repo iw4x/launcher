@@ -45,6 +45,21 @@ namespace launcher
 
     const char* artwork_dir = "cache/shortcut";
 
+    // Labels the shortcuts were installed under before the clients were
+    // renamed to IW4x and IW4x (mm).
+    //
+    vector<string>
+    legacy_labels (architecture a)
+    {
+      switch (a)
+      {
+        case architecture::x86: return {"IW4x (x86)"};
+        case architecture::x64: return {"IW4x (x64)"};
+      }
+
+      return {};
+    }
+
     void
     write_image (const fs::path& p, artwork::image i)
     {
@@ -115,6 +130,7 @@ namespace launcher
     s.id = "iw4x-" + string (to_string (a));
     s.name = architecture_label (a);
     s.comment = architecture_description (a);
+    s.legacy_names = legacy_labels (a);
 
     s.target = launcher_;
     s.arguments = {"--arch", string (to_string (a))};
