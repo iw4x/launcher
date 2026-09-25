@@ -28,6 +28,11 @@ namespace launcher
     std::string name;
     std::string comment;
 
+    // Names this shortcut was installed under by earlier launchers. Any
+    // shortcut still carrying one of them is stale and gets removed.
+    //
+    std::vector<std::string> legacy_names;
+
     fs::path target;
     std::vector<std::string> arguments;
     fs::path working_directory;
