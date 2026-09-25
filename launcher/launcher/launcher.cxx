@@ -869,19 +869,21 @@ namespace launcher
                    const path& root,
                    bool pre)
   {
+    // As it turn out, older GCC versions cannot lower braced
+    // initializer arguments in a co_await expression.
+    //
+    vector<string> exclude {"Unlinker.exe"};
+
+    vector<pair<string, string>> rename {
+      {"iw4mp.exe", string (architecture_executable (architecture::x64))}};
+
     co_await sync_archive_release (io, gh, dc, pc, cc, root, pre,
                                    component_type::client_x64,
                                    "IW4x (mm) client",
                                    client_x64_org,
                                    client_x64_repo,
-                                   {"Unlinker.exe"},
-
-                                   // The archive carries the client as
-                                   // iw4mp.exe. Install it as IW4x (mm).
-                                   //
-                                   {{"iw4mp.exe",
-                                     string (architecture_executable (
-                                       architecture::x64))}});
+                                   std::move (exclude),
+                                   std::move (rename));
   }
 
   // Synchronize the fastfiles built for the x64 client. The release
