@@ -2099,6 +2099,7 @@ GLIBC_COMPAT_SYMVER__(socketpair,socketpair@GLIBC_2.2.5);
 GLIBC_COMPAT_SYMVER__(splice,splice@GLIBC_2.5);
 GLIBC_COMPAT_SYMVER__(sprintf,sprintf@GLIBC_2.2.5);
 GLIBC_COMPAT_SYMVER__(sprofil,sprofil@GLIBC_2.2.5);
+GLIBC_COMPAT_SYMVER__(sqrtf,sqrtf@GLIBC_2.2.5);
 GLIBC_COMPAT_SYMVER__(srand,srand@GLIBC_2.2.5);
 GLIBC_COMPAT_SYMVER__(srand48,srand48@GLIBC_2.2.5);
 GLIBC_COMPAT_SYMVER__(srand48_r,srand48_r@GLIBC_2.2.5);
