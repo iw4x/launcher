@@ -76,6 +76,22 @@ namespace launcher
       return r;
     }
 
+    // The launch options of the entry for this shortcut.
+    //
+    // Note that we pass --no-shortcuts: the refresh may close and reopen
+    // Steam to update the entries, which, when Steam itself started us, is
+    // taking down our own parent. Steam then goes on to relaunch us and the
+    // whole thing repeats.
+    //
+    string
+    launch_options (const shortcut_spec& c)
+    {
+      vector<string> as (c.arguments);
+      as.push_back ("--no-shortcuts");
+
+      return command_line (as);
+    }
+
     optional<vector<char>>
     read_file (const fs::path& p)
     {
@@ -342,7 +358,7 @@ namespace launcher
       {
         string exe (quoted (c.target));
         string dir (directory (c.working_directory));
-        string opt (command_line (c.arguments));
+        string opt (launch_options (c));
 
         error_code ec;
         string icon (!c.image.empty () && fs::exists (c.image, ec)
