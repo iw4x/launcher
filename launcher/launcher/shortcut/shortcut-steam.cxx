@@ -348,11 +348,108 @@ namespace launcher
     }
 
     bool
-    reconcile (vdf_object& l,
-               const vector<shortcut_spec>& cs,
-               vector<entry_id>& ids)
+    remove_artwork (const fs::path& grid, uint32_t app_id, bool apply)
+    {
+      if (app_id == 0)
+        return false;
+
+      std::string id (std::to_string (app_id));
+
+      bool r (false);
+
+      for (const char* s : {".png", "p.png", "_hero.png", "_logo.png"})
+      {
+        fs::path p (grid / (id + s));
+
+        error_code ec;
+
+        if (!fs::exists (p, ec))
+          continue;
+
+        r = true;
+
+        if (apply && !fs::remove (p, ec) && ec)
+          throw system_error (ec, "failed to remove " + p.string ());
+      }
+
+      return r;
+    }
+
+    // Steam numbers the entries consecutively from 0. Restore that after
+    // some were removed.
+    //
+    void
+    renumber (vdf_object& l)
+    {
+      vector<vdf_object> es;
+
+      for (const string& k : l.keys ())
+      {
+        if (const vdf_object* e = l.object (k))
+        {
+          es.push_back (*e);
+          l.erase (k);
+        }
+      }
+
+      for (size_t i (0); i != es.size (); ++i)
+        l.set_object (std::to_string (i)) = std::move (es[i]);
+    }
+
+    // Remove the entries earlier launchers added under names the shortcuts
+    // no longer carry, returning their app ids in stale. We recognize ours
+    // by the launch options rather than the executable, in case the
+    // installation has moved since.
+    //
+    bool
+    retire (vdf_object& l,
+            const vector<shortcut_spec>& cs,
+            vector<uint32_t>& stale)
     {
       bool changed (false);
+
+      for (const shortcut_spec& c : cs)
+      {
+        // Earlier launchers did not pass --no-shortcuts, so recognize
+        // either.
+        //
+        string opt (launch_options (c));
+        string old (command_line (c.arguments));
+
+        for (const string& k : l.keys ())
+        {
+          const vdf_object* e (l.object (k));
+
+          if (e == nullptr)
+            continue;
+
+          const string* n (e->string (field_name));
+          const string* o (e->string (field_options));
+
+          if (n == nullptr || o == nullptr || (*o != opt && *o != old) ||
+              find (c.legacy_names.begin (), c.legacy_names.end (), *n) ==
+                c.legacy_names.end ())
+            continue;
+
+          stale.push_back (entry_app_id (*e));
+          l.erase (k);
+          changed = true;
+        }
+      }
+
+      if (changed)
+        renumber (l);
+
+      return changed;
+    }
+
+    bool
+    reconcile (vdf_object& l,
+               const vector<shortcut_spec>& cs,
+               vector<entry_id>& ids,
+               vector<uint32_t>& stale)
+    {
+      bool changed (retire (l, cs, stale));
 
       for (const shortcut_spec& c : cs)
       {
@@ -549,13 +646,20 @@ namespace launcher
         l = &doc.set_object (shortcuts_key);
 
       vector<entry_id> ids;
+      vector<uint32_t> stale;
 
-      bool changed (reconcile (*l, cs, ids));
+      bool changed (reconcile (*l, cs, ids, stale));
 
       if (changed && apply)
         write_file (p, doc.serialize ());
 
       fs::path grid (p.parent_path () / "grid");
+
+      for (uint32_t id : stale)
+      {
+        if (remove_artwork (grid, id, apply))
+          changed = true;
+      }
 
       for (const entry_id& e : ids)
       {
