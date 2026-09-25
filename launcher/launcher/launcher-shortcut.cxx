@@ -4,6 +4,7 @@
 #include <exception>
 #include <fstream>
 #include <iterator>
+#include <optional>
 #include <string>
 #include <system_error>
 #include <utility>
@@ -58,6 +59,41 @@ namespace launcher
       }
 
       return {};
+    }
+
+    // Remove the shortcuts left behind under legacy names. Return true if
+    // anything was removed.
+    //
+    // Note that where the location does not depend on the name (the Linux
+    // menu entries are named after the id), the legacy location is the
+    // current one and must be left alone.
+    //
+    bool
+    retire (const shortcut_spec& s, shortcut_scope c)
+    {
+      optional<fs::path> p (shortcut_writer::location (s, c));
+
+      bool r (false);
+
+      for (const string& n : s.legacy_names)
+      {
+        shortcut_spec o (s);
+        o.name = n;
+
+        optional<fs::path> l (shortcut_writer::location (o, c));
+
+        if (!l || l == p)
+          continue;
+
+        error_code ec;
+
+        if (fs::remove (*l, ec))
+          r = true;
+        else if (ec)
+          throw system_error (ec, "failed to remove " + l->string ());
+      }
+
+      return r;
     }
 
     void
@@ -187,6 +223,19 @@ namespace launcher
       {
         if (!shortcut_writer::supported (c))
           continue;
+
+        try
+        {
+          if (retire (s, c))
+            info ("removed stale {} shortcut for {}", to_string (c), s.name);
+        }
+        catch (const exception& e)
+        {
+          warning ("failed to remove stale {} shortcut for {}: {}",
+                   to_string (c),
+                   s.name,
+                   e.what ());
+        }
 
         try
         {
