@@ -1224,7 +1224,7 @@ namespace launcher
     for (const auto& a : args)
       wa.push_back (from_utf8 (a).wstring ());
 
-    process::spawn (bin.wstring (),
+    process::spawn (process::exe = bin.wstring (),
                     process::args (wa),
                     process::start_dir (root.wstring ()));
 
