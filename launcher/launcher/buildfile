@@ -104,7 +104,10 @@ hxx{version}: in{version} $src_root/manifest
 
 # Build options.
 #
-cc.poptions =+ "-I$out_root" "-I$src_root"
+# Backport the Boost 1.88 Asio config parser while Boost is pinned to 1.87.
+# This must precede dependency includes and apply to the unit tests as well.
+#
+cc.poptions =+ "-I($src_root/compat)" "-I$out_root" "-I$src_root"
 
 if ($develop)
   cxx.coptions =+ "-DLAUNCHER_DEVELOP"
