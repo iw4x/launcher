@@ -102,10 +102,11 @@ namespace launcher
 
     // Start Steam natively.
     //
-    // Attempts to launch the native Steam client.
+    // Attempts to launch the native Steam client, through the Companion
+    // launcher shipped in the game directory if there is one.
     //
     asio::awaitable<bool>
-    start_steam ();
+    start_steam (const fs::path& game_directory);
 
     // Access to underlying manager.
     //

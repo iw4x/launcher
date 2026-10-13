@@ -43,14 +43,18 @@ namespace launcher
     static std::vector<fs::path>
     lists (const fs::path& root);
 
+    // If Steam has to be restarted, then start it through the Companion
+    // launcher if specified and present (Linux only).
+    //
     static steam_status
-    write (const std::vector<shortcut_spec>&);
+    write (const std::vector<shortcut_spec>&,
+           const fs::path& companion = {});
 
     static bool
     shutdown (const fs::path& root);
 
     static bool
-    launch (const fs::path& root);
+    launch (const fs::path& root, const fs::path& companion = {});
 
     static std::int32_t
     app_id (const std::string& exe, const std::string& name);

@@ -1,5 +1,14 @@
 #include <launcher/launcher-steam-proton.hxx>
 
+#include <cerrno>
+#include <chrono>
+#include <cstdlib>
+
+#include <fcntl.h>
+#include <sys/file.h>
+#include <sys/stat.h>
+#include <unistd.h>
+
 #include <boost/asio/steady_timer.hpp>
 #include <boost/asio/use_awaitable.hpp>
 
@@ -13,6 +22,54 @@ using namespace std::chrono_literals;
 namespace launcher
 {
   namespace bp = boost::process;
+
+  namespace
+  {
+    // The Companion launcher that the rawfiles release ships in the game
+    // directory. It starts the native Steam client with the module that
+    // makes Steam friends see IW4x running under Proton as the game being
+    // played.
+    //
+    fs::path
+    companion_program (const fs::path& gd)
+    {
+      return gd / "linux" / "companion";
+    }
+
+    bool
+    companion_installed (const fs::path& gd)
+    {
+      error_code ec;
+      return fs::is_regular_file (companion_program (gd), ec);
+    }
+
+    // Return true if the Companion module is active in the running Steam
+    // client. The module holds an exclusive lock on its status file for as
+    // long as it runs, so a shared lock is only refused while it does. Anyone
+    // can create files in /dev/shm, so we only consider a regular file that
+    // we own.
+    //
+    bool
+    companion_active ()
+    {
+      string p ("/dev/shm/companion." + std::to_string (getuid ()));
+
+      int f (open (p.c_str (), O_RDONLY | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC));
+
+      if (f == -1)
+        return false;
+
+      struct stat s;
+      bool r (fstat (f, &s) == 0                 &&
+              S_ISREG (s.st_mode)                &&
+              s.st_uid == geteuid ()             &&
+              flock (f, LOCK_SH | LOCK_NB) != 0  &&
+              errno == EWOULDBLOCK);
+
+      close (f);
+      return r;
+    }
+  }
 
   proton_coordinator::
   proton_coordinator (asio::io_context& c, bool fsr)
@@ -221,6 +278,22 @@ namespace launcher
     fs::path gd (x.parent_path ());
     fs::path ld (fs::current_path ());
 
+    // The Steam client only loads the Companion module at startup. So unless
+    // it is already active, we (re)start Steam through Companion, which asks
+    // a running client to exit first. That is impossible if Steam itself
+    // started us (for example, through the library shortcut), since its
+    // shutdown would take us down with it.
+    //
+    if (companion_installed (gd) && !companion_active ())
+    {
+      if (getenv ("SteamGameId") != nullptr)
+        launcher::log::warning (categories::steam{},
+                                "steam started the launcher without companion, so steam friends will not see the game being played");
+      else if (!co_await start_steam (gd))
+        launcher::log::warning (categories::steam{},
+                                "failed to start steam with companion, steam friends will not see the game being played");
+    }
+
     bool r (co_await setup_for_launch (e, gd, ld));
 
     if (!r)
@@ -231,7 +304,7 @@ namespace launcher
         launcher::log::info (categories::steam{},
                              "steam is not running, attempting to start Steam");
 
-      if (!co_await start_steam ())
+      if (!co_await start_steam (gd))
       {
         launcher::log::warning (categories::steam{},
                                 "failed to start steam. launching anyway, steam features may not work");
@@ -266,29 +339,62 @@ namespace launcher
   }
 
   asio::awaitable<bool> proton_coordinator::
-  start_steam ()
+  start_steam (const fs::path& gd)
   {
+    bool c (companion_installed (gd));
+
     try
     {
       // We don't track the Steam process. Just kick it off detatched. Rely on
-      // the system PATH to find the binary.
+      // the system PATH to find the binary. Companion finds it the same way.
       //
-      bp::child c (
-        bp::search_path ("steam"),
-        bp::std_out > bp::null,
-        bp::std_err > bp::null);
+      bp::child p (
+        c
+        ? bp::child (companion_program (gd).string (),
+                     bp::args ({string ("--steam")}),
+                     bp::std_out > bp::null,
+                     bp::std_err > bp::null)
+        : bp::child (bp::search_path ("steam"),
+                     bp::std_out > bp::null,
+                     bp::std_err > bp::null));
 
-      c.detach ();
+      p.detach ();
 
       if (verbose_)
-        launcher::log::info (categories::steam{}, "steam started");
+        launcher::log::info (categories::steam{},
+                             c ? "steam started with companion" : "steam started");
 
-      // Yield briefly to give the process time to register the PID, though
-      // pipe creation usually takes longer (handled by caller).
+      if (!c)
+      {
+        // Yield briefly to give the process time to register the PID, though
+        // pipe creation usually takes longer (handled by caller).
+        //
+        asio::steady_timer t (ioc_, 3s);
+        co_await t.async_wait (asio::use_awaitable);
+
+        co_return true;
+      }
+
+      // Companion waits up to two minutes for a running client to exit
+      // before it starts it again with the module. Wait for the module to
+      // become active, allowing some more time for the client to start.
       //
-      asio::steady_timer t (ioc_, 3s);
-      co_await t.async_wait (asio::use_awaitable);
+      auto d (chrono::steady_clock::now () + 180s);
 
+      for (asio::steady_timer t (ioc_); !companion_active (); )
+      {
+        if (chrono::steady_clock::now () >= d)
+        {
+          launcher::log::error (categories::steam{},
+                                "companion did not become active in steam");
+          co_return false;
+        }
+
+        t.expires_after (500ms);
+        co_await t.async_wait (asio::use_awaitable);
+      }
+
+      launcher::log::info (categories::steam{}, "companion is active in steam");
       co_return true;
     }
     catch (const exception& ex)

@@ -595,15 +595,23 @@ namespace launcher
   }
 
   bool steam_shortcuts::
-  launch (const fs::path& r)
+  launch (const fs::path& r, const fs::path& c)
   {
     optional<steam_program> p (program (r));
+
+    // Companion preloads its module into the native client, which a Flatpak
+    // one is not.
+    //
+    error_code ec;
+
+    if (p && p->file != "flatpak" && !c.empty () && fs::is_regular_file (c, ec))
+      p = steam_program {c.string (), {"--steam"}};
 
     return p && run (*p);
   }
 
   steam_status steam_shortcuts::
-  write (const vector<shortcut_spec>& cs)
+  write (const vector<shortcut_spec>& cs, const fs::path& c)
   {
     optional<fs::path> r (root ());
 
@@ -692,14 +700,15 @@ namespace launcher
     struct relaunch
     {
       const fs::path& root;
+      const fs::path& companion;
       bool armed;
 
       ~relaunch ()
       {
         if (armed)
-          steam_shortcuts::launch (root);
+          steam_shortcuts::launch (root, companion);
       }
-    } guard {*r, restart};
+    } guard {*r, c, restart};
 
     unreadable = false;
 
