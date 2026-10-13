@@ -258,7 +258,12 @@ namespace launcher
 
     try
     {
+#ifdef _WIN32
       steam_status t (steam_shortcuts::write (ss));
+#else
+      steam_status t (
+        steam_shortcuts::write (ss, root_ / "linux" / "companion"));
+#endif
 
       switch (t)
       {
