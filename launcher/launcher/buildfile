@@ -21,6 +21,8 @@ import libs += libodb-sqlite%lib{odb-sqlite}
 
 import libs += libquill%lib{quill}
 
+import! [metadata] xxd = xxd%exe{xxd}
+
 options = launcher-options
 schemas = cache/cache-types
 
@@ -97,6 +99,26 @@ for t: cxx{**.test...}
   ./: $d/exe{$n}: $t $d/{hxx ixx txx}{+$n} $d/testscript{+$n}
   $d/exe{$n}: libue{iw4x-launcher-u}: bin.whole = false
 }
+
+# The manifest test extracts an archive that Info-ZIP created the way the
+# rawfiles release script creates its archives. We keep the archive as a
+# file, which zipinfo and unzip can inspect, and embed it into the test as
+# the xxd -i dump.
+#
+define zip: file
+zip{*}: extension = zip
+
+exe{launcher-manifest.test...}: hxx{launcher-manifest.test-zip...}
+
+hxx{launcher-manifest.test-zip...}: zip{launcher-manifest.test...} $xxd
+{{
+  diag xxd ($<[0])
+
+  # Read the archive from stdin so that xxd writes out just the array
+  # initializer, without naming a variable after the input path.
+  #
+  $xxd -i <=$path($<[0]) >=$path($>[0])
+}}
 
 # Version header generation.
 #
