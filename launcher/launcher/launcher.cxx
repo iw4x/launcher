@@ -351,7 +351,7 @@ namespace launcher
     //
     // On Windows a module that is loaded by some process cannot be removed
     // or overwritten but it can be renamed. Normally such a module belongs
-    // to the game and the user can simply exit it. But iw4x-steam64.dll is
+    // to the game and the user can simply exit it. But companion64.dll is
     // loaded by the game into the Steam client and stays there until Steam
     // exits. So we rename such a file into the retired directory and remove
     // it on a later run, once nothing has it loaded anymore (see
