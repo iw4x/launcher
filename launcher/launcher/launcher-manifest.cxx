@@ -174,6 +174,40 @@ namespace launcher
 
       return nullopt;
     }
+
+    // Restore the executable bits of an extracted file.
+    //
+    // miniz writes every file with the default permissions, which drops the
+    // executable bits that a script (such as linux/iw4x-steam in the
+    // rawfiles) has in the archive. An archive created on a POSIX system
+    // records the file mode in the upper half of the external attributes
+    // (the zip "made by" host 3), so we take the executable bits from there.
+    //
+    // Note that this is best effort: some filesystems (FAT, for example)
+    // don't support the bits, which is no reason to fail the extraction.
+    //
+    void
+    restore_executable (mz_zip_archive& z, mz_uint i, const fs::path& f)
+    {
+#ifndef _WIN32
+      mz_zip_archive_file_stat st;
+      if (!mz_zip_reader_file_stat (&z, i, &st) ||
+          (st.m_version_made_by >> 8) != 3)
+        return;
+
+      auto m (static_cast<fs::perms> ((st.m_external_attr >> 16) & 0111));
+
+      if (m == fs::perms::none)
+        return;
+
+      error_code ec;
+      fs::permissions (f, m, fs::perm_options::add, ec);
+#else
+      (void) z;
+      (void) i;
+      (void) f;
+#endif
+    }
   }
 
   manifest_coordinator::manifest_type manifest_coordinator::
@@ -376,6 +410,7 @@ namespace launcher
             throw runtime_error ("failed to extract file: " + f.path);
           }
 
+          restore_executable (z, static_cast<mz_uint> (idx), out);
           r.push_back (move (out));
         }
       }
@@ -456,6 +491,7 @@ namespace launcher
                                  string (st.m_filename));
           }
 
+          restore_executable (z, i, out);
           r.push_back (move (out));
         }
       }
