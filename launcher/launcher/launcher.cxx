@@ -4,6 +4,7 @@
 #endif
 
 #include <algorithm>
+#include <chrono>
 #include <cstdlib>
 #include <exception>
 #include <filesystem>
@@ -335,6 +336,98 @@ namespace launcher
     return d;
   }
 
+  namespace
+  {
+    // Return the directory of the files that were moved out of the way
+    // because they could not be removed (see retire_file()).
+    //
+    path
+    retired_directory ()
+    {
+      return resolve_cache_root () / "retired";
+    }
+
+    // Move a file that cannot be removed or overwritten out of the way.
+    //
+    // On Windows a module that is loaded by some process cannot be removed
+    // or overwritten but it can be renamed. Normally such a module belongs
+    // to the game and the user can simply exit it. But iw4x-steam64.dll is
+    // loaded by the game into the Steam client and stays there until Steam
+    // exits. So we rename such a file into the retired directory and remove
+    // it on a later run, once nothing has it loaded anymore (see
+    // remove_retired_files()).
+    //
+    // Note that the retired directory is in the cache which is in the
+    // installation root. So the rename is always within the same volume,
+    // which is what makes it work for a loaded module.
+    //
+    // Return true if the file was moved.
+    //
+    bool
+    retire_file (const path& f)
+    {
+      error_code ec;
+
+      path d (retired_directory ());
+      create_directories (d, ec);
+
+      if (ec)
+      {
+        warning ("failed to create retired directory {}: {}",
+                 to_utf8 (d),
+                 to_utf8_system_message (ec.message ()));
+        return false;
+      }
+
+      // An earlier copy of the same file may still be retired and in use,
+      // so make the name unique.
+      //
+      path t (d / (path_digest (f) + "_" +
+                   std::to_string (
+                     chrono::system_clock::now ().time_since_epoch ().count ()) +
+                   "_" + to_utf8 (f.filename ())));
+
+      rename (f, t, ec);
+
+      if (ec)
+      {
+        warning ("failed to retire {}: {}",
+                 to_utf8 (f),
+                 to_utf8_system_message (ec.message ()));
+        return false;
+      }
+
+      info ("retired {} which is in use by another process", to_utf8 (f));
+      return true;
+    }
+
+    // Remove the files retired by earlier runs. A file that is still in use
+    // stays for the next run.
+    //
+    void
+    remove_retired_files ()
+    {
+      path d (retired_directory ());
+      error_code ec;
+
+      if (!exists (d, ec))
+        return;
+
+      for (directory_iterator i (d, ec), e; !ec && i != e; i.increment (ec))
+      {
+        error_code rc;
+        remove (i->path (), rc);
+
+        if (rc)
+          trace_l2 ("retired file {} is still in use: {}",
+                    to_utf8 (i->path ()),
+                    to_utf8_system_message (rc.message ()));
+        else
+          trace_l2 ("removed retired file {}", to_utf8 (i->path ()));
+      }
+    }
+  }
+
   // Return true if the new version was started and this process should
   // exit.
   //
@@ -660,8 +753,11 @@ namespace launcher
                                 to_utf8 (pd));
       }
 
-      if (exists (d.dst))
-        remove (d.dst, e);
+      // If the existing file is in use, then move it out of the way. Without
+      // this both the rename and the copy below would fail.
+      //
+      if (exists (d.dst) && !remove (d.dst, e))
+        retire_file (d.dst);
 
       rename (d.tmp, d.dst, e);
 
@@ -1294,6 +1390,8 @@ try
   }
 
   active_logger = new logger;
+
+  remove_retired_files ();
 
   asio::io_context io;
 
