@@ -178,7 +178,7 @@ namespace launcher
     // Restore the executable bits of an extracted file.
     //
     // miniz writes every file with the default permissions, which drops the
-    // executable bits that a script (such as linux/iw4x-steam in the
+    // executable bits that a program (such as linux/companion in the
     // rawfiles) has in the archive. An archive created on a POSIX system
     // records the file mode in the upper half of the external attributes
     // (the zip "made by" host 3), so we take the executable bits from there.
