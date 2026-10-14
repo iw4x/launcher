@@ -17,3 +17,8 @@
 # Use `binary` to make sure certain files are never auto-detected as text.
 #
 #*.png binary
+
+# The identity register is a manifest list of people, with no room for the
+# SPDX header (see the headers tool).
+#
+identities -spdx
