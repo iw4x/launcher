@@ -1,2 +1,5 @@
 : 1
 location: launcher/
+
+:
+location: launcher-electron/

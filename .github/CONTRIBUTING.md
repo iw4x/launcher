@@ -22,10 +22,13 @@ to set up a build configuration. If you are new to build2, the
 [build2 toolchain introduction](https://build2.org/build2-toolchain/doc/build2-toolchain-intro.xhtml)
 explains the workflow.
 
-The repository holds one package, `launcher`, with its sources in
-`launcher/launcher/` and its tests in `launcher/tests/`. The command line
-parser is generated from `launcher/launcher/launcher.cli` by the development
-build, which `bdep init` configures by default and which keeps the copy in
+The repository holds two packages. The `launcher` package keeps the
+executable in `launcher/launcher/` and its tests in `launcher/tests/`, with
+the Node.js native addon in `launcher/node/`. The `launcher-electron` package
+is the desktop application that loads the addon, with its sources in
+`launcher-electron/`. The command line parser is generated from
+`launcher/launcher/launcher.cli` by the development build, which `bdep init`
+configures by default and which keeps the copy in
 `launcher/launcher/pregenerated/` up to date, together with the man page in
 `launcher/doc/pregenerated/`. Commit these copies together with the change to
 `launcher.cli`.

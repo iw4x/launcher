@@ -1,0 +1,20 @@
+: 1
+name: launcher-electron
+version: 0.1.0-a.0.z
+type: other
+language: typescript
+project: launcher
+summary: Desktop application for the IW4x launcher.
+license: other: GPL-3.0-only with IW4x Linking Exception 1.1
+topics: game, launcher, updater
+description-file: README.md
+changes-file: NEWS
+url: https://iw4x.io/projects/launcher/
+doc-url: https://iw4x.io/projects/launcher/doc/
+src-url: https://github.com/iw4x/launcher
+email: wroy@proton.me
+build-error-email: wroy@proton.me
+depends: * build2 >= 0.18.0
+depends: * bpkg >= 0.18.0
+depends: launcher == $
+builds: none ; Requires podman and network access.

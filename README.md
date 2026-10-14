@@ -4,8 +4,9 @@
 and on headless servers. It is in early development, and in this version it
 prints its usage and version.
 
-The repository holds one package, [`launcher`](launcher/README.md), the
-launcher executable.
+The repository holds two packages: [`launcher`](launcher/README.md), the
+launcher executable, and [`launcher-electron`](launcher-electron/README.md),
+the desktop application that loads it as a Node.js native addon.
 
 ## Usage
 
