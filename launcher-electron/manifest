@@ -9,8 +9,8 @@ license: other: GPL-3.0-only with IW4x Linking Exception 1.1
 topics: game, launcher, updater
 description-file: README.md
 changes-file: NEWS
-url: https://iw4x.io/projects/launcher/
-doc-url: https://iw4x.io/projects/launcher/doc/
+url: https://iw4x.io/
+doc-url: https://github.com/iw4x/launcher
 src-url: https://github.com/iw4x/launcher
 email: wroy@proton.me
 build-error-email: wroy@proton.me
