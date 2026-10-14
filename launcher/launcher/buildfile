@@ -3,10 +3,17 @@
 
 libs =
 
-./: exe{launcher}: {hxx ixx txx cxx}{** -version          \
-                                        -launcher-options \
-                                        -pregenerated/**} \
-                   hxx{version} $libs
+./: exe{launcher}: cxx{launcher} libul{launcher}
+
+# The executable is built from a utility library so that the Node addon (see
+# ../node/) can link the same objects, compiled for shared use, into itself.
+# Note that main() stays out of it since a utility library is linked whole.
+#
+libul{launcher}: {hxx ixx txx cxx}{** -launcher          \
+                                      -version           \
+                                      -launcher-options  \
+                                      -pregenerated/**}  \
+                 hxx{version} $libs
 
 # Target metadata, see also --build2-metadata in launcher.cxx.
 #
@@ -47,7 +54,7 @@ if ($cxx.target.system == 'mingw32' && $cxx.id == 'gcc')
 
 # Use pregenerated versions in the consumption build.
 #
-exe{launcher}: pregenerated/{hxx cxx}{**}: include = (!$develop)
+libul{launcher}: pregenerated/{hxx cxx}{**}: include = (!$develop)
 
 if! $develop
   cxx.poptions =+ "-I($src_base/pregenerated)" # Note: must come first.
@@ -62,7 +69,7 @@ pregenerated/{hxx cxx}{**}: dist = (!$develop)
 ## Development build ($develop == true).
 #
 
-exe{launcher}: {hxx cxx}{launcher-options}: include = $develop
+libul{launcher}: {hxx cxx}{launcher-options}: include = $develop
 
 if $develop
   import! [metadata] cli = cli%exe{cli}
