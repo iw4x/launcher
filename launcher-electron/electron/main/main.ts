@@ -20,6 +20,14 @@ interface addon
 const launcher = createRequire (import.meta.url) (
   join (process.resourcesPath, 'launcher.node')) as addon;
 
+// Chromium's Wayland platform has no Vulkan support, which WebGPU uses by
+// default on Linux. So have WebGPU use OpenGL ES there, the same as the
+// compositor.
+//
+if (process.platform === 'linux' &&
+    process.env['WAYLAND_DISPLAY'] !== undefined)
+  app.commandLine.appendSwitch ('use-webgpu-adapter', 'opengles');
+
 // Keep the window hidden until the renderer has painted, which avoids
 // showing a blank frame on startup.
 //
