@@ -16,6 +16,14 @@ const cache = process.env['electron_config_cache'];
 if (cache === undefined)
   throw new Error ('electron_config_cache environment variable is not set');
 
+// Numeric application version for the executable metadata (see buildfile).
+//
+const app_version = process.env['launcher_electron_app_version'];
+
+if (app_version === undefined)
+  throw new Error (
+    'launcher_electron_app_version environment variable is not set');
+
 // Note that ../out/ is out/ in our output directory (see buildfile).
 //
 const config: ForgeConfig =
@@ -27,6 +35,8 @@ const config: ForgeConfig =
     name: 'IW4x Launcher',
     executableName: 'iw4x-launcher',
     appBundleId: 'io.iw4x.launcher',
+    appVersion: app_version,
+    buildVersion: app_version,
     asar: true,
 
     // The packaging step has no network access, so take the Electron

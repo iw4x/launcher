@@ -143,6 +143,9 @@ file{bundle.stamp}: file{node-modules.stamp}                        \
 # Package the application for our target into out/. Note that Forge takes
 # the Electron archive from the cache (see forge.config.ts).
 #
+# Windows and Mac OS only accept numeric versions in the executable metadata,
+# so pass the version without the pre-release part.
+#
 import addon = launcher%libs{launcher-node}
 
 file{app.stamp}: file{bundle.stamp} $addon
@@ -153,8 +156,10 @@ file{app.stamp}: file{bundle.stamp} $addon
   rm -r -f $out_base/out
   cp --no-cleanup $path($<[1]) $stage/launcher.node
 
-  $run --network=none $image npx electron-forge package \
-    --platform=$platform --arch=$arch >-
+  v = "$version.major.$version.minor.$version.patch"
+
+  $run --network=none "--env=launcher_electron_app_version=$v" $image \
+    npx electron-forge package --platform=$platform --arch=$arch >-
 
   touch $path($>)
 }}
