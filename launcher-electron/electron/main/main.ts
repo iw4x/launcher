@@ -24,8 +24,8 @@ const launcher = createRequire (import.meta.url) (
 
 // Keep the window hidden until the renderer has painted, which avoids
 // showing a blank frame on startup. Note that the window background is the
-// surface role (see material/build/color.ts), which it shows when resized
-// faster than the renderer paints.
+// surface role (see material/build/color.ts) so that the areas the renderer
+// hasn't painted yet match the page.
 //
 // The window is frameless with the renderer drawing its title bar (see
 // renderer.css).

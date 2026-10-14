@@ -50,8 +50,8 @@ color_css (): string
 }
 
 // Return the module with the colors that the main process needs, since it
-// cannot read the stylesheet. Currently this is the surface role, which the
-// window shows until the renderer paints.
+// cannot read the stylesheet. Currently this is the surface role for the
+// window background (see electron/main/main.ts).
 //
 export function
 color_ts (): string

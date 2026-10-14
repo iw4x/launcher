@@ -8,10 +8,10 @@
     file{app.stamp}
 
 # The JavaScript tools only ever run in a container built from Containerfile,
-# without capabilities and on a read-only root file system. The container
-# only sees our output directory, mounted at /out, so each step copies its
-# inputs into stage/ and runs its tool there. Note that the tools keep their
-# caches in cache/.
+# without capabilities and on a read-only root file system. The one host
+# directory that the container sees is our output directory (mounted at
+# /out), so each step copies its inputs into stage/ and runs its tool there.
+# Note that the tools keep their caches in cache/.
 #
 podman = $config.launcher_electron.podman
 image  = localhost/launcher-electron
@@ -65,8 +65,8 @@ file{image.stamp}: file{Containerfile}
   touch $path($>)
 }}
 
-# Substitute the package version, which npm requires to be a semantic
-# version (as the project version is).
+# Substitute the project version (the version without the epoch and
+# revision) as the package version since npm requires a semantic version.
 #
 file{package.json}:      in{package.json.in}
 file{package-lock.json}: in{package-lock.json.in}

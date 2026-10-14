@@ -68,8 +68,9 @@ const config: ForgeConfig =
   plugins:
   [
     // Restrict the packaged application to its own integrity-checked
-    // archive. Note that it also rejects Node.js options from the
-    // environment and the command line.
+    // archive and reject Node.js options from the environment and the
+    // command line. Note that we also disable running as Node.js and
+    // encrypt cookies at rest.
     //
     new FusesPlugin (
     {
