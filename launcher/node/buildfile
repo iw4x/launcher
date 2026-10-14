@@ -1,105 +1,144 @@
 # Copyright (c) the IW4x authors (see the AUTHORS file).
 # SPDX-License-Identifier: GPL-3.0-only WITH AdditionRef-IW4x-Exception-1.1
 
-# Node.js native addon that launcher-electron loads into its main process.
-#
 include ../launcher/
 
+# We need the Node-API module definition file from the dependency's metadata
+# (see below), so we import it immediately.
+#
 import! [metadata, rule_hint=cxx.link] \
   libs = libnode-api-headers%lib{node-api-headers}
 
 tclass = $cxx.target.class
 tsys   = $cxx.target.system
 
-windows = ($tclass == 'windows')
-mingw   = ($tsys == 'mingw32')
-msvc    = ($windows && !$mingw) # MSVC or Clang targeting MSVC.
+windows      = ($tclass == 'windows')
+mingw        = ($tsys == 'mingw32')
+msvc_runtime = ($tsys == 'win32-msvc')
 
-# Node.js can only load an addon from a shared library, so that is all we
-# build.
+# The Node.js addon that the desktop application loads. We only ever load
+# it at run time, so it is a shared library and nothing else. It links the
+# launcher's objects from the utility library that the executable is built
+# from (see ../launcher/).
 #
-libs{launcher-node}: cxx{** -delay-load-windows} ../launcher/hxx{version} \
-                     $libs
+libs{launcher-node}: cxx{** -delay-load-windows} \
+                     ../launcher/libul{launcher} $libs
 
+# The delay-load hook is only needed on Windows (see below).
+#
 libs{launcher-node}: cxx{delay-load-windows}: include = $windows
 
-# Note that the addon has no use outside of the launcher-electron
-# application package, which takes it from our output directory.
+# Don't install the addon. It has no use outside of the desktop
+# application, which is to ship it as part of its own package.
 #
 libs{launcher-node}: install = false
 
 # Build options.
 #
+# The utility library doesn't export any options, so we specify the include
+# directories ourselves, the same way ../launcher/buildfile does.
+#
 cxx.poptions =+ "-I$out_root" "-I$src_root"
 
-# Electron 44 embeds Node.js 24, which provides Node-API version 10.
-#
-# NOTE: remember to update this when upgrading Electron in
-#       launcher-electron/package.json.
+# Build against Node-API version 10, which Node.js 24, embedded by the
+# Electron 44 that launcher-electron uses, provides.
 #
 cxx.poptions += -DNAPI_VERSION=10
 
-# Node-API import library.
+# The Node-API functions come from the process that loads the addon. On
+# Linux the dynamic linker resolves them at load time by default while on
+# Mac OS we have to ask the linker to leave them for the dynamic linker.
 #
-# The Node-API functions are exported by the executable that loads the addon,
-# so we leave them unresolved at link time. On Linux the linker does this for
-# a shared library by default while on Mac OS we have to ask for it.
+# On Windows every imported function names the module that it comes from.
+# The Node-API module definition file names node.exe, from which we produce
+# the import library. We delay-load node.exe and our delay-load hook hands
+# over the executable of the process instead, whatever its name (see
+# delay-load-windows.cxx).
 #
-# Windows has no such notion: every imported function names the module it
-# comes from. So we produce an import library from the Node-API module
-# definition file, which names node.exe, and delay-load node.exe. Our
-# delay-load hook then hands over the executable of the process, whatever its
-# name (see delay-load-windows.cxx for details).
+if ($tclass == 'macos')
+  libs{launcher-node}: cxx.loptions += -Wl,-undefined,dynamic_lookup
+
+# We declare the import libraries whatever the target and let the include
+# variable select the one for our platform, so that the build graph, and
+# with it the distribution, is the same in every configuration. For the
+# same reason we make the recipes conditional rather than the declarations.
+# This also saves the other platforms from parsing recipes that refer to
+# variables they don't set.
 #
 node_api_def = [path] $($libs: libnode_api_headers.node_api_def)
 
 # The file is in the dependency's source directory, outside of our project,
-# where it can only be found as a target that we declare.
+# where build2 doesn't look for existing source files. So we declare the
+# target ourselves.
 #
 def{$node_api_def}:
 
-libs{launcher-node}: file{node.lib}:  include = ($msvc  ? adhoc : false)
+libs{launcher-node}: file{node.lib}:  include = ($msvc_runtime ? adhoc : false)
 libs{launcher-node}: file{libnode.a}: include = ($mingw ? adhoc : false)
 
-switch $cxx.target.cpu
+if $msvc_runtime
 {
-  case 'x86_64'
+  switch $cxx.target.cpu
   {
-    lib_machine     = x64
-    dlltool_machine = 'i386:x86-64'
+    case 'x86_64'
+      machine = x64
+    case 'aarch64'
+      machine = arm64
+    default
+      fail "unsupported target cpu $cxx.target.cpu"
   }
-  case 'aarch64'
+
+  # Clang expects linker options prefixed with -Wl while MSVC takes them as
+  # is.
+  #
+  libs{launcher-node}:
   {
-    lib_machine     = arm64
-    dlltool_machine = arm64
+    cxx.loptions += ($cxx.class == 'msvc' \
+                     ? '/DELAYLOAD:node.exe' \
+                     : '-Wl,/DELAYLOAD:node.exe')
+    cxx.libs += $out_base/node.lib delayimp.lib
   }
 }
+elif $mingw
+{
+  switch $cxx.target.cpu
+  {
+    case 'x86_64'
+      machine = i386:x86-64
+    case 'aarch64'
+      machine = arm64
+    default
+      fail "unsupported target cpu $cxx.target.cpu"
+  }
 
-# Note that lib.exe also writes the exports file, which we don't use.
+  # The binutils of our compiler include dlltool, which produces the
+  # delay-import library. The binutils pattern, if any, is either a program
+  # name with a wildcard or a directory (see the bin module).
+  #
+  if ($bin.pattern == [null])
+    dlltool = dlltool
+  elif $regex.match($bin.pattern, '.*\*.*')
+    dlltool = $regex.replace($bin.pattern, '\*', 'dlltool')
+  else
+    dlltool = "$(bin.pattern)dlltool"
+
+  # The MinGW runtime provides the delay-load helper itself, so unlike with
+  # MSVC there is no delayimp.lib to link.
+  #
+  libs{launcher-node}: cxx.libs += $out_base/libnode.a
+}
+
+# The librarian also writes the exports file, which we have no use for.
 #
 <file{node.lib} file{node.exp}>: def{$node_api_def}
 %
-if $msvc
+if $msvc_runtime
 {{
   diag lib ($<)
 
-  if ($lib_machine == [null])
-    exit "unsupported target cpu $cxx.target.cpu"
-
-  $bin.ar.path /NOLOGO /MACHINE:$lib_machine /NAME:node.exe \
+  $bin.ar.path /NOLOGO /MACHINE:$machine /NAME:node.exe \
     "/DEF:$path($<)" "/OUT:$path($>[0])" >-
 }}
-
-# Use the dlltool of our binutils, which produces the delay-import library.
-# The binutils pattern, if any, is either a program name with a wildcard or a
-# directory (see the bin module for details).
-#
-if ($bin.pattern == [null])
-  dlltool = dlltool
-elif $regex.match($bin.pattern, '.*\*.*')
-  dlltool = $regex.replace($bin.pattern, '\*', 'dlltool')
-else
-  dlltool = "$(bin.pattern)dlltool"
 
 file{libnode.a}: def{$node_api_def}
 %
@@ -107,35 +146,6 @@ if $mingw
 {{
   diag dlltool ($<)
 
-  if ($dlltool_machine == [null])
-    exit "unsupported target cpu $cxx.target.cpu"
-
-  $dlltool --machine $dlltool_machine --input-def $path($<) \
+  $dlltool --machine $machine --input-def $path($<) \
     --dllname node.exe --output-delaylib $path($>)
 }}
-
-# Link options.
-#
-# Note that the MinGW runtime provides the delay-load helper itself while
-# with MSVC it comes from delayimp.lib. Clang targeting MSVC passes linker
-# options through -Wl.
-#
-switch $tclass, $tsys
-{
-  case 'macos'
-    libs{launcher-node}: cxx.loptions += -Wl,-undefined,dynamic_lookup
-
-  case 'windows', 'mingw32'
-    libs{launcher-node}: cxx.libs += $out_base/libnode.a
-
-  case 'windows'
-  {
-    libs{launcher-node}:
-    {
-      cxx.loptions += ($cxx.class == 'msvc' \
-                       ? /DELAYLOAD:node.exe \
-                       : -Wl,/DELAYLOAD:node.exe)
-      cxx.libs += $out_base/node.lib delayimp.lib
-    }
-  }
-}
