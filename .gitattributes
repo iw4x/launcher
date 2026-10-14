@@ -18,6 +18,22 @@
 #
 #*.png binary
 
+# GitHub's Linguist, which does the syntax highlighting and the language
+# statistics, has no build2 language and detects a buildfile as Ruby (the
+# Buildfile of Buildr). So we keep the build2 files out of the statistics and
+# highlight each one as the language that is closest to it, under both of the
+# build2 naming schemes. The identity register is a manifest list as well.
+#
+buildfile    linguist-detectable=false linguist-language=Makefile
+build2file   linguist-detectable=false linguist-language=Makefile
+*.build      linguist-detectable=false linguist-language=Makefile
+*.build2     linguist-detectable=false linguist-language=Makefile
+testscript   linguist-detectable=false linguist-language=Shell
+*.testscript linguist-detectable=false linguist-language=Shell
+manifest     linguist-detectable=false linguist-language=YAML
+*.manifest   linguist-detectable=false linguist-language=YAML
+identities   linguist-detectable=false linguist-language=YAML
+
 # The identity register is a manifest list of people, with no room for the
 # SPDX header (see the headers tool).
 #
