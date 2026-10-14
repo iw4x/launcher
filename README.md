@@ -19,6 +19,10 @@ bdep update
 bdep test
 ```
 
+## Contributing
+
+See [CONTRIBUTING](.github/CONTRIBUTING.md).
+
 ## License
 
 launcher is licensed under the GNU General Public License, version 3,
