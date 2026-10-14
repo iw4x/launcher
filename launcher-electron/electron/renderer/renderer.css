@@ -14,3 +14,20 @@ body
 {
   margin: 0;
 }
+
+/*
+ * The window is frameless, so the title bar is where the user drags it.
+ */
+.title-bar
+{
+  -webkit-app-region: drag;
+  user-select: none;
+  height: 40px;
+  padding: 0 16px;
+  line-height: 40px;
+}
+
+main
+{
+  padding: 0 16px;
+}

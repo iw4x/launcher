@@ -35,6 +35,9 @@ if (process.platform === 'linux' &&
 // surface role (see material/build/color.ts), which it shows when resized
 // faster than the renderer paints.
 //
+// The window is frameless with the renderer drawing its title bar (see
+// renderer.css).
+//
 function
 create_window (): void
 {
@@ -44,6 +47,7 @@ create_window (): void
     height: 800,
     minWidth: 960,
     minHeight: 600,
+    frame: false,
     show: false,
     backgroundColor: surface,
     webPreferences:
