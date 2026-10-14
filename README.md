@@ -18,3 +18,9 @@ bdep init -C @gcc cc config.cxx=g++
 bdep update
 bdep test
 ```
+
+## License
+
+launcher is licensed under the GNU General Public License, version 3.
+
+See LICENSE.md.
