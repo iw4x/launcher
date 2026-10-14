@@ -65,6 +65,12 @@ file{image.stamp}: file{Containerfile}
   touch $path($>)
 }}
 
+# Substitute the package version, which npm requires to be a semantic
+# version (as the project version is).
+#
+file{package.json}:      in{package.json.in}
+file{package-lock.json}: in{package-lock.json.in}
+
 # Install the dependencies pinned by the lockfile. This is the only step with
 # network access. Install scripts are disabled in the image (see
 # Containerfile), so run Electron's explicitly to download the Electron

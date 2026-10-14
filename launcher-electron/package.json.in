@@ -1,6 +1,6 @@
 {
   "name": "launcher-electron",
-  "version": "0.1.0",
+  "version": "$version.project$",
   "description": "Desktop application for the IW4x launcher.",
   "license": "GPL-3.0-only WITH AdditionRef-IW4x-Exception-1.1",
   "private": true,

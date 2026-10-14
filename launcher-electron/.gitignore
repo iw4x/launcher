@@ -30,3 +30,8 @@
 # Compilation database.
 #
 compile_commands.json
+
+# Generated npm package files.
+#
+/package.json
+/package-lock.json
