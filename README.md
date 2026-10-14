@@ -1,8 +1,8 @@
 # launcher - Launcher and updater for IW4x.
 
-`launcher` is the launcher and updater of the IW4x game client. It runs on
-players' computers and on headless servers. It is in early development, and
-in this version it prints its usage and version.
+`launcher` is the launcher and updater of IW4x. It runs on players' computers
+and on headless servers. It is in early development, and in this version it
+prints its usage and version.
 
 The repository holds one package, [`launcher`](launcher/README.md), the
 launcher executable.

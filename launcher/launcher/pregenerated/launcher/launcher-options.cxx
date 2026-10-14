@@ -870,8 +870,8 @@ namespace launcher
        << ::std::endl
        << "DESCRIPTION" << ::std::endl
        << ::std::endl
-       << "The launcher program is the launcher and updater of the IW4x game client. It" << ::std::endl
-       << "runs on players' computers and on headless servers." << ::std::endl
+       << "The launcher program is the launcher and updater of IW4x. It runs on players'" << ::std::endl
+       << "computers and on headless servers." << ::std::endl
        << ::std::endl
        << "In this version the program prints its usage and version." << ::std::endl;
 
