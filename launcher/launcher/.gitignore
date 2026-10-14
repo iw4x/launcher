@@ -1,0 +1,14 @@
+/launcher
+
+# Generated version header.
+#
+version.hxx
+
+# Generated command line parser (see pregenerated/ for the copy we keep).
+#
+/launcher-options.hxx
+/launcher-options.cxx
+
+# Testscript output directory (can be symlink).
+#
+test-launcher

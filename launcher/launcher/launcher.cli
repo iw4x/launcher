@@ -1,0 +1,37 @@
+// Copyright (c) the IW4x authors (see the AUTHORS file).
+// SPDX-License-Identifier: GPL-3.0-only WITH AdditionRef-IW4x-Exception-1.1
+
+"\section=1"
+"\name=launcher"
+"\summary=launcher and updater for IW4x"
+
+namespace launcher
+{
+  {
+    "<options>",
+
+    "\h|SYNOPSIS|
+
+     \c{\b{launcher --help}\n
+        \b{launcher --version}}
+
+     \h|DESCRIPTION|
+
+     The \cb{launcher} program is the launcher and updater of the IW4x game
+     client. It runs on players' computers and on headless servers.
+
+     In this version the program prints its usage and version."
+  }
+
+  class options
+  {
+    "\h|OPTIONS|"
+
+    bool --help {"Print usage information and exit."}
+    bool --version {"Print version and exit."}
+  };
+
+  "\h|EXIT STATUS|
+
+   Non-zero exit status is returned in case of an error."
+}

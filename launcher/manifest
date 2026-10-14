@@ -1,0 +1,23 @@
+: 1
+name: launcher
+version: 0.1.0-a.0.z
+type: exe
+language: c++
+project: launcher
+summary: Launcher and updater for IW4x.
+license: other: GPL-3.0-only with IW4x Linking Exception 1.1
+topics: game, launcher, updater
+description-file: README.md
+changes-file: NEWS
+url: https://iw4x.io/projects/launcher/
+doc-url: https://iw4x.io/projects/launcher/doc/
+src-url: https://github.com/iw4x/launcher
+email: wroy@proton.me
+build-error-email: wroy@proton.me
+depends: * build2 >= 0.18.0
+depends: * bpkg >= 0.18.0
+depends: * cli ^1.2.1 ? ($config.launcher.develop)
+builds: default
+builds: -( +gcc &!gcc-14+ )                ; Requires std::print() (GCC 14).
+build-exclude: linux_debian_12-clang_18-** ; Requires std::print() (libstdc++ 14).
+build-exclude: macos_*-clang_15.0-**       ; Requires std::print() (libc++ 17).

@@ -1,0 +1,107 @@
+# Copyright (c) the IW4x authors (see the AUTHORS file).
+# SPDX-License-Identifier: GPL-3.0-only WITH AdditionRef-IW4x-Exception-1.1
+
+libs =
+
+exe{launcher}: {hxx ixx txx cxx}{** -version          \
+                                    -launcher-options \
+                                    -pregenerated/**} \
+               hxx{version} $libs testscript
+
+hxx{version}: in{version} $src_root/manifest
+
+# Build options.
+#
+cxx.poptions =+ "-I$out_root" "-I$src_root"
+
+# MinGW GCC's libstdc++ keeps the Windows console support of std::print() in a
+# separate library.
+#
+if ($cxx.target.system == 'mingw32' && $cxx.id == 'gcc')
+  cxx.libs += -lstdc++exp
+
+# The command line parser.
+#
+# In the consumption build ($develop == false) we use the copy of the parser
+# that we keep in pregenerated/. In the development build ($develop == true)
+# we regenerate the parser from launcher.cli with the cli compiler and, if
+# the result differs, update the copy in pregenerated/.
+
+## Consumption build ($develop == false).
+#
+
+# Use the pregenerated parser.
+#
+exe{launcher}: pregenerated/{hxx cxx}{**}: include = (!$develop)
+
+if! $develop
+  cxx.poptions =+ "-I($src_base/pregenerated)" # Note: must come first.
+
+# Distribute the pregenerated parser only in the consumption build.
+#
+pregenerated/{hxx cxx}{**}: dist = (!$develop)
+
+#
+##
+
+## Development build ($develop == true).
+#
+
+exe{launcher}: {hxx cxx}{launcher-options}: include = $develop
+
+if $develop
+  import! [metadata] cli = cli%exe{cli}
+
+# In the development build we distribute the regenerated parser in place of
+# the pregenerated one (which is only distributed in the consumption build,
+# see above), remapping it to the pregenerated location, so that the
+# distributed parser is always up to date.
+#
+<{hxx cxx}{launcher-options}>: cli{launcher} $cli
+{
+  dist = ($develop ? pregenerated/launcher/ : false)
+}
+%
+if $develop
+{{
+  options = --std c++14                            \
+            --include-with-brackets                \
+            --include-prefix launcher              \
+            --guard-prefix LAUNCHER                \
+            --cli-namespace launcher::cli          \
+            --generate-parse                       \
+            --suppress-inline                      \
+            --suppress-undocumented                \
+            --long-usage                           \
+            --option-length 11                     \
+            --page-usage 'launcher::print_$name$_' \
+            --output-suffix -options
+
+  diag cli ($<[0]) -> $>
+
+  $cli $options -o $out_base $path($<[0])
+
+  # If the result differs from the pregenerated copy (or there is no copy
+  # yet), update the copy.
+  #
+  d = [dir_path] $src_base/pregenerated/launcher
+
+  if test -f $d/launcher-options.hxx              && \
+     test -f $d/launcher-options.cxx              && \
+     diff $d/launcher-options.hxx $path($>[0]) >- && \
+     diff $d/launcher-options.cxx $path($>[1]) >-
+    exit
+
+  # Note that the source directory may be inside the script's working
+  # directory (the directory b was started from), where the script removes
+  # what it creates once it completes. So we disable this cleanup for the
+  # copy.
+  #
+  mkdir --no-cleanup -p $d
+
+  cp --no-cleanup $path($>[0]) $d/launcher-options.hxx
+  cp --no-cleanup $path($>[1]) $d/launcher-options.cxx
+}}
+
+#
+##

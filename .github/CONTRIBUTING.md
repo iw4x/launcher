@@ -22,6 +22,13 @@ to set up a build configuration. If you are new to build2, the
 [build2 toolchain introduction](https://build2.org/build2-toolchain/doc/build2-toolchain-intro.xhtml)
 explains the workflow.
 
+The repository holds one package, `launcher`, with its sources in
+`launcher/launcher/` and its tests in `launcher/launcher/testscript`. The
+command line parser is generated from `launcher/launcher/launcher.cli` by the
+development build, which `bdep init` configures by default and which keeps
+the copy in `launcher/launcher/pregenerated/` up to date. Commit that copy
+together with the change to `launcher.cli`.
+
 Work on a branch of your fork of the repository and keep it up to date with
 `main` by rebasing it. The history is linear, so a branch with merge commits
 cannot be merged.

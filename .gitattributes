@@ -22,3 +22,10 @@
 # SPDX header (see the headers tool).
 #
 identities -spdx
+
+# The copy of the command line parser that the cli compiler generates and we
+# keep in pregenerated/ (see launcher/launcher/buildfile). It carries no SPDX
+# header, and GitHub collapses it in diffs and leaves it out of the language
+# statistics.
+#
+**/pregenerated/** -spdx linguist-generated

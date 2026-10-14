@@ -1,0 +1,57 @@
+# Copyright (c) the IW4x authors (see the AUTHORS file).
+# SPDX-License-Identifier: GPL-3.0-only WITH AdditionRef-IW4x-Exception-1.1
+
+: no-arguments
+:
+$*
+
+: print-usage
+:
+$* --help >>EOO
+SYNOPSIS
+
+launcher --help
+launcher --version
+
+DESCRIPTION
+
+The launcher program is the launcher and updater of the IW4x game client. It
+runs on players' computers and on headless servers.
+
+In this version the program prints its usage and version.
+
+OPTIONS
+
+--help      Print usage information and exit.
+
+--version   Print version and exit.
+
+EXIT STATUS
+
+Non-zero exit status is returned in case of an error.
+EOO
+
+: print-version
+:
+$* --version >>"EOO"
+launcher $version.project_id
+Copyright \(c\) the IW4x authors.
+This is free software released under the GNU General Public License, version 3,
+with the IW4x Linking Exception, version 1.1.
+EOO
+
+: unknown-option
+: Test handling of an option that is not ours
+:
+$* --frobnicate 2>>EOE != 0
+error: unknown option '--frobnicate'
+  info: run 'launcher --help' for more information
+EOE
+
+: unknown-argument
+: Test handling of an argument when none is taken
+:
+$* game 2>>EOE != 0
+error: unknown argument 'game'
+  info: run 'launcher --help' for more information
+EOE
