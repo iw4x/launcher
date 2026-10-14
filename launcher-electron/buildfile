@@ -1,7 +1,7 @@
 # Copyright (c) the IW4x authors (see the AUTHORS file).
 # SPDX-License-Identifier: GPL-3.0-only WITH AdditionRef-IW4x-Exception-1.1
 
-./: {*/ -build/ -electron/}                                  \
+./: {*/ -build/ -electron/ -material/}                       \
     doc{README.md NEWS}                                      \
     legal{LICENSE.md LICENSE-EXCEPTION.md AUTHORS}           \
     manifest                                                 \
@@ -102,22 +102,32 @@ file{node-modules.stamp}: file{image.stamp}                         \
   rm -r -f $stage $cache $path($>) $path($>).d
 }}
 
-# Type-check the TypeScript (configuration files included) and bundle the
-# code of each Electron process into stage/dist/.
+# Bundle the code of each Electron process into stage/dist/.
 #
-file{bundle.stamp}: file{node-modules.stamp}                        \
-                    file{tsconfig.json}                             \
-                    file{vite.main.config.ts vite.preload.config.ts \
-                         vite.renderer.config.ts forge.config.ts}   \
-                    file{electron/**}
+# Note that we first generate the color tokens into stage/material/generated/
+# since the code imports them, and then type-check the TypeScript
+# (configuration files included).
+#
+file{bundle.stamp}: file{node-modules.stamp}                           \
+                    file{tsconfig.json}                                \
+                    file{vite.main.config.ts vite.preload.config.ts    \
+                         vite.renderer.config.ts vite.tokens.config.ts \
+                         forge.config.ts}                              \
+                    file{electron/** material/**}
 % update
 {{
   diag vite ($<[1])
 
-  rm -r -f $stage/electron $stage/dist
+  rm -r -f $stage/electron $stage/material $stage/dist $stage/tools
   cp --no-cleanup -r $src_base/electron $stage/electron
+  cp --no-cleanup -r $src_base/material $stage/material
   cp --no-cleanup $path($<[1]) $path($<[2]) $path($<[3]) $path($<[4]) \
-    $path($<[5]) $stage
+    $path($<[5]) $path($<[6]) $stage
+
+  $run --network=none $image npx vite build --logLevel=warn \
+    --config vite.tokens.config.ts
+
+  $run --network=none $image node tools/generate.js material/generated
 
   $run --network=none $image npx tsc -p .
 
@@ -134,9 +144,10 @@ file{bundle.stamp}: file{node-modules.stamp}                        \
 }}
 % [diag=clean] clean
 {{
-  rm -r -f $stage/electron $stage/dist $stage/tsconfig.json         \
-    $stage/vite.main.config.ts $stage/vite.preload.config.ts \
-    $stage/vite.renderer.config.ts $stage/forge.config.ts    \
+  rm -r -f $stage/electron $stage/material $stage/dist $stage/tools \
+    $stage/tsconfig.json $stage/forge.config.ts                     \
+    $stage/vite.main.config.ts $stage/vite.preload.config.ts        \
+    $stage/vite.renderer.config.ts $stage/vite.tokens.config.ts     \
     $path($>) $path($>).d
 }}
 

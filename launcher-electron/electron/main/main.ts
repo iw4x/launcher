@@ -5,6 +5,8 @@ import { app, BrowserWindow, ipcMain } from 'electron';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
 
+import { surface } from '../../material/generated/color.js';
+
 import type { launcher_api } from '../preload/launcher.js';
 
 // Launcher addon interface (see launcher/node/addon.cxx).
@@ -29,7 +31,9 @@ if (process.platform === 'linux' &&
   app.commandLine.appendSwitch ('use-webgpu-adapter', 'opengles');
 
 // Keep the window hidden until the renderer has painted, which avoids
-// showing a blank frame on startup.
+// showing a blank frame on startup. Note that the window background is the
+// surface role (see material/build/color.ts), which it shows when resized
+// faster than the renderer paints.
 //
 function
 create_window (): void
@@ -41,6 +45,7 @@ create_window (): void
     minWidth: 960,
     minHeight: 600,
     show: false,
+    backgroundColor: surface,
     webPreferences:
     {
       preload: join (import.meta.dirname, '../preload/preload.cjs'),
