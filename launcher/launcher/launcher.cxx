@@ -18,8 +18,8 @@ namespace launcher
     main (int argc, char* argv[])
     try
     {
-      // Parse the command line. Nothing takes arguments yet, so we treat an
-      // argument as an error, the same as an unknown option.
+      // Parse the command line. We don't take any arguments (yet) so treat
+      // them as errors, the same as unknown options.
       //
       options o;
       o.parse (argc, argv,
@@ -27,6 +27,8 @@ namespace launcher
                cli::unknown_mode::fail,
                cli::unknown_mode::fail);
 
+      // Handle --version.
+      //
       if (o.version ())
       {
         println ("launcher {}\n"
@@ -39,6 +41,8 @@ namespace launcher
         return 0;
       }
 
+      // Handle --help.
+      //
       if (o.help ())
       {
         print_launcher_usage (cout);
@@ -49,7 +53,8 @@ namespace launcher
     }
     catch (const cli::exception& e)
     {
-      // Note that cli::exception only prints itself to a stream.
+      // Note that cli::exception can only be printed to a stream so format
+      // it into a string first.
       //
       ostringstream os;
       os << e;

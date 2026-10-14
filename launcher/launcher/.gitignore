@@ -4,10 +4,9 @@
 #
 version.hxx
 
-# Generated command line parser (see pregenerated/ for the copy we keep).
+# Generated command line parser.
 #
-/launcher-options.hxx
-/launcher-options.cxx
+/launcher-options.?xx
 
 # Testscript output directory (can be symlink).
 #

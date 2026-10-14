@@ -7,27 +7,26 @@ xhtml{*}: extension = xhtml
 define pdf: doc
 pdf{*}: extension = pdf
 
-# The prologues and epilogues are only prerequisites in the development build,
-# so we list them here to distribute them in every build.
+# Note that the prologues and epilogues are only prerequisites in the
+# development build so list them here to also distribute them in the
+# consumption build.
 #
 ./: file{man-*}
 
 # Man pages.
 #
-# The man page and its XHTML version are generated from the command line
-# definition (../launcher/launcher.cli) by the cli compiler. As with the
-# command line parser (see ../launcher/buildfile), the development build
-# regenerates them and keeps the copy in pregenerated/ up to date, which the
-# consumption build uses.
+# Similar to the command line parser (see ../launcher/buildfile), we keep the
+# man pages generated from ../launcher/launcher.cli in pregenerated/ and only
+# regenerate them in the development build.
 
 ## Consumption build ($develop == false).
 #
 
-# Use the pregenerated pages.
+# Use pregenerated versions in the consumption build.
 #
 ./: pregenerated/{man1 xhtml}{*}: include = (!$develop)
 
-# Distribute the pregenerated pages only in the consumption build.
+# Distribute pregenerated versions only in the consumption build.
 #
 pregenerated/{man1 xhtml}{*}: dist = (!$develop)
 
@@ -43,17 +42,15 @@ if $develop
 {
   import! [metadata] cli = cli%exe{cli}
 
-  # The version that the pages document, without the snapshot part. With the
-  # snapshot part every commit would change the pages and leave the copy in
-  # pregenerated/ out of date.
+  # Leave the snapshot part out of the documented version. Otherwise every
+  # commit would change the pages and make the pregenerated versions stale.
   #
   doc_version = [string] "$version.major.$version.minor.$version.patch"
 
   if $version.pre_release
     doc_version += "-$version.pre_release_string"
 
-  # The month and year of the release that the pages document. We change it
-  # together with the version, when we prepare a release.
+  # NOTE: remember to update the date when preparing a release.
   #
   doc_date = 'October 2026'
 
@@ -64,10 +61,10 @@ if $develop
                 --suppress-undocumented
 }
 
-# In the development build we distribute the regenerated pages in place of the
-# pregenerated ones (which are only distributed in the consumption build, see
-# above), remapping them to the pregenerated location, so that the
-# distributed pages are always up to date.
+# In the development build distribute regenerated versions, remapping their
+# locations to the paths of the pregenerated versions (which are only
+# distributed in the consumption build; see above). This way we make sure that
+# the distributed files are always up-to-date.
 #
 {man1 xhtml}{launcher}: dist = ($develop ? pregenerated/ : false)
 
@@ -84,8 +81,8 @@ if $develop
        --man-epilogue-file $path($<[2]) \
        --stdout $path($<[0]) >$path($>)
 
-  # If the result differs from the pregenerated copy (or there is no copy
-  # yet), update the copy. See ../launcher/buildfile for the reason behind
+  # If the result differs from the pregenerated version (or there is none
+  # yet), copy it over. See ../launcher/buildfile for why we need
   # --no-cleanup.
   #
   p = $src_base/pregenerated/launcher.1
@@ -124,20 +121,24 @@ if $develop
 
 # PDF.
 #
-# The PDF version of the man page is rendered with Ghostscript's ps2pdf from
-# the PostScript that groff produces. The development build renders it if
-# both programs are installed. Each rendering records its creation date, so
-# we don't commit the result. We still copy it to pregenerated/ and
-# distribute it from there, which lets the consumption build of a
-# distribution install it.
+# This case is slightly more involved because we make the rendering of the
+# PDF optional and also don't keep the result in the repository (each
+# rendering embeds its creation date). Specifically:
+#
+# 1. In the consumption build we will install/redistribute the PDF if present.
+#
+# 2. In the development build we will render the PDF from the man page if we
+#    are able to import groff and ps2pdf, issuing a warning otherwise.
 
 ## Consumption build ($develop == false).
 #
 
-# Use the pregenerated PDF, if there is one.
+# Use the pregenerated version, if present, in the consumption build.
 #
 ./: pregenerated/pdf{*}: include = (!$develop)
 
+# Distribute the pregenerated version only in the consumption build.
+#
 pregenerated/pdf{*}: dist = (!$develop)
 
 #
@@ -150,6 +151,8 @@ render = false
 
 if $develop
 {
+  # Import the groff and ps2pdf programs from the system, if available.
+  #
   import? groff  = groff%exe{groff}
   import? ps2pdf = ps2pdf%exe{ps2pdf}
 
@@ -161,6 +164,8 @@ if $develop
 
 ./: pdf{launcher}: include = $render
 
+# As above.
+#
 pdf{launcher}: dist = ($render ? pregenerated/ : false)
 
 pdf{launcher}: man1{launcher} $groff $ps2pdf
@@ -171,8 +176,10 @@ if $render
 
   $groff -man -Tps $path($<[0]) | $ps2pdf - $path($>)
 
-  # Note that the pregenerated copy may not exist yet (see above for the
-  # reason behind --no-cleanup).
+  # Strictly speaking we don't need to copy the result since it is not
+  # stored in the repository, but let's do that for consistency with the
+  # distributed source tree. See ../launcher/buildfile for why we need
+  # --no-cleanup.
   #
   mkdir --no-cleanup -p $src_base/pregenerated
   cp --no-cleanup $path($>) $src_base/pregenerated/launcher.pdf

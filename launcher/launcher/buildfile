@@ -14,30 +14,33 @@ hxx{version}: in{version} $src_root/manifest
 #
 cxx.poptions =+ "-I$out_root" "-I$src_root"
 
-# MinGW GCC's libstdc++ keeps the Windows console support of std::print() in a
-# separate library.
+# Note that MinGW GCC keeps the Windows console support of std::print() in
+# the separate stdc++exp library.
 #
 if ($cxx.target.system == 'mingw32' && $cxx.id == 'gcc')
   cxx.libs += -lstdc++exp
 
-# The command line parser.
+# Command line parser.
 #
-# In the consumption build ($develop == false) we use the copy of the parser
-# that we keep in pregenerated/. In the development build ($develop == true)
-# we regenerate the parser from launcher.cli with the cli compiler and, if
-# the result differs, update the copy in pregenerated/.
+# We keep the generated command line parser in pregenerated/ so that only
+# the development build requires the cli compiler.
+#
+# In the consumption build ($config.launcher.develop == false) we just use
+# this pregenerated source code. In the development build
+# ($config.launcher.develop == true) we regenerate the parser from
+# launcher.cli and, if the result differs, copy it over to pregenerated/.
 
 ## Consumption build ($develop == false).
 #
 
-# Use the pregenerated parser.
+# Use pregenerated versions in the consumption build.
 #
 exe{launcher}: pregenerated/{hxx cxx}{**}: include = (!$develop)
 
 if! $develop
   cxx.poptions =+ "-I($src_base/pregenerated)" # Note: must come first.
 
-# Distribute the pregenerated parser only in the consumption build.
+# Distribute pregenerated versions only in the consumption build.
 #
 pregenerated/{hxx cxx}{**}: dist = (!$develop)
 
@@ -52,10 +55,10 @@ exe{launcher}: {hxx cxx}{launcher-options}: include = $develop
 if $develop
   import! [metadata] cli = cli%exe{cli}
 
-# In the development build we distribute the regenerated parser in place of
-# the pregenerated one (which is only distributed in the consumption build,
-# see above), remapping it to the pregenerated location, so that the
-# distributed parser is always up to date.
+# In the development build distribute regenerated {hxx cxx}{launcher-options},
+# remapping their locations to the paths of the pregenerated versions (which
+# are only distributed in the consumption build; see above). This way we make
+# sure that the distributed files are always up-to-date.
 #
 <{hxx cxx}{launcher-options}>: cli{launcher} $cli
 {
@@ -81,8 +84,8 @@ if $develop
 
   $cli $options -o $out_base $path($<[0])
 
-  # If the result differs from the pregenerated copy (or there is no copy
-  # yet), update the copy.
+  # If the result differs from the pregenerated version (or there is none
+  # yet), copy it over.
   #
   d = [dir_path] $src_base/pregenerated/launcher
 
@@ -92,10 +95,10 @@ if $develop
      diff $d/launcher-options.cxx $path($>[1]) >-
     exit
 
-  # Note that the source directory may be inside the script's working
-  # directory (the directory b was started from), where the script removes
-  # what it creates once it completes. So we disable this cleanup for the
-  # copy.
+  # Note that the mkdir and cp builtins register the filesystem entries they
+  # create for cleanup, which happens once the recipe completes. Since the
+  # pregenerated versions may not exist yet, we suppress this with the
+  # --no-cleanup option.
   #
   mkdir --no-cleanup -p $d
 

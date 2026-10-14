@@ -1,10 +1,10 @@
 # Copyright (c) the IW4x authors (see the AUTHORS file).
 # SPDX-License-Identifier: GPL-3.0-only WITH AdditionRef-IW4x-Exception-1.1
 
-# The development build regenerates the command line parser from its .cli
-# definition with the cli compiler. Everyone else uses the copy that we keep
-# in pregenerated/, so that only the development build requires cli (see
-# launcher/buildfile for details).
+# Note that only the development build regenerates the command line parser
+# and the man pages from launcher.cli, which requires the cli compiler. The
+# consumption build uses the pregenerated versions that we keep in the
+# repository (see launcher/buildfile for details).
 #
 config [bool] config.launcher.develop ?= false
 
@@ -26,6 +26,6 @@ ixx{*}: extension = ixx
 txx{*}: extension = txx
 cxx{*}: extension = cxx
 
-# The test target for cross-testing (running tests under Wine, etc).
+# Specify the test target for cross-testing.
 #
 test.target = $cxx.target
