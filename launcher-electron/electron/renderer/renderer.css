@@ -7,16 +7,24 @@
 {
   background: var(--md-sys-color-surface);
   color: var(--md-sys-color-on-surface);
-  font-family: system-ui, sans-serif;
-}
-
-body
-{
-  margin: 0;
 }
 
 /*
- * The window is frameless, so the title bar is where the user drags it.
+ * We set the type on the body so that the root font size stays at the 16dp
+ * that the rem sizes of the type scale are relative to.
+ */
+body
+{
+  margin: 0;
+  font-family: var(--md-sys-typescale-body-medium-font);
+  font-size: var(--md-sys-typescale-body-medium-size);
+  line-height: var(--md-sys-typescale-body-medium-line-height);
+  font-weight: var(--md-sys-typescale-body-medium-weight);
+  letter-spacing: var(--md-sys-typescale-body-medium-tracking);
+}
+
+/*
+ * The window is frameless, so the user drags it by the title bar.
  */
 .title-bar
 {

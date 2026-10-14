@@ -1,0 +1,16 @@
+/*
+ * Copyright (c) the IW4x authors (see the AUTHORS file).
+ * SPDX-License-Identifier: GPL-3.0-only WITH AdditionRef-IW4x-Exception-1.1
+ */
+
+/*
+ * Opacities of the state layer, which an interactive element paints over
+ * itself in its content color (see ripple.ts).
+ */
+:root
+{
+  --md-sys-state-hover-state-layer-opacity: 0.08;
+  --md-sys-state-focus-state-layer-opacity: 0.1;
+  --md-sys-state-pressed-state-layer-opacity: 0.1;
+  --md-sys-state-dragged-state-layer-opacity: 0.16;
+}

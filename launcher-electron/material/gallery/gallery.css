@@ -1,0 +1,61 @@
+/*
+ * Copyright (c) the IW4x authors (see the AUTHORS file).
+ * SPDX-License-Identifier: GPL-3.0-only WITH AdditionRef-IW4x-Exception-1.1
+ */
+
+/*
+ * The gallery uses the surface role and the body medium type, the same as the
+ * launcher's window (see ../../electron/renderer/renderer.css).
+ */
+:root
+{
+  background: var(--md-sys-color-surface);
+  color: var(--md-sys-color-on-surface);
+}
+
+/*
+ * We set the type on the body so that the root font size stays at the 16dp
+ * that the rem sizes of the type scale are relative to.
+ */
+body
+{
+  margin: 0;
+  font-family: var(--md-sys-typescale-body-medium-font);
+  font-size: var(--md-sys-typescale-body-medium-size);
+  line-height: var(--md-sys-typescale-body-medium-line-height);
+  font-weight: var(--md-sys-typescale-body-medium-weight);
+  letter-spacing: var(--md-sys-typescale-body-medium-tracking);
+}
+
+/*
+ * The window is frameless, so the user drags it by the title bar. Note that
+ * the scheme button is excluded from the drag region so that it receives
+ * clicks.
+ */
+.title-bar
+{
+  -webkit-app-region: drag;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 40px;
+  padding: 0 16px;
+}
+
+.title-bar button
+{
+  -webkit-app-region: no-drag;
+  height: 32px;
+  padding: 0 16px;
+  border: 1px solid var(--md-sys-color-outline-variant);
+  border-radius: var(--md-sys-shape-corner-full);
+  background: none;
+  color: var(--md-sys-color-on-surface);
+  font: inherit;
+}
+
+main
+{
+  padding: 16px;
+}

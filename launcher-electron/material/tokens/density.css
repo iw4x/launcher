@@ -1,0 +1,15 @@
+/*
+ * Copyright (c) the IW4x authors (see the AUTHORS file).
+ * SPDX-License-Identifier: GPL-3.0-only WITH AdditionRef-IW4x-Exception-1.1
+ */
+
+/*
+ * Density of the lists and text fields. Each step of the scale takes 4dp off
+ * the height of a component (see list.ts and text-field.ts).
+ */
+:root
+{
+  --m3-density-scale: -2;
+  --m3-density-step: 4px;
+  --m3-density-offset: calc(var(--m3-density-scale) * var(--m3-density-step));
+}

@@ -4,8 +4,8 @@
 # Image in which the build runs its JavaScript tools (see buildfile for
 # details).
 #
-# Use the Node.js version that Electron 44 embeds (24), pinned by digest so
-# that every build runs the same tools.
+# We use the Node.js version that Electron 44 embeds (24), pinned by digest
+# so that every build runs the same tools.
 #
 # NOTE: remember to update the image when upgrading Electron in
 #       package.json.
@@ -13,7 +13,7 @@
 FROM docker.io/library/node:24-bookworm-slim@sha256:51b1100cc2a83d370c6a60952e3f2989c8a43159d0e38586e090f3b3326efefd
 
 # Don't run the install scripts of dependencies and limit npm's registry
-# requests to the packages it installs.
+# requests to the packages that it installs.
 #
 ENV npm_config_ignore_scripts=true   \
     npm_config_update_notifier=false \

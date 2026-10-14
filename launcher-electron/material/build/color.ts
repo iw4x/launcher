@@ -7,56 +7,73 @@ import { argbFromHex,
          MaterialDynamicColors,
          SchemeTonalSpot } from '@material/material-color-utilities';
 
-// Source color of the scheme, the IW4x accent (lime 400 of the website).
+// Source color of the schemes, which is the IW4x accent (lime 400 of the
+// website).
 //
 export const source_color = '#a3e635';
 
-// Return the dark tonal spot scheme of the source color as of the 2025 (M3
+// Return the tonal spot scheme of the source color as of the 2025 (M3
 // Expressive) color specification, with the standard contrast level.
 //
 function
-dark_scheme (): SchemeTonalSpot
+scheme (dark: boolean): SchemeTonalSpot
 {
   return new SchemeTonalSpot (Hct.fromInt (argbFromHex (source_color)),
-                              true /* is_dark */,
+                              dark,
                               0 /* contrast_level */,
                               '2025');
 }
 
-// Return the color tokens stylesheet, one custom property per color role.
+// Return the declarations of the scheme, one custom property per color role.
 //
-// Note that the palette key colors are inputs of the scheme (and not roles)
-// so we leave them out. The library's list of all colors omits the shadow
-// and scrim roles, so we add them.
+// Note that the library's list of all colors omits the shadow and scrim
+// roles, so we add them.
+//
+function
+declarations (dark: boolean): string
+{
+  const s = scheme (dark);
+  const m = new MaterialDynamicColors ();
+
+  const r: string[] = [];
+
+  for (const c of [...m.allColors, m.shadow (), m.scrim ()])
+  {
+    const n = c.name.replaceAll ('_', '-');
+    r.push (`  --md-sys-color-${n}: ${hexFromArgb (c.getArgb (s))};`);
+  }
+
+  return r.join ('\n');
+}
+
+// Return the color tokens stylesheet. The dark scheme is the default and the
+// light scheme applies if the root element has data-color-scheme='light'.
 //
 export function
 color_css (): string
 {
-  const s = dark_scheme ();
-  const m = new MaterialDynamicColors ();
-
-  let r = ':root\n{\n  color-scheme: dark;\n';
-
-  for (const c of [...m.allColors, m.shadow (), m.scrim ()])
-  {
-    if (c.name.endsWith ('_palette_key_color'))
-      continue;
-
-    const n = c.name.replaceAll ('_', '-');
-    r += `  --md-sys-color-${n}: ${hexFromArgb (c.getArgb (s))};\n`;
-  }
-
-  return r + '}\n';
+  return `:root
+{
+  color-scheme: dark;
+${declarations (true)}
 }
 
-// Return the module with the colors that the main process needs, since it
-// cannot read the stylesheet. Currently this is the surface role for the
-// window background (see electron/main/main.ts).
+:root[data-color-scheme='light']
+{
+  color-scheme: light;
+${declarations (false)}
+}
+`;
+}
+
+// Return the module with the colors that the main process needs since it
+// cannot read the stylesheet. Currently, this is the surface role of the dark
+// scheme for the window background (see electron/main/main.ts).
 //
 export function
 color_ts (): string
 {
-  const s = dark_scheme ();
+  const s = scheme (true);
   const m = new MaterialDynamicColors ();
 
   const surface = hexFromArgb (m.surface ().getArgb (s));

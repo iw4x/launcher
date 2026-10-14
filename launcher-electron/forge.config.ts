@@ -50,8 +50,8 @@ const config: ForgeConfig =
         'electron/checksums.json') as Record<string, string>
     },
 
-    // Only the bundles and package.json (which names the main process
-    // entry) go into the application archive.
+    // Only put the bundles and package.json (which names the main process
+    // entry) into the application archive.
     //
     ignore: (p: string) => p !== '' &&
                            p !== '/package.json' &&
@@ -59,18 +59,19 @@ const config: ForgeConfig =
                            !p.startsWith ('/dist/'),
 
     // Keep the addon outside of the application archive since Electron
-    // would otherwise extract it into a temporary file to load it (see
-    // electron/main/main.ts).
+    // would have to extract it into a temporary file to load it from there
+    // (see electron/main/main.ts). Note that the third-party licenses go
+    // next to the archive as well (see buildfile).
     //
-    extraResource: ['launcher.node']
+    extraResource: ['launcher.node', 'licenses']
   },
 
   plugins:
   [
     // Restrict the packaged application to its own integrity-checked
-    // archive and reject Node.js options from the environment and the
-    // command line. Note that we also disable running as Node.js and
-    // encrypt cookies at rest.
+    // archive and ignore the NODE_OPTIONS environment variable as well as the
+    // inspector arguments on the command line. Note that we also disable
+    // running as Node.js and encrypt cookies at rest.
     //
     new FusesPlugin (
     {

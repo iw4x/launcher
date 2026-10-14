@@ -1,7 +1,7 @@
 # Copyright (c) the IW4x authors (see the AUTHORS file).
 # SPDX-License-Identifier: GPL-3.0-only WITH AdditionRef-IW4x-Exception-1.1
 
-# We need to configure C++ module to obtain the target information (see
+# We need to configure the C++ module to obtain the target information (see
 # buildfile).
 #
 using cxx.config
@@ -11,3 +11,8 @@ using in
 # Podman program to run the JavaScript tools with (see buildfile).
 #
 config [path] config.launcher_electron.podman ?= podman
+
+# Whether to build the component gallery into the application, which then
+# shows it in place of the launcher if started with --gallery.
+#
+config [bool] config.launcher_electron.gallery ?= false

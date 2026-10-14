@@ -5,6 +5,8 @@ import { contextBridge, ipcRenderer } from 'electron';
 
 import type { launcher_api } from './launcher.js';
 
+// Expose the launcher interface to the renderer (see launcher.ts).
+//
 const launcher: launcher_api =
 {
   version: () => ipcRenderer.invoke ('launcher:version') as Promise<string>

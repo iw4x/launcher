@@ -7,8 +7,8 @@
     manifest                                                 \
     file{app.stamp}
 
-# The JavaScript tools only ever run in a container built from Containerfile,
-# without capabilities and on a read-only root file system. The one host
+# We run the JavaScript tools in a container built from Containerfile, with
+# all capabilities dropped and a read-only root file system. The only host
 # directory that the container sees is our output directory (mounted at
 # /out), so each step copies its inputs into stage/ and runs its tool there.
 # Note that the tools keep their caches in cache/.
@@ -29,6 +29,8 @@ run = $podman run --rm                              \
 
 stage = [dir_path] $out_base/stage/
 cache = [dir_path] $out_base/cache/
+
+gallery = $config.launcher_electron.gallery
 
 # Map our target to Electron's platform and architecture names.
 #
@@ -55,7 +57,7 @@ switch $cxx.target.cpu
 }
 
 # Build the container image. Note that Containerfile needs no build context,
-# thus stdin.
+# so we pass it on stdin.
 #
 file{image.stamp}: file{Containerfile}
 {{
@@ -66,14 +68,15 @@ file{image.stamp}: file{Containerfile}
 }}
 
 # Substitute the project version (the version without the epoch and
-# revision) as the package version since npm requires a semantic version.
+# revision) as the npm package version since npm requires a semantic
+# version.
 #
 file{package.json}:      in{package.json.in}
 file{package-lock.json}: in{package-lock.json.in}
 
 # Install the dependencies pinned by the lockfile. This is the only step with
 # network access. Install scripts are disabled in the image (see
-# Containerfile), so run Electron's explicitly to download the Electron
+# Containerfile), so we run Electron's explicitly to download the Electron
 # archive for our target into the cache.
 #
 # Note: stage/ and cache/ outlive the recipe, thus --no-cleanup is required
@@ -102,17 +105,18 @@ file{node-modules.stamp}: file{image.stamp}                         \
   rm -r -f $stage $cache $path($>) $path($>).d
 }}
 
-# Bundle the code of each Electron process into stage/dist/.
+# Bundle the code of each Electron process into stage/dist/, along with the
+# component gallery if so configured.
 #
-# Note that we first generate the color tokens into stage/material/generated/
-# since the code imports them, and then type-check the TypeScript
-# (configuration files included).
+# Note that we first generate the tokens that are computed at build time
+# (color and motion) into stage/material/generated/ since the code imports
+# them, and then type-check the TypeScript (configuration files included).
 #
 file{bundle.stamp}: file{node-modules.stamp}                           \
                     file{tsconfig.json}                                \
                     file{vite.main.config.ts vite.preload.config.ts    \
                          vite.renderer.config.ts vite.tokens.config.ts \
-                         forge.config.ts}                              \
+                         vite.gallery.config.ts forge.config.ts}       \
                     file{electron/** material/**}
 % update
 {{
@@ -122,7 +126,7 @@ file{bundle.stamp}: file{node-modules.stamp}                           \
   cp --no-cleanup -r $src_base/electron $stage/electron
   cp --no-cleanup -r $src_base/material $stage/material
   cp --no-cleanup $path($<[1]) $path($<[2]) $path($<[3]) $path($<[4]) \
-    $path($<[5]) $path($<[6]) $stage
+    $path($<[5]) $path($<[6]) $path($<[7]) $stage
 
   $run --network=none $image npx vite build --logLevel=warn \
     --config vite.tokens.config.ts
@@ -131,14 +135,20 @@ file{bundle.stamp}: file{node-modules.stamp}                           \
 
   $run --network=none $image npx tsc -p .
 
-  $run --network=none $image npx vite build --logLevel=warn \
-    --config vite.main.config.ts
+  $run --network=none "--env=launcher_electron_gallery=$gallery" $image \
+    npx vite build --logLevel=warn --config vite.main.config.ts
 
   $run --network=none $image npx vite build --logLevel=warn \
     --config vite.preload.config.ts
 
   $run --network=none $image npx vite build --logLevel=warn \
     --config vite.renderer.config.ts
+
+  if $gallery
+  {
+    $run --network=none $image npx vite build --logLevel=warn \
+      --config vite.gallery.config.ts
+  }
 
   touch $path($>)
 }}
@@ -148,6 +158,7 @@ file{bundle.stamp}: file{node-modules.stamp}                           \
     $stage/tsconfig.json $stage/forge.config.ts                     \
     $stage/vite.main.config.ts $stage/vite.preload.config.ts        \
     $stage/vite.renderer.config.ts $stage/vite.tokens.config.ts     \
+    $stage/vite.gallery.config.ts                                   \
     $path($>) $path($>).d
 }}
 
@@ -155,7 +166,14 @@ file{bundle.stamp}: file{node-modules.stamp}                           \
 # the Electron archive from the cache (see forge.config.ts).
 #
 # Windows and Mac OS only accept numeric versions in the executable metadata,
-# so pass the version without the pre-release part.
+# so we pass the version without the pre-release part.
+#
+# The licenses of the third-party packages that the bundles contain require
+# that a copy accompanies the distribution, so we copy each one into
+# licenses/<package>/, which Forge places next to the archive.
+#
+# NOTE: remember to update the package list when the bundles start
+#       containing another such package.
 #
 import addon = launcher%libs{launcher-node}
 
@@ -164,8 +182,15 @@ file{app.stamp}: file{bundle.stamp} $addon
 {{
   diag forge ($<[1])
 
-  rm -r -f $out_base/out
+  rm -r -f $out_base/out $stage/licenses
   cp --no-cleanup $path($<[1]) $stage/launcher.node
+
+  for p: @fontsource-variable/inter @material-symbols/font-400 \
+         lit lit-html lit-element @lit/reactive-element
+  {
+    mkdir --no-cleanup -p $stage/licenses/$p
+    cp --no-cleanup $stage/node_modules/$p/LICENSE $stage/licenses/$p/LICENSE
+  }
 
   v = "$version.major.$version.minor.$version.patch"
 
@@ -176,5 +201,6 @@ file{app.stamp}: file{bundle.stamp} $addon
 }}
 % [diag=clean] clean
 {{
-  rm -r -f $out_base/out $stage/launcher.node $path($>) $path($>).d
+  rm -r -f $out_base/out $stage/launcher.node $stage/licenses \
+    $path($>) $path($>).d
 }}

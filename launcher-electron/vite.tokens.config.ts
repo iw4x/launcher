@@ -6,8 +6,9 @@ import { builtinModules } from 'node:module';
 import { defineConfig } from 'vite';
 
 // Bundle the token generator together with its dependencies into
-// tools/generate.js. Note that the material color utilities import their own
-// modules in a form that only a bundler resolves, thus the bundle.
+// tools/generate.js. Note that some modules of the material color utilities
+// import others without the .js extension, which Node.js doesn't resolve,
+// thus the bundle.
 //
 export default defineConfig (
 {

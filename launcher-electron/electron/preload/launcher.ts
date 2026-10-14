@@ -3,7 +3,8 @@
 
 // Launcher interface that the preload script exposes to the renderer as
 // window.launcher. Each function sends a request to the main process over
-// the IPC channel of the same name (prefixed with launcher:).
+// the IPC channel of the same name prefixed with launcher: (for example,
+// launcher:version).
 //
 export interface launcher_api
 {

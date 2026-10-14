@@ -16,19 +16,25 @@ interface addon
   version (): string;
 }
 
-// Note that the packaging step places the addon into the resources
+// Whether the bundle includes the component gallery (see
+// vite.main.config.ts).
+//
+declare const launcher_gallery: boolean;
+
+// Load the addon. Note that the packaging step places it into the resources
 // directory, next to the application archive (see forge.config.ts).
 //
 const launcher = createRequire (import.meta.url) (
   join (process.resourcesPath, 'launcher.node')) as addon;
 
-// Keep the window hidden until the renderer has painted, which avoids
-// showing a blank frame on startup. Note that the window background is the
-// surface role (see material/build/color.ts) so that the areas the renderer
-// hasn't painted yet match the page.
+// Create the main window and load the launcher or, if the bundle includes
+// the component gallery and we were started with --gallery, the gallery.
 //
-// The window is frameless with the renderer drawing its title bar (see
-// renderer.css).
+// The window is frameless and the renderer draws the title bar (see
+// renderer.css). We keep the window hidden until the renderer has painted so
+// that we don't show a blank frame on startup. Note also that the window
+// background is the surface role (see material/build/color.ts) so that any
+// area the renderer hasn't painted yet matches the page.
 //
 function
 create_window (): void
@@ -52,11 +58,16 @@ create_window (): void
   });
 
   w.once ('ready-to-show', () => {w.show ();});
-  void w.loadFile (join (import.meta.dirname, '../renderer/index.html'));
+
+  const page = launcher_gallery && process.argv.includes ('--gallery')
+    ? '../gallery/index.html'
+    : '../renderer/index.html';
+
+  void w.loadFile (join (import.meta.dirname, page));
 }
 
-// Only run one instance. On a second start, bring the window of the running
-// instance forward and exit.
+// Only run one instance. If we are the second, then exit and let the
+// running instance bring its window forward.
 //
 if (!app.requestSingleInstanceLock ())
 {
@@ -77,6 +88,8 @@ else
     }
   });
 
+  // Serve the launcher interface (see preload/launcher.ts).
+  //
   ipcMain.handle ('launcher:version',
                   (): ReturnType<launcher_api['version']> =>
                     Promise.resolve (launcher.version ()));

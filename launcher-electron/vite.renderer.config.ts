@@ -5,8 +5,8 @@ import { resolve } from 'node:path';
 
 import { defineConfig } from 'vite';
 
-// The window loads the renderer from the file system, thus relative asset
-// references. Note that Electron 44 embeds Chromium 152.
+// The window loads the renderer from the file system, thus the relative
+// asset references. Note that Electron 44 embeds Chromium 152.
 //
 export default defineConfig (
 {

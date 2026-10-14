@@ -1,0 +1,205 @@
+/*
+ * Copyright (c) the IW4x authors (see the AUTHORS file).
+ * SPDX-License-Identifier: GPL-3.0-only WITH AdditionRef-IW4x-Exception-1.1
+ */
+
+/*
+ * Type scale of the specification with the baseline and emphasized styles as
+ * of Material tokens version v0_103 (the version that Jetpack Compose's
+ * generated TypeScaleTokens use).
+ *
+ * The sizes are in rem so that the scale follows the user's font size
+ * setting (1rem is 16dp by default). The brand and plain typefaces are both
+ * Inter, which the library bundles (see ../index.ts).
+ */
+:root
+{
+  --md-ref-typeface-brand: 'Inter Variable', system-ui, sans-serif;
+  --md-ref-typeface-plain: 'Inter Variable', system-ui, sans-serif;
+
+  --md-sys-typescale-display-large-font: var(--md-ref-typeface-brand);
+  --md-sys-typescale-display-large-size: 3.5625rem;
+  --md-sys-typescale-display-large-line-height: 4rem;
+  --md-sys-typescale-display-large-weight: 400;
+  --md-sys-typescale-display-large-tracking: -0.0125rem;
+
+  --md-sys-typescale-emphasized-display-large-font:
+    var(--md-ref-typeface-brand);
+  --md-sys-typescale-emphasized-display-large-size: 3.5625rem;
+  --md-sys-typescale-emphasized-display-large-line-height: 4rem;
+  --md-sys-typescale-emphasized-display-large-weight: 500;
+  --md-sys-typescale-emphasized-display-large-tracking: 0;
+
+  --md-sys-typescale-display-medium-font: var(--md-ref-typeface-brand);
+  --md-sys-typescale-display-medium-size: 2.8125rem;
+  --md-sys-typescale-display-medium-line-height: 3.25rem;
+  --md-sys-typescale-display-medium-weight: 400;
+  --md-sys-typescale-display-medium-tracking: 0;
+
+  --md-sys-typescale-emphasized-display-medium-font:
+    var(--md-ref-typeface-brand);
+  --md-sys-typescale-emphasized-display-medium-size: 2.8125rem;
+  --md-sys-typescale-emphasized-display-medium-line-height: 3.25rem;
+  --md-sys-typescale-emphasized-display-medium-weight: 500;
+  --md-sys-typescale-emphasized-display-medium-tracking: 0;
+
+  --md-sys-typescale-display-small-font: var(--md-ref-typeface-brand);
+  --md-sys-typescale-display-small-size: 2.25rem;
+  --md-sys-typescale-display-small-line-height: 2.75rem;
+  --md-sys-typescale-display-small-weight: 400;
+  --md-sys-typescale-display-small-tracking: 0;
+
+  --md-sys-typescale-emphasized-display-small-font:
+    var(--md-ref-typeface-brand);
+  --md-sys-typescale-emphasized-display-small-size: 2.25rem;
+  --md-sys-typescale-emphasized-display-small-line-height: 2.75rem;
+  --md-sys-typescale-emphasized-display-small-weight: 500;
+  --md-sys-typescale-emphasized-display-small-tracking: 0;
+
+  --md-sys-typescale-headline-large-font: var(--md-ref-typeface-brand);
+  --md-sys-typescale-headline-large-size: 2rem;
+  --md-sys-typescale-headline-large-line-height: 2.5rem;
+  --md-sys-typescale-headline-large-weight: 400;
+  --md-sys-typescale-headline-large-tracking: 0;
+
+  --md-sys-typescale-emphasized-headline-large-font:
+    var(--md-ref-typeface-brand);
+  --md-sys-typescale-emphasized-headline-large-size: 2rem;
+  --md-sys-typescale-emphasized-headline-large-line-height: 2.5rem;
+  --md-sys-typescale-emphasized-headline-large-weight: 500;
+  --md-sys-typescale-emphasized-headline-large-tracking: 0;
+
+  --md-sys-typescale-headline-medium-font: var(--md-ref-typeface-brand);
+  --md-sys-typescale-headline-medium-size: 1.75rem;
+  --md-sys-typescale-headline-medium-line-height: 2.25rem;
+  --md-sys-typescale-headline-medium-weight: 400;
+  --md-sys-typescale-headline-medium-tracking: 0;
+
+  --md-sys-typescale-emphasized-headline-medium-font:
+    var(--md-ref-typeface-brand);
+  --md-sys-typescale-emphasized-headline-medium-size: 1.75rem;
+  --md-sys-typescale-emphasized-headline-medium-line-height: 2.25rem;
+  --md-sys-typescale-emphasized-headline-medium-weight: 500;
+  --md-sys-typescale-emphasized-headline-medium-tracking: 0;
+
+  --md-sys-typescale-headline-small-font: var(--md-ref-typeface-brand);
+  --md-sys-typescale-headline-small-size: 1.5rem;
+  --md-sys-typescale-headline-small-line-height: 2rem;
+  --md-sys-typescale-headline-small-weight: 400;
+  --md-sys-typescale-headline-small-tracking: 0;
+
+  --md-sys-typescale-emphasized-headline-small-font:
+    var(--md-ref-typeface-brand);
+  --md-sys-typescale-emphasized-headline-small-size: 1.5rem;
+  --md-sys-typescale-emphasized-headline-small-line-height: 2rem;
+  --md-sys-typescale-emphasized-headline-small-weight: 500;
+  --md-sys-typescale-emphasized-headline-small-tracking: 0;
+
+  --md-sys-typescale-title-large-font: var(--md-ref-typeface-brand);
+  --md-sys-typescale-title-large-size: 1.375rem;
+  --md-sys-typescale-title-large-line-height: 1.75rem;
+  --md-sys-typescale-title-large-weight: 400;
+  --md-sys-typescale-title-large-tracking: 0;
+
+  --md-sys-typescale-emphasized-title-large-font: var(--md-ref-typeface-brand);
+  --md-sys-typescale-emphasized-title-large-size: 1.375rem;
+  --md-sys-typescale-emphasized-title-large-line-height: 1.75rem;
+  --md-sys-typescale-emphasized-title-large-weight: 500;
+  --md-sys-typescale-emphasized-title-large-tracking: 0;
+
+  --md-sys-typescale-title-medium-font: var(--md-ref-typeface-plain);
+  --md-sys-typescale-title-medium-size: 1rem;
+  --md-sys-typescale-title-medium-line-height: 1.5rem;
+  --md-sys-typescale-title-medium-weight: 500;
+  --md-sys-typescale-title-medium-tracking: 0.0125rem;
+
+  --md-sys-typescale-emphasized-title-medium-font: var(--md-ref-typeface-plain);
+  --md-sys-typescale-emphasized-title-medium-size: 1rem;
+  --md-sys-typescale-emphasized-title-medium-line-height: 1.5rem;
+  --md-sys-typescale-emphasized-title-medium-weight: 700;
+  --md-sys-typescale-emphasized-title-medium-tracking: 0.009375rem;
+
+  --md-sys-typescale-title-small-font: var(--md-ref-typeface-plain);
+  --md-sys-typescale-title-small-size: 0.875rem;
+  --md-sys-typescale-title-small-line-height: 1.25rem;
+  --md-sys-typescale-title-small-weight: 500;
+  --md-sys-typescale-title-small-tracking: 0.00625rem;
+
+  --md-sys-typescale-emphasized-title-small-font: var(--md-ref-typeface-plain);
+  --md-sys-typescale-emphasized-title-small-size: 0.875rem;
+  --md-sys-typescale-emphasized-title-small-line-height: 1.25rem;
+  --md-sys-typescale-emphasized-title-small-weight: 700;
+  --md-sys-typescale-emphasized-title-small-tracking: 0.00625rem;
+
+  --md-sys-typescale-body-large-font: var(--md-ref-typeface-plain);
+  --md-sys-typescale-body-large-size: 1rem;
+  --md-sys-typescale-body-large-line-height: 1.5rem;
+  --md-sys-typescale-body-large-weight: 400;
+  --md-sys-typescale-body-large-tracking: 0.03125rem;
+
+  --md-sys-typescale-emphasized-body-large-font: var(--md-ref-typeface-plain);
+  --md-sys-typescale-emphasized-body-large-size: 1rem;
+  --md-sys-typescale-emphasized-body-large-line-height: 1.5rem;
+  --md-sys-typescale-emphasized-body-large-weight: 500;
+  --md-sys-typescale-emphasized-body-large-tracking: 0.009375rem;
+
+  --md-sys-typescale-body-medium-font: var(--md-ref-typeface-plain);
+  --md-sys-typescale-body-medium-size: 0.875rem;
+  --md-sys-typescale-body-medium-line-height: 1.25rem;
+  --md-sys-typescale-body-medium-weight: 400;
+  --md-sys-typescale-body-medium-tracking: 0.0125rem;
+
+  --md-sys-typescale-emphasized-body-medium-font: var(--md-ref-typeface-plain);
+  --md-sys-typescale-emphasized-body-medium-size: 0.875rem;
+  --md-sys-typescale-emphasized-body-medium-line-height: 1.25rem;
+  --md-sys-typescale-emphasized-body-medium-weight: 500;
+  --md-sys-typescale-emphasized-body-medium-tracking: 0.015625rem;
+
+  --md-sys-typescale-body-small-font: var(--md-ref-typeface-plain);
+  --md-sys-typescale-body-small-size: 0.75rem;
+  --md-sys-typescale-body-small-line-height: 1rem;
+  --md-sys-typescale-body-small-weight: 400;
+  --md-sys-typescale-body-small-tracking: 0.025rem;
+
+  --md-sys-typescale-emphasized-body-small-font: var(--md-ref-typeface-plain);
+  --md-sys-typescale-emphasized-body-small-size: 0.75rem;
+  --md-sys-typescale-emphasized-body-small-line-height: 1rem;
+  --md-sys-typescale-emphasized-body-small-weight: 500;
+  --md-sys-typescale-emphasized-body-small-tracking: 0.025rem;
+
+  --md-sys-typescale-label-large-font: var(--md-ref-typeface-plain);
+  --md-sys-typescale-label-large-size: 0.875rem;
+  --md-sys-typescale-label-large-line-height: 1.25rem;
+  --md-sys-typescale-label-large-weight: 500;
+  --md-sys-typescale-label-large-tracking: 0.00625rem;
+
+  --md-sys-typescale-emphasized-label-large-font: var(--md-ref-typeface-plain);
+  --md-sys-typescale-emphasized-label-large-size: 0.875rem;
+  --md-sys-typescale-emphasized-label-large-line-height: 1.25rem;
+  --md-sys-typescale-emphasized-label-large-weight: 700;
+  --md-sys-typescale-emphasized-label-large-tracking: 0.00625rem;
+
+  --md-sys-typescale-label-medium-font: var(--md-ref-typeface-plain);
+  --md-sys-typescale-label-medium-size: 0.75rem;
+  --md-sys-typescale-label-medium-line-height: 1rem;
+  --md-sys-typescale-label-medium-weight: 500;
+  --md-sys-typescale-label-medium-tracking: 0.03125rem;
+
+  --md-sys-typescale-emphasized-label-medium-font: var(--md-ref-typeface-plain);
+  --md-sys-typescale-emphasized-label-medium-size: 0.75rem;
+  --md-sys-typescale-emphasized-label-medium-line-height: 1rem;
+  --md-sys-typescale-emphasized-label-medium-weight: 700;
+  --md-sys-typescale-emphasized-label-medium-tracking: 0.03125rem;
+
+  --md-sys-typescale-label-small-font: var(--md-ref-typeface-plain);
+  --md-sys-typescale-label-small-size: 0.6875rem;
+  --md-sys-typescale-label-small-line-height: 1rem;
+  --md-sys-typescale-label-small-weight: 500;
+  --md-sys-typescale-label-small-tracking: 0.03125rem;
+
+  --md-sys-typescale-emphasized-label-small-font: var(--md-ref-typeface-plain);
+  --md-sys-typescale-emphasized-label-small-size: 0.6875rem;
+  --md-sys-typescale-emphasized-label-small-line-height: 1rem;
+  --md-sys-typescale-emphasized-label-small-weight: 700;
+  --md-sys-typescale-emphasized-label-small-tracking: 0.03125rem;
+}

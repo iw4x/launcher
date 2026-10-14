@@ -36,6 +36,6 @@ compile_commands.json
 /package.json
 /package-lock.json
 
-# Generated color tokens.
+# Generated tokens (see material/build/generate.ts).
 #
 /material/generated/
