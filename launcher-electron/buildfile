@@ -3,4 +3,95 @@
 
 ./: {*/ -build/}                                             \
     doc{README.md NEWS}                                      \
-    legal{LICENSE.md LICENSE-EXCEPTION.md AUTHORS} manifest
+    legal{LICENSE.md LICENSE-EXCEPTION.md AUTHORS} manifest  \
+    file{node-modules.stamp}
+
+# The JavaScript tools only ever run in a container built from Containerfile,
+# without capabilities and on a read-only root file system. The container
+# only sees our output directory, mounted at /out, so each step copies its
+# inputs into stage/ and runs its tool there. Note that the tools keep their
+# caches in cache/.
+#
+import! podman = podman%exe{podman}
+
+image = localhost/launcher-electron
+
+run_options = --rm                                          \
+              --userns=keep-id                              \
+              --cap-drop=all                                \
+              --security-opt=no-new-privileges              \
+              --read-only                                   \
+              --tmpfs=/tmp                                  \
+              "--volume=$out_base:/out:Z"                   \
+              --env=HOME=/out/cache/home                    \
+              --env=npm_config_cache=/out/cache/npm         \
+              --env=electron_config_cache=/out/cache/electron
+
+stage = [dir_path] $out_base/stage/
+cache = [dir_path] $out_base/cache/
+
+# Map our target to Electron's platform and architecture names.
+#
+switch $cxx.target.class
+{
+  case 'linux'
+    platform = linux
+  case 'windows'
+    platform = win32
+  case 'macos'
+    platform = darwin
+  default
+    fail "unsupported target class $cxx.target.class"
+}
+
+switch $cxx.target.cpu
+{
+  case 'x86_64'
+    arch = x64
+  case 'aarch64'
+    arch = arm64
+  default
+    fail "unsupported target cpu $cxx.target.cpu"
+}
+
+# Build the container image. Note that Containerfile needs no build context,
+# thus stdin.
+#
+file{image.stamp}: file{Containerfile} $podman
+{{
+  diag podman ($<[0])
+
+  $podman build --quiet --tag $image - <=$path($<[0]) >-
+  touch $path($>)
+}}
+
+# Install the dependencies pinned by the lockfile. This is the only step with
+# network access. Install scripts are disabled in the image (see
+# Containerfile), so run Electron's explicitly to download the Electron
+# archive for our target into the cache.
+#
+# Note: stage/ and cache/ outlive the recipe, thus --no-cleanup is required
+# for the mkdir and cp builtin calls.
+#
+file{node-modules.stamp}: file{image.stamp}                        \
+                          file{package.json package-lock.json}     \
+                          $podman
+{{
+  diag npm ($<[1])
+
+  mkdir --no-cleanup -p $stage $cache/home
+  cp --no-cleanup $path($<[1]) $path($<[2]) $stage
+
+  $podman run $run_options --network=pasta $image npm ci >-
+
+  $podman run $run_options --network=pasta    \
+    --env=npm_config_platform=$platform       \
+    --env=npm_config_arch=$arch               \
+    $image node node_modules/electron/install.js
+
+  touch $path($>)
+}}
+% [diag=clean] clean
+{{
+  rm -r -f $stage $cache $path($>) $path($>).d
+}}
