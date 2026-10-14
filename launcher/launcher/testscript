@@ -40,6 +40,16 @@ This is free software released under the GNU General Public License, version 3,
 with the IW4x Linking Exception, version 1.1.
 EOO
 
+: build2-metadata
+:
+$* --build2-metadata 1 >>"EOO"
+# build2 buildfile launcher
+export.metadata = 1 launcher
+launcher.name = [string] launcher
+launcher.version = [string] '$version'
+launcher.checksum = [string] '$version'
+EOO
+
 : unknown-option
 : Test handling of an option that is not ours
 :

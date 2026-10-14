@@ -329,7 +329,7 @@ namespace launcher
     struct parser
     {
       static void
-      parse (X& x, scanner& s)
+      parse (X& x, bool& xs, scanner& s)
       {
         using namespace std;
 
@@ -343,6 +343,8 @@ namespace launcher
         }
         else
           throw missing_value (o);
+
+        xs = true;
       }
     };
 
@@ -350,7 +352,7 @@ namespace launcher
     struct parser<bool>
     {
       static void
-      parse (bool& x, scanner& s)
+      parse (bool& x, bool& xs, scanner& s)
       {
         const char* o (s.next ());
 
@@ -373,6 +375,8 @@ namespace launcher
         }
         else
           throw missing_value (o);
+
+        xs = true;
       }
     };
 
@@ -380,7 +384,7 @@ namespace launcher
     struct parser<std::string>
     {
       static void
-      parse (std::string& x, scanner& s)
+      parse (std::string& x, bool& xs, scanner& s)
       {
         const char* o (s.next ());
 
@@ -388,6 +392,8 @@ namespace launcher
           x = s.next ();
         else
           throw missing_value (o);
+
+        xs = true;
       }
     };
 
@@ -395,10 +401,10 @@ namespace launcher
     struct parser<std::pair<X, std::size_t> >
     {
       static void
-      parse (std::pair<X, std::size_t>& x, scanner& s)
+      parse (std::pair<X, std::size_t>& x, bool& xs, scanner& s)
       {
         x.second = s.position ();
-        parser<X>::parse (x.first, s);
+        parser<X>::parse (x.first, xs, s);
       }
     };
 
@@ -406,11 +412,13 @@ namespace launcher
     struct parser<std::vector<X> >
     {
       static void
-      parse (std::vector<X>& c, scanner& s)
+      parse (std::vector<X>& c, bool& xs, scanner& s)
       {
         X x;
-        parser<X>::parse (x, s);
+        bool dummy;
+        parser<X>::parse (x, dummy, s);
         c.push_back (x);
+        xs = true;
       }
     };
 
@@ -418,11 +426,13 @@ namespace launcher
     struct parser<std::set<X, C> >
     {
       static void
-      parse (std::set<X, C>& c, scanner& s)
+      parse (std::set<X, C>& c, bool& xs, scanner& s)
       {
         X x;
-        parser<X>::parse (x, s);
+        bool dummy;
+        parser<X>::parse (x, dummy, s);
         c.insert (x);
+        xs = true;
       }
     };
 
@@ -430,7 +440,7 @@ namespace launcher
     struct parser<std::map<K, V, C> >
     {
       static void
-      parse (std::map<K, V, C>& m, scanner& s)
+      parse (std::map<K, V, C>& m, bool& xs, scanner& s)
       {
         const char* o (s.next ());
 
@@ -452,24 +462,27 @@ namespace launcher
             0
           };
 
+          bool dummy;
           if (!kstr.empty ())
           {
             av[1] = const_cast<char*> (kstr.c_str ());
             argv_scanner s (0, ac, av, false, pos);
-            parser<K>::parse (k, s);
+            parser<K>::parse (k, dummy, s);
           }
 
           if (!vstr.empty ())
           {
             av[1] = const_cast<char*> (vstr.c_str ());
             argv_scanner s (0, ac, av, false, pos);
-            parser<V>::parse (v, s);
+            parser<V>::parse (v, dummy, s);
           }
 
           m[k] = v;
         }
         else
           throw missing_value (o);
+
+        xs = true;
       }
     };
 
@@ -477,7 +490,7 @@ namespace launcher
     struct parser<std::multimap<K, V, C> >
     {
       static void
-      parse (std::multimap<K, V, C>& m, scanner& s)
+      parse (std::multimap<K, V, C>& m, bool& xs, scanner& s)
       {
         const char* o (s.next ());
 
@@ -499,24 +512,27 @@ namespace launcher
             0
           };
 
+          bool dummy;
           if (!kstr.empty ())
           {
             av[1] = const_cast<char*> (kstr.c_str ());
             argv_scanner s (0, ac, av, false, pos);
-            parser<K>::parse (k, s);
+            parser<K>::parse (k, dummy, s);
           }
 
           if (!vstr.empty ())
           {
             av[1] = const_cast<char*> (vstr.c_str ());
             argv_scanner s (0, ac, av, false, pos);
-            parser<V>::parse (v, s);
+            parser<V>::parse (v, dummy, s);
           }
 
           m.insert (typename std::multimap<K, V, C>::value_type (k, v));
         }
         else
           throw missing_value (o);
+
+        xs = true;
       }
     };
 
@@ -534,6 +550,13 @@ namespace launcher
       s.next ();
       x.*M = true;
     }
+
+    template <typename X, typename T, T X::*M, bool X::*S>
+    void
+    thunk (X& x, scanner& s)
+    {
+      parser<T>::parse (x.*M, x.*S, s);
+    }
   }
 }
 
@@ -541,6 +564,18 @@ namespace launcher
 {
   // options
   //
+
+  const std::uint64_t& options::
+  build2_metadata () const
+  {
+    return this->build2_metadata_;
+  }
+
+  bool options::
+  build2_metadata_specified () const
+  {
+    return this->build2_metadata_specified_;
+  }
 
   const bool& options::
   help () const
@@ -564,7 +599,9 @@ namespace launcher
 
   options::
   options ()
-  : help_ (),
+  : build2_metadata_ (),
+    build2_metadata_specified_ (false),
+    help_ (),
     version_ ()
   {
   }
@@ -663,6 +700,9 @@ namespace launcher
   {
     _cli_options_map_init ()
     {
+      _cli_options_map_["--build2-metadata"] =
+      &::launcher::cli::thunk< options, std::uint64_t, &options::build2_metadata_,
+        &options::build2_metadata_specified_ >;
       _cli_options_map_["--help"] =
       &::launcher::cli::thunk< options, &options::help_ >;
       _cli_options_map_["--version"] =

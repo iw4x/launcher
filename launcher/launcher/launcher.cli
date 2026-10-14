@@ -1,6 +1,8 @@
 // Copyright (c) the IW4x authors (see the AUTHORS file).
 // SPDX-License-Identifier: GPL-3.0-only WITH AdditionRef-IW4x-Exception-1.1
 
+include <cstdint>; // std::uint64_t
+
 "\section=1"
 "\name=launcher"
 "\summary=launcher and updater for IW4x"
@@ -26,6 +28,8 @@ namespace launcher
   class options
   {
     "\h|OPTIONS|"
+
+    std::uint64_t --build2-metadata; // Leave undocumented/hidden.
 
     bool --help {"Print usage information and exit."}
     bool --version {"Print version and exit."}

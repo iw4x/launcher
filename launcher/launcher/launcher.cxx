@@ -27,6 +27,24 @@ namespace launcher
                cli::unknown_mode::fail,
                cli::unknown_mode::fail);
 
+      // Handle --build2-metadata (see also buildfile).
+      //
+      if (o.build2_metadata_specified ())
+      {
+        // Note that the export.metadata variable should be the first non-
+        // blank/comment line.
+        //
+        println ("# build2 buildfile launcher\n"
+                 "export.metadata = 1 launcher\n"
+                 "launcher.name = [string] launcher\n"
+                 "launcher.version = [string] '{}'\n"
+                 "launcher.checksum = [string] '{}'",
+                 LAUNCHER_VERSION_FULL,
+                 LAUNCHER_VERSION_FULL);
+
+        return 0;
+      }
+
       // Handle --version.
       //
       if (o.version ())

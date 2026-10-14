@@ -269,6 +269,8 @@ namespace launcher
   }
 }
 
+#include <cstdint>
+
 namespace launcher
 {
   class options
@@ -317,6 +319,12 @@ namespace launcher
 
     // Option accessors.
     //
+    const std::uint64_t&
+    build2_metadata () const;
+
+    bool
+    build2_metadata_specified () const;
+
     const bool&
     help () const;
 
@@ -342,6 +350,8 @@ namespace launcher
             ::launcher::cli::unknown_mode argument);
 
     public:
+    std::uint64_t build2_metadata_;
+    bool build2_metadata_specified_;
     bool help_;
     bool version_;
   };

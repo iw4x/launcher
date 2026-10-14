@@ -8,6 +8,18 @@ exe{launcher}: {hxx ixx txx cxx}{** -version          \
                                     -pregenerated/**} \
                hxx{version} $libs testscript
 
+# Target metadata, see also --build2-metadata in launcher.cxx.
+#
+# Note that launcher does not query any environment variables.
+#
+exe{launcher}:
+{
+  export.metadata = 1 launcher
+  launcher.name     = [string] launcher
+  launcher.version  = [string] $version
+  launcher.checksum = [string] $version
+}
+
 hxx{version}: in{version} $src_root/manifest
 
 # Build options.
@@ -73,6 +85,7 @@ if $develop
             --guard-prefix LAUNCHER                \
             --cli-namespace launcher::cli          \
             --generate-parse                       \
+            --generate-specifier                   \
             --suppress-inline                      \
             --suppress-undocumented                \
             --long-usage                           \
