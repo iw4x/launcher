@@ -9,8 +9,11 @@ import! [metadata, rule_hint=cxx.link] \
   libs = libnode-api-headers%lib{node-api-headers}
 
 tclass = $cxx.target.class
+tsys   = $cxx.target.system
 
 windows = ($tclass == 'windows')
+mingw   = ($tsys == 'mingw32')
+msvc    = ($windows && !$mingw) # MSVC or Clang targeting MSVC.
 
 # Node.js can only load an addon from a shared library, so that is all we
 # build.
@@ -36,6 +39,8 @@ cxx.poptions =+ "-I$out_root" "-I$src_root"
 #
 cxx.poptions += -DNAPI_VERSION=10
 
+# Node-API import library.
+#
 # The Node-API functions are exported by the executable that loads the addon,
 # so we leave them unresolved at link time. On Linux the linker does this for
 # a shared library by default while on Mac OS we have to ask for it.
@@ -46,89 +51,91 @@ cxx.poptions += -DNAPI_VERSION=10
 # delay-load hook then hands over the executable of the process, whatever its
 # name (see delay-load-windows.cxx for details).
 #
-switch $tclass
+node_api_def = [path] $($libs: libnode_api_headers.node_api_def)
+
+# The file is in the dependency's source directory, outside of our project,
+# where it can only be found as a target that we declare.
+#
+def{$node_api_def}:
+
+libs{launcher-node}: file{node.lib}:  include = ($msvc  ? adhoc : false)
+libs{launcher-node}: file{libnode.a}: include = ($mingw ? adhoc : false)
+
+switch $cxx.target.cpu
+{
+  case 'x86_64'
+  {
+    lib_machine     = x64
+    dlltool_machine = 'i386:x86-64'
+  }
+  case 'aarch64'
+  {
+    lib_machine     = arm64
+    dlltool_machine = arm64
+  }
+}
+
+# Note that lib.exe also writes the exports file, which we don't use.
+#
+<file{node.lib} file{node.exp}>: def{$node_api_def}
+%
+if $msvc
+{{
+  diag lib ($<)
+
+  if ($lib_machine == [null])
+    exit "unsupported target cpu $cxx.target.cpu"
+
+  $bin.ar.path /NOLOGO /MACHINE:$lib_machine /NAME:node.exe \
+    "/DEF:$path($<)" "/OUT:$path($>[0])" >-
+}}
+
+# Use the dlltool of our binutils, which produces the delay-import library.
+# The binutils pattern, if any, is either a program name with a wildcard or a
+# directory (see the bin module for details).
+#
+if ($bin.pattern == [null])
+  dlltool = dlltool
+elif $regex.match($bin.pattern, '.*\*.*')
+  dlltool = $regex.replace($bin.pattern, '\*', 'dlltool')
+else
+  dlltool = "$(bin.pattern)dlltool"
+
+file{libnode.a}: def{$node_api_def}
+%
+if $mingw
+{{
+  diag dlltool ($<)
+
+  if ($dlltool_machine == [null])
+    exit "unsupported target cpu $cxx.target.cpu"
+
+  $dlltool --machine $dlltool_machine --input-def $path($<) \
+    --dllname node.exe --output-delaylib $path($>)
+}}
+
+# Link options.
+#
+# Note that the MinGW runtime provides the delay-load helper itself while
+# with MSVC it comes from delayimp.lib. Clang targeting MSVC passes linker
+# options through -Wl.
+#
+switch $tclass, $tsys
 {
   case 'macos'
     libs{launcher-node}: cxx.loptions += -Wl,-undefined,dynamic_lookup
 
+  case 'windows', 'mingw32'
+    libs{launcher-node}: cxx.libs += $out_base/libnode.a
+
   case 'windows'
   {
-    node_api_def = [path] $($libs: libnode_api_headers.node_api_def)
-
-    # The file is in the dependency's source directory, outside of our
-    # project, where it can only be found as a target that we declare.
-    #
-    def{$node_api_def}:
-
-    if ($cxx.target.system != 'mingw32')
+    libs{launcher-node}:
     {
-      switch $cxx.target.cpu
-      {
-        case 'x86_64'
-          machine = x64
-        case 'aarch64'
-          machine = arm64
-        default
-          fail "unsupported target cpu $cxx.target.cpu"
-      }
-
-      # Note that lib.exe also writes the exports file, which we don't use.
-      #
-      <file{node.lib} file{node.exp}>: def{$node_api_def}
-      {{
-        diag lib ($<)
-
-        $bin.ar.path /NOLOGO /MACHINE:$machine /NAME:node.exe \
-          "/DEF:$path($<)" "/OUT:$path($>[0])" >-
-      }}
-
-      libs{launcher-node}: file{node.lib}: include = adhoc
-
-      # Clang targeting MSVC passes linker options through -Wl.
-      #
-      libs{launcher-node}:
-      {
-        cxx.loptions += ($cxx.class == 'msvc' \
-                         ? /DELAYLOAD:node.exe \
-                         : -Wl,/DELAYLOAD:node.exe)
-        cxx.libs += $out_base/node.lib delayimp.lib
-      }
-    }
-    else
-    {
-      switch $cxx.target.cpu
-      {
-        case 'x86_64'
-          machine = i386:x86-64
-        case 'aarch64'
-          machine = arm64
-        default
-          fail "unsupported target cpu $cxx.target.cpu"
-      }
-
-      # Use the dlltool of our binutils, which produces the delay-import
-      # library. The binutils pattern, if any, is either a program name with
-      # a wildcard or a directory (see the bin module for details).
-      #
-      if ($bin.pattern == [null])
-        dlltool = dlltool
-      elif $regex.match($bin.pattern, '.*\*.*')
-        dlltool = $regex.replace($bin.pattern, '\*', 'dlltool')
-      else
-        dlltool = "$(bin.pattern)dlltool"
-
-      file{libnode.a}: def{$node_api_def}
-      {{
-        diag dlltool ($<)
-
-        $dlltool --machine $machine --input-def $path($<) \
-          --dllname node.exe --output-delaylib $path($>)
-      }}
-
-      # Note that the MinGW runtime provides the delay-load helper itself.
-      #
-      libs{launcher-node}: file{libnode.a}: include = adhoc
-      libs{launcher-node}: cxx.libs += $out_base/libnode.a
+      cxx.loptions += ($cxx.class == 'msvc' \
+                       ? /DELAYLOAD:node.exe \
+                       : -Wl,/DELAYLOAD:node.exe)
+      cxx.libs += $out_base/node.lib delayimp.lib
     }
   }
 }
