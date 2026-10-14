@@ -3,10 +3,10 @@
 
 libs =
 
-exe{launcher}: {hxx ixx txx cxx}{** -version          \
-                                    -launcher-options \
-                                    -pregenerated/**} \
-               hxx{version} $libs testscript
+./: exe{launcher}: {hxx ixx txx cxx}{** -version          \
+                                        -launcher-options \
+                                        -pregenerated/**} \
+                   hxx{version} $libs
 
 # Target metadata, see also --build2-metadata in launcher.cxx.
 #

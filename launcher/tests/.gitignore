@@ -1,0 +1,4 @@
+# Testscript output directories (can be symlinks).
+#
+test
+test-*

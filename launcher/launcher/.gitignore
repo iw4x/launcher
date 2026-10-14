@@ -7,7 +7,3 @@ version.hxx
 # Generated command line parser.
 #
 /launcher-options.?xx
-
-# Testscript output directory (can be symlink).
-#
-test-launcher

@@ -23,12 +23,12 @@ to set up a build configuration. If you are new to build2, the
 explains the workflow.
 
 The repository holds one package, `launcher`, with its sources in
-`launcher/launcher/` and its tests in `launcher/launcher/testscript`. The
-command line parser is generated from `launcher/launcher/launcher.cli` by the
-development build, which `bdep init` configures by default and which keeps
-the copy in `launcher/launcher/pregenerated/` up to date, together with the
-man page in `launcher/doc/pregenerated/`. Commit these copies together with
-the change to `launcher.cli`.
+`launcher/launcher/` and its tests in `launcher/tests/`. The command line
+parser is generated from `launcher/launcher/launcher.cli` by the development
+build, which `bdep init` configures by default and which keeps the copy in
+`launcher/launcher/pregenerated/` up to date, together with the man page in
+`launcher/doc/pregenerated/`. Commit these copies together with the change to
+`launcher.cli`.
 
 Work on a branch of your fork of the repository and keep it up to date with
 `main` by rebasing it. The history is linear, so a branch with merge commits
@@ -70,6 +70,10 @@ Every change that affects behavior comes with a test, and every bug fix comes
 with a test that fails without the fix. The tests are written in
 [Testscript](https://build2.org/build2/doc/build2-testscript-manual.xhtml)
 and run with `bdep test` (or `b test` in a forwarded configuration).
+
+The tests live in `launcher/tests/`, a subproject that imports the launcher
+it tests. Each subdirectory groups the tests of one subject (for example,
+`basics/`) in its own `testscript`.
 
 Give each test an explicit id (for example, `: missing-name`), with a summary
 if it tests a failure. A test checks one thing at a time. Where the output

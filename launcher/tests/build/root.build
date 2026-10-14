@@ -1,0 +1,16 @@
+# Copyright (c) the IW4x authors (see the AUTHORS file).
+# SPDX-License-Identifier: GPL-3.0-only WITH AdditionRef-IW4x-Exception-1.1
+
+# We need to configure C++ module to obtain the target information (see
+# below).
+#
+using cxx.config
+
+# Import the launcher we will be testing.
+#
+import! [metadata] launcher = launcher%exe{launcher}
+testscript{*}: test = $launcher
+
+# Specify the test target for cross-testing.
+#
+test.target = $cxx.target

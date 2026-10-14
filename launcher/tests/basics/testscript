@@ -33,9 +33,9 @@ EOO
 
 : print-version
 :
-$* --version >>"EOO"
-launcher $version.project_id
-Copyright \(c\) the IW4x authors.
+$* --version >>~/EOO/
+/launcher .+/
+Copyright (c) the IW4x authors.
 This is free software released under the GNU General Public License, version 3,
 with the IW4x Linking Exception, version 1.1.
 EOO
@@ -46,8 +46,8 @@ $* --build2-metadata 1 >>"EOO"
 # build2 buildfile launcher
 export.metadata = 1 launcher
 launcher.name = [string] launcher
-launcher.version = [string] '$version'
-launcher.checksum = [string] '$version'
+launcher.version = [string] '$launcher_version'
+launcher.checksum = [string] '$launcher_version'
 EOO
 
 : unknown-option

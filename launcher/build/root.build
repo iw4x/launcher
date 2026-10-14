@@ -25,7 +25,3 @@ hxx{*}: extension = hxx
 ixx{*}: extension = ixx
 txx{*}: extension = txx
 cxx{*}: extension = cxx
-
-# Specify the test target for cross-testing.
-#
-test.target = $cxx.target

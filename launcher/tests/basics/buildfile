@@ -1,0 +1,12 @@
+# Copyright (c) the IW4x authors (see the AUTHORS file).
+# SPDX-License-Identifier: GPL-3.0-only WITH AdditionRef-IW4x-Exception-1.1
+
+./: testscript
+
+# Pass the version from the launcher metadata to the tests.
+#
+testscript{*}: launcher_version = $($launcher: launcher.version)
+
+# Note: avoid cleaning exe{launcher} through this dependency.
+#
+./: $launcher: clean = false
