@@ -5,9 +5,9 @@ libs =
 
 ./: exe{launcher}: cxx{launcher} libul{launcher}
 
-# The executable is built from a utility library so that the Node addon (see
-# ../node/) can link the same objects, compiled for shared use, into itself.
-# Note that main() stays out of it since a utility library is linked whole.
+# Build the executable from a utility library that the Node addon (see
+# ../node/) also links. Note: main() must stay out of it since utility
+# libraries are linked whole.
 #
 libul{launcher}: {hxx ixx txx cxx}{** -launcher          \
                                       -version           \
@@ -33,16 +33,16 @@ hxx{version}: in{version} $src_root/manifest
 #
 cxx.poptions =+ "-I$out_root" "-I$src_root"
 
-# Note that MinGW GCC keeps the Windows console support of std::print() in
+# Link the Windows console support of std::print(), which MinGW GCC keeps in
 # the separate stdc++exp library.
 #
 if ($cxx.target.system == 'mingw32' && $cxx.id == 'gcc')
   cxx.libs += -lstdc++exp
 
-# Command line parser.
+# Generated options parser.
 #
-# We keep the generated command line parser in pregenerated/ so that only
-# the development build requires the cli compiler.
+# We keep the generated options parser in pregenerated/ so that only the
+# development build requires the cli compiler.
 #
 # In the consumption build ($config.launcher.develop == false) we just use
 # this pregenerated source code. In the development build
@@ -115,10 +115,9 @@ if $develop
      diff $d/launcher-options.cxx $path($>[1]) >-
     exit
 
-  # Note that the mkdir and cp builtins register the filesystem entries they
-  # create for cleanup, which happens once the recipe completes. Since the
-  # pregenerated versions may not exist yet, we suppress this with the
-  # --no-cleanup option.
+  # Note: the pregenerated versions may not exist yet, thus --no-cleanup is
+  # required for the mkdir and cp builtin calls (newly created filesystem
+  # entries are otherwise removed once the recipe completes).
   #
   mkdir --no-cleanup -p $d
 

@@ -16,9 +16,9 @@ namespace launcher
       // Throw a JavaScript Error with the specified message, unless the
       // Node-API call that failed has already left an exception pending.
       //
-      // Note that only some failures leave one pending (napi_invalid_arg,
-      // for example, doesn't) and returning nullptr without it would make
-      // the call quietly evaluate to undefined.
+      // Note that only some failures leave one pending (e.g.,
+      // napi_invalid_arg doesn't) and returning nullptr without it would
+      // make the call quietly evaluate to undefined.
       //
       void
       throw_error (napi_env e, const char* m)

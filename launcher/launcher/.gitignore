@@ -4,6 +4,6 @@
 #
 version.hxx
 
-# Generated command line parser.
+# Generated options parser.
 #
 /launcher-options.?xx

@@ -1,9 +1,9 @@
 : 1
 summary: launcher project repository
 
-# We use the testing section of cppget.org. Packages there have passed CI and
-# are queued for stable, and the testing repository complements stable, so we
-# see every stable package as well.
+# We use the testing section of cppget.org for packages that have passed CI
+# and are queued for stable (such as libnode-api-headers). Note that testing
+# complements stable, so we also see every stable package.
 #
 :
 role: prerequisite

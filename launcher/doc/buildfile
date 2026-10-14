@@ -15,8 +15,8 @@ pdf{*}: extension = pdf
 
 # Man pages.
 #
-# Similar to the command line parser (see ../launcher/buildfile), we keep the
-# man pages generated from ../launcher/launcher.cli in pregenerated/ and only
+# Similar to the options parser (see ../launcher/buildfile), we keep the man
+# pages generated from ../launcher/launcher.cli in pregenerated/ and only
 # regenerate them in the development build.
 
 ## Consumption build ($develop == false).
@@ -82,8 +82,7 @@ if $develop
        --stdout $path($<[0]) >$path($>)
 
   # If the result differs from the pregenerated version (or there is none
-  # yet), copy it over. See ../launcher/buildfile for why we need
-  # --no-cleanup.
+  # yet), copy it over (see ../launcher/buildfile for why --no-cleanup).
   #
   p = $src_base/pregenerated/launcher.1
 
@@ -176,10 +175,9 @@ if $render
 
   $groff -man -Tps $path($<[0]) | $ps2pdf - $path($>)
 
-  # Strictly speaking we don't need to copy the result since it is not
-  # stored in the repository, but let's do that for consistency with the
-  # distributed source tree. See ../launcher/buildfile for why we need
-  # --no-cleanup.
+  # Also copy the result to pregenerated/ for consistency with the
+  # distributed source tree (see ../launcher/buildfile for why
+  # --no-cleanup).
   #
   mkdir --no-cleanup -p $src_base/pregenerated
   cp --no-cleanup $path($>) $src_base/pregenerated/launcher.pdf

@@ -3,7 +3,8 @@
 
 ./: testscript
 
-# Pass the version from the launcher metadata to the tests.
+# Pass the launcher version from its metadata (testscript cannot look up
+# target-specific variables).
 #
 testscript{*}: launcher_version = $($launcher: launcher.version)
 

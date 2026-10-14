@@ -10,19 +10,20 @@
 
 #include <string.h> // _stricmp()
 
-// The Node-API functions that we import name node.exe as their module (see
-// buildfile). The process that loads us is Electron running under the name
-// of the application, and it exports these functions from its own
-// executable. Since node.exe is delay-loaded, the delay-load helper calls
-// our hook before loading it, and we hand over the process executable
-// instead.
-//
 namespace launcher
 {
   namespace node
   {
     namespace
     {
+      // Return the process executable in place of node.exe and nullptr
+      // (default handling) for everything else.
+      //
+      // The Node-API functions that we import name node.exe as their module
+      // (see buildfile). The process that loads us is Electron under the
+      // name of the application, which exports these functions from its own
+      // executable.
+      //
       FARPROC WINAPI
       delay_load_hook (unsigned int n, PDelayLoadInfo i)
       {
@@ -35,9 +36,10 @@ namespace launcher
   }
 }
 
-// The helper reads the hook from this variable. Its declaration differs
-// between the Microsoft and the MinGW runtimes (the former is const), so we
-// take the type from the declaration.
+// Register the hook with the delay-load helper.
+//
+// Note that the declaration differs between the Microsoft and MinGW runtimes
+// (the former is const), thus decltype.
 //
 decltype (__pfnDliNotifyHook2) __pfnDliNotifyHook2 =
   &launcher::node::delay_load_hook;

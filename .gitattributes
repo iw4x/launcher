@@ -18,10 +18,10 @@
 #
 #*.png binary
 
-# GitHub Linguist doesn't know build2 and detects buildfile as Ruby (Buildr's
-# Buildfile). So exclude build2 files from the language statistics and
-# highlight them as the closest language it does know, in both naming
-# schemes. Note that the identity register is also a manifest list.
+# Exclude build2 files from the GitHub language statistics and highlight them
+# as the closest language that Linguist knows (it has no build2 and detects
+# buildfile as Ruby). Note that the identity register is also a manifest
+# list.
 #
 buildfile    linguist-detectable=false linguist-language=Makefile
 build2file   linguist-detectable=false linguist-language=Makefile
@@ -38,8 +38,8 @@ identities   linguist-detectable=false linguist-language=YAML
 #
 identities -spdx
 
-# The generated code we keep in pregenerated/ (see launcher/launcher/buildfile
-# for details) has no SPDX header. Mark it as generated so that GitHub
-# collapses it in diffs and excludes it from the language statistics.
+# Mark the code we keep in pregenerated/ as generated (GitHub then collapses
+# it in diffs and excludes it from the language statistics). Note that it has
+# no SPDX header (see launcher/launcher/buildfile for details).
 #
 **/pregenerated/** -spdx linguist-generated
