@@ -15,9 +15,9 @@ FROM docker.io/library/node:24-bookworm-slim@sha256:51b1100cc2a83d370c6a60952e3f
 # Don't run the install scripts of dependencies and limit npm's registry
 # requests to the packages it installs.
 #
-ENV npm_config_ignore_scripts=true \
+ENV npm_config_ignore_scripts=true   \
     npm_config_update_notifier=false \
-    npm_config_fund=false \
+    npm_config_fund=false            \
     npm_config_audit=false
 
 WORKDIR /out/stage
