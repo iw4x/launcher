@@ -15,9 +15,8 @@ section describes.
 
 ## Development
 
-The development setup uses the standard `bdep`-based workflow and needs a C++
-compiler whose standard library provides `std::print()` from C++23. On Linux,
-with GCC 14 or later:
+The development setup for `launcher` uses the standard `bdep`-based workflow
+and needs a C++23 compiler that provides `std::print()`, for example, GCC 14:
 
 ```
 git clone https://github.com/iw4x/launcher.git
@@ -28,28 +27,9 @@ bdep update
 bdep test
 ```
 
-The command line parser of `launcher` is generated from
-`launcher/launcher/launcher.cli` by
-[CLI](https://codesynthesis.com/projects/cli/). In this setup `bdep` builds
-`cli` in the host configuration that `--create-host-config` creates, and each
-build updates the copy of the generated parser kept in
-`launcher/launcher/pregenerated/`. Consumers of the package build that copy,
-so only the development build requires `cli`. The man page and its XHTML
-version are generated the same way, into `launcher/doc/pregenerated/`. Their
-PDF version is rendered with `groff` and Ghostscript's `ps2pdf` if both are
-installed (the build warns and skips the PDF otherwise).
-
-The `launcher-electron` package runs its JavaScript tooling in a
-[Podman](https://podman.io/) container, so its build needs `podman` and, for
-the dependency installation step, network access. The packaged application
-is written to `launcher-electron/out/` in the build configuration (for
-example, `../launcher-gcc/launcher-electron/out/`). To use a `podman` other
-than the one found in `PATH`, set `config.launcher_electron.podman`.
-
-`launcher` is also built and tested for Windows. From Linux, add a MinGW-w64
-GCC configuration that runs the tests under Wine. Wine has to find the MinGW
-runtime DLLs, so the test runner adds their directory to `WINEPATH` (here, as
-on Fedora):
+To also build for Windows with MinGW-w64 GCC, add a configuration that runs
+the tests under Wine (which finds the MinGW runtime DLLs through `WINEPATH`,
+here as on Fedora):
 
 ```
 bdep init -C @mingw cc config.cxx=x86_64-w64-mingw32-g++ \
@@ -59,24 +39,19 @@ bdep update @mingw
 bdep test @mingw
 ```
 
-On Windows, with MSVC, from the Visual Studio "x64 Native Tools Command
-Prompt", which builds 64-bit binaries:
+On Windows with MSVC, use the "x64 Native Tools Command Prompt" (in
+PowerShell, write the configuration name as `-@msvc`):
 
 ```
-git clone https://github.com/iw4x/launcher.git
-cd launcher
-
 bdep init -C @msvc cc config.cxx=cl --create-host-config
 bdep update
 bdep test
 ```
 
-In PowerShell, a leading `@` has a special meaning (splatting), so write the
-configuration name as `-@msvc`, which `bdep` also accepts:
-
-```
-bdep init -C -@msvc cc config.cxx=cl --create-host-config
-```
+Note that `launcher-electron` builds in a [Podman](https://podman.io/)
+container and needs network access to install its npm dependencies. The
+packaged application is written to `launcher-electron/out/` in the build
+configuration.
 
 ## Contributing
 
