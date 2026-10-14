@@ -33,6 +33,11 @@ manifest     linguist-detectable=false linguist-language=YAML
 *.manifest   linguist-detectable=false linguist-language=YAML
 identities   linguist-detectable=false linguist-language=YAML
 
+# Highlight the npm package file templates (see launcher-electron/buildfile)
+# as JSON.
+#
+*.json.in linguist-language=JSON
+
 # Note that the identity register is a manifest list and so cannot have the
 # SPDX header.
 #
