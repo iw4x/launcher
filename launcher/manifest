@@ -16,6 +16,7 @@ email: wroy@proton.me
 build-error-email: wroy@proton.me
 depends: * build2 >= 0.18.0
 depends: * bpkg >= 0.18.0
+depends: libnode-api-headers ^1.9.0
 depends: * cli ^1.2.1 ? ($config.launcher.develop)
 builds: default
 builds: -( +gcc &!gcc-14+ )                ; Requires std::print() (GCC 14).

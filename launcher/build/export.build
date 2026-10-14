@@ -4,6 +4,10 @@
 $out_root/
 {
   include launcher/
+  include node/
 }
 
-export $out_root/launcher/exe{launcher}
+if ($import.target == libs{launcher-node})
+  export $out_root/node/$import.target
+else
+  export $out_root/launcher/$import.target
