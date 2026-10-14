@@ -33,7 +33,10 @@ The command line parser of `launcher` is generated from
 `cli` in the host configuration that `--create-host-config` creates, and each
 build updates the copy of the generated parser kept in
 `launcher/launcher/pregenerated/`. Consumers of the package build that copy,
-so only the development build requires `cli`.
+so only the development build requires `cli`. The man page and its XHTML
+version are generated the same way, into `launcher/doc/pregenerated/`. Their
+PDF version is rendered with `groff` and Ghostscript's `ps2pdf` if both are
+installed (the build warns and skips the PDF otherwise).
 
 `launcher` is also built and tested for Windows. From Linux, add a MinGW-w64
 GCC configuration that runs the tests under Wine. Wine has to find the MinGW

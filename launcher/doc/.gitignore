@@ -1,0 +1,11 @@
+# The generated pages, which a forwarded configuration links here (see
+# pregenerated/ for the copy we keep).
+#
+/launcher.1
+/launcher.xhtml
+/launcher.pdf
+
+# The PDF, which we don't commit since it records its creation date (see
+# buildfile).
+#
+/pregenerated/*.pdf

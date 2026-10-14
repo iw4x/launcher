@@ -26,8 +26,9 @@ The repository holds one package, `launcher`, with its sources in
 `launcher/launcher/` and its tests in `launcher/launcher/testscript`. The
 command line parser is generated from `launcher/launcher/launcher.cli` by the
 development build, which `bdep init` configures by default and which keeps
-the copy in `launcher/launcher/pregenerated/` up to date. Commit that copy
-together with the change to `launcher.cli`.
+the copy in `launcher/launcher/pregenerated/` up to date, together with the
+man page in `launcher/doc/pregenerated/`. Commit these copies together with
+the change to `launcher.cli`.
 
 Work on a branch of your fork of the repository and keep it up to date with
 `main` by rebasing it. The history is linear, so a branch with merge commits
