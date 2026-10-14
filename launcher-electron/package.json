@@ -5,6 +5,7 @@
   "license": "GPL-3.0-only WITH AdditionRef-IW4x-Exception-1.1",
   "private": true,
   "type": "module",
+  "main": "dist/main/main.js",
   "devDependencies": {
     "@electron-forge/cli": "8.0.1",
     "@electron-forge/plugin-fuses": "8.0.1",

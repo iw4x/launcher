@@ -1,10 +1,11 @@
 # Copyright (c) the IW4x authors (see the AUTHORS file).
 # SPDX-License-Identifier: GPL-3.0-only WITH AdditionRef-IW4x-Exception-1.1
 
-./: {*/ -build/}                                             \
+./: {*/ -build/ -electron/}                                  \
     doc{README.md NEWS}                                      \
-    legal{LICENSE.md LICENSE-EXCEPTION.md AUTHORS} manifest  \
-    file{node-modules.stamp}
+    legal{LICENSE.md LICENSE-EXCEPTION.md AUTHORS}           \
+    manifest                                                 \
+    file{app.stamp}
 
 # The JavaScript tools only ever run in a container built from Containerfile,
 # without capabilities and on a read-only root file system. The container
@@ -12,20 +13,19 @@
 # inputs into stage/ and runs its tool there. Note that the tools keep their
 # caches in cache/.
 #
-import! podman = podman%exe{podman}
+podman = $config.launcher_electron.podman
+image  = localhost/launcher-electron
 
-image = localhost/launcher-electron
-
-run_options = --rm                                          \
-              --userns=keep-id                              \
-              --cap-drop=all                                \
-              --security-opt=no-new-privileges              \
-              --read-only                                   \
-              --tmpfs=/tmp                                  \
-              "--volume=$out_base:/out:Z"                   \
-              --env=HOME=/out/cache/home                    \
-              --env=npm_config_cache=/out/cache/npm         \
-              --env=electron_config_cache=/out/cache/electron
+run = $podman run --rm                              \
+      --userns=keep-id                              \
+      --cap-drop=all                                \
+      --security-opt=no-new-privileges              \
+      --read-only                                   \
+      --tmpfs=/tmp                                  \
+      "--volume=$out_base:/out:Z"                   \
+      --env=HOME=/out/cache/home                    \
+      --env=npm_config_cache=/out/cache/npm         \
+      --env=electron_config_cache=/out/cache/electron
 
 stage = [dir_path] $out_base/stage/
 cache = [dir_path] $out_base/cache/
@@ -57,11 +57,11 @@ switch $cxx.target.cpu
 # Build the container image. Note that Containerfile needs no build context,
 # thus stdin.
 #
-file{image.stamp}: file{Containerfile} $podman
+file{image.stamp}: file{Containerfile}
 {{
-  diag podman ($<[0])
+  diag podman ($<)
 
-  $podman build --quiet --tag $image - <=$path($<[0]) >-
+  $podman build --quiet --tag $image - <=$path($<) >-
   touch $path($>)
 }}
 
@@ -73,20 +73,20 @@ file{image.stamp}: file{Containerfile} $podman
 # Note: stage/ and cache/ outlive the recipe, thus --no-cleanup is required
 # for the mkdir and cp builtin calls.
 #
-file{node-modules.stamp}: file{image.stamp}                        \
-                          file{package.json package-lock.json}     \
-                          $podman
+file{node-modules.stamp}: file{image.stamp}                         \
+                          file{package.json package-lock.json}
+% update
 {{
   diag npm ($<[1])
 
   mkdir --no-cleanup -p $stage $cache/home
   cp --no-cleanup $path($<[1]) $path($<[2]) $stage
 
-  $podman run $run_options --network=pasta $image npm ci >-
+  $run --network=pasta $image npm ci >-
 
-  $podman run $run_options --network=pasta    \
-    --env=npm_config_platform=$platform       \
-    --env=npm_config_arch=$arch               \
+  $run --network=pasta                         \
+    --env=npm_config_platform=$platform        \
+    --env=npm_config_arch=$arch                \
     $image node node_modules/electron/install.js
 
   touch $path($>)
@@ -94,4 +94,65 @@ file{node-modules.stamp}: file{image.stamp}                        \
 % [diag=clean] clean
 {{
   rm -r -f $stage $cache $path($>) $path($>).d
+}}
+
+# Type-check the TypeScript (configuration files included) and bundle the
+# code of each Electron process into stage/dist/.
+#
+file{bundle.stamp}: file{node-modules.stamp}                        \
+                    file{tsconfig.json}                             \
+                    file{vite.main.config.ts vite.preload.config.ts \
+                         vite.renderer.config.ts forge.config.ts}   \
+                    file{electron/**}
+% update
+{{
+  diag vite ($<[1])
+
+  rm -r -f $stage/electron $stage/dist
+  cp --no-cleanup -r $src_base/electron $stage/electron
+  cp --no-cleanup $path($<[1]) $path($<[2]) $path($<[3]) $path($<[4]) \
+    $path($<[5]) $stage
+
+  $run --network=none $image npx tsc -p .
+
+  $run --network=none $image npx vite build --logLevel=warn \
+    --config vite.main.config.ts
+
+  $run --network=none $image npx vite build --logLevel=warn \
+    --config vite.preload.config.ts
+
+  $run --network=none $image npx vite build --logLevel=warn \
+    --config vite.renderer.config.ts
+
+  touch $path($>)
+}}
+% [diag=clean] clean
+{{
+  rm -r -f $stage/electron $stage/dist $stage/tsconfig.json         \
+    $stage/vite.main.config.ts $stage/vite.preload.config.ts \
+    $stage/vite.renderer.config.ts $stage/forge.config.ts    \
+    $path($>) $path($>).d
+}}
+
+# Package the application for our target into out/. Note that Forge takes
+# the Electron archive from the cache (see forge.config.ts).
+#
+import addon = launcher%libs{launcher-node}
+
+file{app.stamp}: file{bundle.stamp} $addon
+% update
+{{
+  diag forge ($<[1])
+
+  rm -r -f $out_base/out
+  cp --no-cleanup $path($<[1]) $stage/launcher.node
+
+  $run --network=none $image npx electron-forge package \
+    --platform=$platform --arch=$arch >-
+
+  touch $path($>)
+}}
+% [diag=clean] clean
+{{
+  rm -r -f $out_base/out $stage/launcher.node $path($>) $path($>).d
 }}

@@ -39,6 +39,13 @@ version are generated the same way, into `launcher/doc/pregenerated/`. Their
 PDF version is rendered with `groff` and Ghostscript's `ps2pdf` if both are
 installed (the build warns and skips the PDF otherwise).
 
+The `launcher-electron` package runs its JavaScript tooling in a
+[Podman](https://podman.io/) container, so its build needs `podman` and, for
+the dependency installation step, network access. The packaged application
+is written to `launcher-electron/out/` in the build configuration (for
+example, `../launcher-gcc/launcher-electron/out/`). To use a `podman` other
+than the one found in `PATH`, set `config.launcher_electron.podman`.
+
 `launcher` is also built and tested for Windows. From Linux, add a MinGW-w64
 GCC configuration that runs the tests under Wine. Wine has to find the MinGW
 runtime DLLs, so the test runner adds their directory to `WINEPATH` (here, as

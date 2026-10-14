@@ -5,3 +5,7 @@
 # buildfile).
 #
 using cxx.config
+
+# Podman program to run the JavaScript tools with (see buildfile).
+#
+config [path] config.launcher_electron.podman ?= podman

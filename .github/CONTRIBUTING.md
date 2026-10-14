@@ -26,7 +26,7 @@ The repository holds two packages. The `launcher` package keeps the
 executable in `launcher/launcher/` and its tests in `launcher/tests/`, with
 the Node.js native addon in `launcher/node/`. The `launcher-electron` package
 is the desktop application that loads the addon, with its sources in
-`launcher-electron/`. The command line parser is generated from
+`launcher-electron/electron/`. The command line parser is generated from
 `launcher/launcher/launcher.cli` by the development build, which `bdep init`
 configures by default and which keeps the copy in
 `launcher/launcher/pregenerated/` up to date, together with the man page in
