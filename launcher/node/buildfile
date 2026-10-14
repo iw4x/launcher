@@ -114,6 +114,19 @@ switch $tclass, $tsys
     # delayimp.lib above).
     #
     libs{launcher-node}: cxx.libs += $out_base/libnode.a
+
+    # Link the GCC runtime statically since the application package has no
+    # copy of its DLLs and Windows doesn't provide them.
+    #
+    # Note that libstdc++ also depends on winpthreads, which the compiler
+    # driver links after our libraries, thus --whole-archive.
+    #
+    libs{launcher-node}:
+    {
+      cxx.loptions += -static-libstdc++ -static-libgcc
+      cxx.libs += -Wl,-Bstatic,--whole-archive -lwinpthread \
+                  -Wl,--no-whole-archive,-Bdynamic
+    }
   }
 }
 
