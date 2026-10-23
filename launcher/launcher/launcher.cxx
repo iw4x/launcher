@@ -1636,9 +1636,9 @@ catch (const exception& ex)
 }
 catch (...)
 {
-  error ("You've run into a launcher bug we didn't see coming. Since this isn't"
-         "something a restart can fix, please report it to our team so we can"
-         "investigate.");
+  error ("You've run into a launcher bug we didn't see coming. Since this "
+         "isn't something a restart can fix, please report it to our team so "
+         "we can investigate.");
   error ("please report this to the IW4x developers on Discord: "
          "https://discord.com/invite/2ETE8engZM");
   return 1;
