@@ -42,6 +42,12 @@ namespace launcher
   //
   constexpr size_t download_buffer_size  = 8192;
 
+  // Limit on the size of response headers. Beast defaults to 8KB which some
+  // servers exceed (GitHub release redirects, for example, carry a large
+  // Content-Security-Policy).
+  //
+  constexpr uint32_t response_header_limit = 64 * 1024;
+
   namespace
   {
     struct url_parts
@@ -274,8 +280,11 @@ namespace launcher
       co_await http_beast::async_write (stream, creq, asio::use_awaitable);
 
       beast::flat_buffer buf;
-      http_beast::response<http_beast::empty_body> cres;
-      co_await http_beast::async_read (stream, buf, cres, asio::use_awaitable);
+      http_beast::response_parser<http_beast::empty_body> cps;
+      cps.header_limit (response_header_limit);
+      co_await http_beast::async_read (stream, buf, cps, asio::use_awaitable);
+
+      http_beast::response<http_beast::empty_body> cres (cps.release ());
 
       if (cres.result () != http_beast::status::ok)
         throw runtime_error (
@@ -701,11 +710,14 @@ namespace launcher
     co_await http_beast::async_write (s, br, asio::use_awaitable);
 
     beast::flat_buffer b;
-    beast_res bres;
+    http_beast::response_parser<beast_res::body_type> ps;
+    ps.header_limit (response_header_limit);
 
     // Read the response back.
     //
-    co_await http_beast::async_read (s, b, bres, asio::use_awaitable);
+    co_await http_beast::async_read (s, b, ps, asio::use_awaitable);
+
+    beast_res bres (ps.release ());
 
     http_response rs;
     rs.status  = from_beast_status (bres.result ());
@@ -806,11 +818,14 @@ namespace launcher
     co_await http_beast::async_write (s, br, asio::use_awaitable);
 
     beast::flat_buffer b;
-    beast_res bres;
+    http_beast::response_parser<beast_res::body_type> ps;
+    ps.header_limit (response_header_limit);
 
     // Collect the response.
     //
-    co_await http_beast::async_read (s, b, bres, asio::use_awaitable);
+    co_await http_beast::async_read (s, b, ps, asio::use_awaitable);
+
+    beast_res bres (ps.release ());
 
     beast::error_code ec;
     s.socket ().shutdown (tcp::socket::shutdown_both, ec);
@@ -906,6 +921,7 @@ namespace launcher
 
       beast::flat_buffer b;
       parser ps;
+      ps.header_limit (response_header_limit);
       ps.body_limit (numeric_limits<uint64_t>::max ());
 
       // Only read the header initially so we can check for redirects
