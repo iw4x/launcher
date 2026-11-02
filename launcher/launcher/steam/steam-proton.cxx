@@ -4,6 +4,9 @@
 #include <boost/asio/use_awaitable.hpp>
 #include <boost/asio/steady_timer.hpp>
 
+#include <cctype>   // isdigit()
+#include <charconv> // from_chars()
+#include <vector>
 #include <iostream>
 #include <fstream>
 #include <algorithm>
@@ -182,6 +185,44 @@ namespace launcher
     return nullopt;
   }
 
+  namespace
+  {
+    // Split a version such as "10.0-3" into its numeric components. Return
+    // nullopt if the version does not start with a digit, which is the case
+    // for directories whose name we could not parse (for example, "Proton
+    // Hotfix"). As well as if a component doesn't fit, since such a name is
+    // hardly a Proton release we would want to prefer.
+    //
+    optional<vector<unsigned long>>
+    numeric_version (const string& v)
+    {
+      if (v.empty () || !isdigit (static_cast<unsigned char> (v.front ())))
+        return nullopt;
+
+      vector<unsigned long> r;
+
+      for (const char* b (v.data ()), *e (b + v.size ()); b != e; )
+      {
+        if (!isdigit (static_cast<unsigned char> (*b)))
+        {
+          ++b;
+          continue;
+        }
+
+        unsigned long n;
+        from_chars_result c (from_chars (b, e, n));
+
+        if (c.ec != errc ())
+          return nullopt;
+
+        r.push_back (n);
+        b = c.ptr;
+      }
+
+      return r;
+    }
+  }
+
   bool proton_manager::
   version_compare (const proton_version& a, const proton_version& b)
   {
@@ -191,9 +232,21 @@ namespace launcher
     if (a.experimental && !b.experimental) return true;
     if (!a.experimental && b.experimental) return false;
 
-    // Otherwise, simple lexicographical sort is usually good enough for
-    // "8.0" vs "7.0".
+    // Numbered releases come next, newest first. Compare the components
+    // numerically since "10.0" is newer than "9.0".
     //
+    // Everything we could not parse goes last. Notably, this includes Proton
+    // Hotfix, which Valve only intends for specific games but which Steam
+    // now downloads on its own whenever the compatibility tool selection is
+    // opened. Ranking it by its name would put it above every numbered
+    // release and break the launch.
+    //
+    auto x (numeric_version (a.version));
+    auto y (numeric_version (b.version));
+
+    if (x && y) return *x > *y;
+    if (x || y) return x.has_value ();
+
     return a.version > b.version;
   }
 
