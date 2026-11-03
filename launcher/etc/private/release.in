@@ -1,0 +1,447 @@
+#!/usr/bin/env bash
+
+# Copyright (c) the IW4x authors (see the AUTHORS file).
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+# Build the launcher release archives.
+#
+# Usage: release [-h|--help] [<options>] <output-dir>
+#
+# Build the launcher from a commit of the repository that we run in and
+# write an archive for each of the targets that we ship to <output-dir>:
+#
+# windows  launcher-<version>-x86_64-windows.zip
+# glibc    launcher-<version>-x86_64-linux-glibc.tar.xz
+# musl     launcher-<version>-x86_64-linux-musl.tar.xz
+#
+# Each archive holds the launcher executable alone, which the update
+# extracts and puts in place of the running launcher. The names are what the
+# update looks for (see update-discovery.cxx), and <version> is the package
+# version of the commit.
+#
+# Every target is built in its own bpkg configuration in <output-dir>/build/
+# from the commit as bpkg fetches it from the repository, so uncommitted
+# changes don't end up in a release. We keep the configurations between runs
+# since building the dependencies takes most of the time. We cross-compile
+# the Windows launcher with MinGW-w64 and build the glibc launcher with the
+# native GCC, both linked statically. We build the musl launcher, which is
+# linked fully statically, with the GCC of an Alpine Linux container that we
+# run with podman.
+#
+# For example, from the repository root:
+#
+# launcher/etc/private/release ../launcher-release
+#
+# Note that this script requires podman for the musl target, the MinGW-w64
+# GCC for the Windows target, and binutils, xz, and zip.
+#
+usage="usage: $0 [-h|--help] [<options>] <output-dir>"
+
+trap 'exit 1' ERR
+set -o errtrace # Trap in functions and subshells.
+set -o pipefail # Fail if any pipeline command fails.
+
+function info () { echo "$*" 1>&2; }
+function error () { info "error: $*"; exit 1; }
+
+function usage_error () # <message>
+{
+  info "error: $1"
+  info "  info: run '$0 --help' for more information"
+  exit 1
+}
+
+# Note that this function will execute a command with arguments that contain
+# spaces but it will not print them as quoted (and neither does set -x).
+#
+function run ()
+{
+  info "+ $*"
+  "$@"
+}
+
+# The glibc floor of the glibc launcher (see glibc.cxx in the launcher
+# package), which we verify the executable against.
+#
+glibc_floor=2.36
+
+# The Alpine Linux image that builds the musl launcher.
+#
+# The build2 0.18 scheduler crashes on musl (build2 issue #526), so we
+# install the staged toolchain, whose installation script we verify against
+# its checksum. Each staged toolchain replaces the script, so if the
+# checksum doesn't match, then use the one from the toolchain.sha256 file
+# next to the script. bpkg also needs libuuid, openssl (repository fetch),
+# and coreutils (it rejects the busybox sha256sum).
+#
+alpine=3.23
+build2=0.19.0-a.0
+build2_script=build2-install-$build2-stage.sh
+build2_sha256=e2bffd43b5ade6463610e6ae30f9c00b23dcdfd28541e3562c7f85a6cb3a7b78
+
+image="localhost/launcher-release:alpine$alpine-build2-$build2"
+
+# Parse the command line.
+#
+commit=HEAD
+targets=()
+jobs=()
+odir=
+
+while [[ "$#" -gt 0 ]]; do
+  case "$1" in
+    -h|--help)
+      info "$usage"
+      info
+      info "Options:"
+      info "  --commit <rev>     Commit to release (HEAD by default)."
+      info "  --target <target>  Target to build, one of windows, glibc, and"
+      info "                     musl. Repeat for several (all by default)."
+      info "  --jobs|-j <num>    Number of jobs to perform in parallel."
+      exit 0
+      ;;
+    --commit)
+      shift
+      if [[ "$#" -eq 0 ]]; then
+        usage_error "commit expected after --commit"
+      fi
+      commit="$1"
+      shift
+      ;;
+    --target)
+      shift
+      if [[ "$#" -eq 0 ]]; then
+        usage_error "target expected after --target"
+      fi
+      case "$1" in
+        windows|glibc|musl) targets+=("$1")                    ;;
+        *)                  usage_error "unknown target '$1'" ;;
+      esac
+      shift
+      ;;
+    -j|--jobs)
+      shift
+      if [[ "$#" -eq 0 ]]; then
+        usage_error "number of jobs expected after --jobs|-j"
+      fi
+      jobs=(-j "$1")
+      shift
+      ;;
+    -*)
+      usage_error "unknown option '$1'"
+      ;;
+    *)
+      if [[ -n "$odir" ]]; then
+        usage_error "unexpected argument '$1'"
+      fi
+      odir="${1%/}"
+      shift
+      ;;
+  esac
+done
+
+if [[ -z "$odir" ]]; then
+  usage_error "output directory expected"
+fi
+
+if [[ "${#targets[@]}" -eq 0 ]]; then
+  targets=(windows glibc musl)
+fi
+
+declare -A selected
+for t in "${targets[@]}"; do
+  selected[$t]=true
+done
+
+# Make sure we have everything that we need before we build anything.
+#
+function check_command () # <command> <hint>
+{
+  if ! command -v "$1" >/dev/null 2>&1; then
+    error "unable to find $1 ($2)"
+  fi
+}
+
+check_command git   "git"
+check_command bpkg  "build2 toolchain"
+check_command xz    "xz"
+check_command tar   "tar"
+
+if [[ -n "${selected[windows]}" ]]; then
+  check_command x86_64-w64-mingw32-g++     "MinGW-w64 GCC"
+  check_command x86_64-w64-mingw32-objdump "MinGW-w64 binutils"
+  check_command zip                        "zip"
+fi
+
+if [[ -n "${selected[glibc]}" ]]; then
+  check_command g++     "GCC"
+  check_command objdump "binutils"
+fi
+
+if [[ -n "${selected[musl]}" ]]; then
+  check_command podman  "podman"
+  check_command readelf "binutils"
+fi
+
+if ! root="$(git rev-parse --show-toplevel 2>/dev/null)"; then
+  error "not inside the launcher repository"
+fi
+
+if ! sha="$(git -C "$root" rev-parse --verify --quiet "$commit^{commit}")"
+then
+  error "unknown commit '$commit'"
+fi
+
+# The time of the commit, which every file in the archives carries so that
+# the same commit gives the same archives.
+#
+time="$(git -C "$root" show -s --format=%ct "$sha")"
+
+mkdir -p "$odir"
+odir="$(cd "$odir" && pwd)"
+
+# The repository at the commit, as bpkg fetches it. Note that a git
+# repository location can only name a commit with its full id.
+#
+location="git+file://$root#@$sha"
+
+# Configure a target, build the launcher in it, and install the executable
+# into <output-dir>/work/<target>/, printing the installation directory.
+#
+# The installation directory is launcher-<version>/, which is where the
+# version comes from. We filter out everything except the executable and
+# the dependencies are linked statically, so it should only contain
+# bin/iw4x-launcher[.exe].
+#
+function build () # <target> <bindist-option>...
+{
+  local t="$1"
+  shift
+
+  local c="$odir/build/$t"
+  local w="$odir/work/$t"
+
+  if [[ ! -d "$c" ]]; then
+    case "$t" in
+      windows)
+        run bpkg create -d "$c" cc          \
+          config.cxx=x86_64-w64-mingw32-g++ \
+          config.c=x86_64-w64-mingw32-gcc   \
+          config.cc.coptions=-O3            \
+          config.cc.loptions=-static        \
+          config.bin.lib=static 1>&2
+        ;;
+      glibc)
+        run bpkg create -d "$c" cc \
+          config.cxx=g++           \
+          config.c=gcc             \
+          config.cc.coptions=-O3   \
+          config.bin.lib=static 1>&2
+        ;;
+    esac
+  fi
+
+  rm -rf "$w"
+
+  run bpkg build -d "$c" "${jobs[@]}" --yes "launcher@$location" 1>&2
+
+  run bpkg bindist -d "$c" -o "$w"                                 \
+    --distribution=archive                                         \
+    --archive-prepare-only                                         \
+    --archive-install-root /                                       \
+    --recursive=auto                                               \
+    "$@"                                                           \
+    config.install.filter='include/@false lib/@false share/@false' \
+    launcher >/dev/null
+
+  install_dir "$w"
+}
+
+# Print the installation directory in <work-dir>, its only entry.
+#
+function install_dir () # <work-dir>
+{
+  local d=("$1"/*)
+
+  if [[ "${#d[@]}" -ne 1 || ! "$(basename "${d[0]}")" =~ ^launcher-.+$ ]]; then
+    error "unable to find installation directory in '$1'"
+  fi
+
+  echo "${d[0]}"
+}
+
+# Print the version of the installation directory, which bpkg names
+# launcher-<version>-<architecture>-<os>[...].
+#
+function version () # <install-dir>
+{
+  local n
+  n="$(basename "$1")"
+  n="${n#launcher-}"
+  echo "${n%%-x86_64-*}"
+}
+
+# Make sure the installation directory only contains the executable and
+# print its path.
+#
+function executable () # <install-dir> <name>
+{
+  local e
+  local f="$1/bin/$2"
+
+  if [[ ! -f "$f" ]]; then
+    error "no '$2' in installation directory '$1'"
+  fi
+
+  while read -r e; do
+    if [[ "$e" != "bin/$2" ]]; then
+      error "unexpected '$e' in installation directory '$1'"
+    fi
+  done < <(cd "$1" && find . -type f -printf '%P\n')
+
+  echo "$f"
+}
+
+# Write the executable to the archive with only its name as the path.
+#
+function archive () # <executable> <archive>
+{
+  if [[ -e "$2" ]]; then
+    error "archive '$2' already exists"
+  fi
+
+  local d
+  d="$(dirname "$1")"
+
+  touch -d "@$time" "$1"
+
+  case "$2" in
+    *.zip)
+      (cd "$d" && zip -q -X "$2" "$(basename "$1")")
+      ;;
+    *.tar.xz)
+      tar -C "$d" -cJf "$2"                                    \
+          --owner=0 --group=0 --numeric-owner --mtime="@$time" \
+          "$(basename "$1")"
+      ;;
+  esac
+
+  info "generated $2"
+}
+
+# Windows.
+#
+# The MinGW runtime DLLs are not on the hosts that run the launcher, so the
+# launcher must import Windows DLLs only.
+#
+if [[ -n "${selected[windows]}" ]]; then
+  d="$(build windows                       \
+         --architecture=x86_64-w64-mingw32 \
+         --os-release-id=windows)"
+
+  e="$(executable "$d" iw4x-launcher.exe)"
+  h="$(x86_64-w64-mingw32-objdump -p "$e")"
+
+  if sed -n -e 's/^\s*DLL Name: //p' <<<"$h" |
+       grep -i -E '^lib(stdc\+\+|gcc_s|winpthread).*\.dll$'; then
+    error "'$e' imports the MinGW runtime"
+  fi
+
+  archive "$e" "$odir/launcher-$(version "$d")-x86_64-windows.zip"
+fi
+
+# glibc.
+#
+# The launcher binds its glibc references to the floor, which we verify the
+# same way as its floor test does (see glibc/testscript in launcher-tests).
+#
+if [[ -n "${selected[glibc]}" ]]; then
+  d="$(build glibc)"
+  e="$(executable "$d" iw4x-launcher)"
+  h="$(objdump -T "$e")"
+
+  # The latest of the glibc versions that the executable references.
+  #
+  v="$(sed -n -E -e 's/^.*[ (]GLIBC_([0-9.]+)\)? .*$/\1/p' <<<"$h" |
+         sort -V | tail -n 1)"
+
+  if [[ -z "$v" ]]; then
+    error "no glibc references in '$e'"
+  fi
+
+  if [[ "$(printf '%s\n' "$glibc_floor" "$v" | sort -V | tail -n 1)" \
+        != "$glibc_floor" ]]; then
+    error "'$e' requires glibc $v, above the $glibc_floor floor"
+  fi
+
+  archive "$e" "$odir/launcher-$(version "$d")-x86_64-linux-glibc.tar.xz"
+fi
+
+# musl.
+#
+# We build in the container with the repository mounted read-only and the
+# output directory mounted read-write, so the configuration and the
+# installation end up where the other targets have theirs. A fully static
+# executable neither requires shared libraries nor a dynamic loader, which
+# is what we verify.
+#
+if [[ -n "${selected[musl]}" ]]; then
+  if ! podman image exists "$image"; then
+    run podman build -t "$image" - <<EOF
+FROM docker.io/library/alpine:$alpine
+
+RUN apk add --no-cache build-base linux-headers git curl openssl coreutils \\
+    libuuid perl
+
+RUN cd /tmp                                                             && \\
+    curl -sSfO https://stage.build2.org/0/$build2/$build2_script        && \\
+    echo "$build2_sha256  $build2_script" | sha256sum -c                && \\
+    sh $build2_script --yes --trust yes --local --sudo false /usr/local && \\
+    rm -rf /tmp/*
+EOF
+  fi
+
+  c=/out/build/musl
+  w=/out/work/musl
+
+  rm -rf "$odir/work/musl"
+
+  # Note that inside the container the repository is at /src.
+  #
+  run podman run --rm    \
+    -v "$root:/src:ro,Z" \
+    -v "$odir:/out:Z"    \
+    "$image" sh -c "
+set -e
+
+if test ! -d $c; then
+  bpkg create -d $c cc         \
+    config.cxx=g++             \
+    config.c=gcc               \
+    config.cc.coptions=-O3     \
+    config.cc.loptions=-static \
+    config.bin.lib=static
+fi
+
+bpkg build -d $c ${jobs[*]} --yes 'launcher@git+file:///src#@$sha'
+
+bpkg bindist -d $c -o $w                                         \
+  --distribution=archive                                         \
+  --archive-prepare-only                                         \
+  --archive-install-root /                                       \
+  --recursive=auto                                               \
+  config.install.filter='include/@false lib/@false share/@false' \
+  launcher >/dev/null
+" 1>&2
+
+  d="$(install_dir "$odir/work/musl")"
+  e="$(executable "$d" iw4x-launcher)"
+
+  h="$(readelf -d -l "$e")"
+
+  if grep -q -E '\(NEEDED\)|^\s*INTERP\s' <<<"$h"; then
+    error "'$e' is not linked statically"
+  fi
+
+  archive "$e" "$odir/launcher-$(version "$d")-x86_64-linux-musl.tar.xz"
+fi
