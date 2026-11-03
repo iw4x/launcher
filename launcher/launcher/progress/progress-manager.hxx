@@ -140,6 +140,16 @@ namespace launcher
       return running_.load (std::memory_order_relaxed);
     }
 
+    // Return the current entries. Note that add_entry() and remove_entry()
+    // only change them once their work runs on the io_context.
+    //
+    std::vector<std::shared_ptr<progress_entry>>
+    entries () const
+    {
+      int r (entries_buffer_.load (std::memory_order_acquire));
+      return entries_buffers_ [r];
+    }
+
   private:
     asio::awaitable<void> update_loop ();
     asio::awaitable<void> render_loop ();
