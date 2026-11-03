@@ -127,16 +127,13 @@ if $glibc
 obje{launcher-glibc}: cxx.poptions = "-I$out_root" "-I$src_root"
 
 # Our Asio and Beast heavy translation units can exceed the section limit of
-# the default COFF object format.
+# the default COFF object format. Note that Clang targeting MSVC switches to
+# the big object format by itself.
 #
-switch $tsys
-{
-  case 'win32-msvc'
-    cxx.coptions += /bigobj
-
-  case 'mingw32'
-    cxx.coptions += -Wa,-mbig-obj
-}
+if ($cxx.class == 'msvc')
+  cxx.coptions += /bigobj
+elif ($tsys == 'mingw32')
+  cxx.coptions += -Wa,-mbig-obj
 
 # Open every log category to the full trace range in the development build
 # (see launcher-log.cxx for details).
