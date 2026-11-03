@@ -4,6 +4,7 @@
 #pragma once
 
 #include <string>
+#include <vector>
 #include <filesystem>
 
 namespace launcher
@@ -40,6 +41,20 @@ namespace launcher
     //
     void
     migrate_clients () const;
+
+    // Move the DLC fastfiles that earlier launchers installed into zone/dlc/
+    // to their destinations among the specified files, which are the files
+    // that the DLC manifest installs. If a destination already exists, then
+    // remove the legacy copy instead.
+    //
+    // At startup the client moves the files of zone/dlc/ that are not the
+    // game's own DLC over their copies in zone/iw4x/x86/dlc/, taking them
+    // for the newer ones. So a legacy copy that differs from the DLC
+    // manifest's replaces the installed file on every start that finds it,
+    // and we download the file again on the next update.
+    //
+    void
+    migrate_dlc (const std::vector<std::filesystem::path>&) const;
 
     // Move a file that is in use by another process, and so cannot be
     // removed, into the retired directory. Return true if the file was moved.

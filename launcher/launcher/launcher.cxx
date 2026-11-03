@@ -960,6 +960,19 @@ namespace launcher
       m.archives.push_back (std::move (x));
     }
 
+    // Take over the copies that earlier launchers installed into zone/dlc/
+    // before the planning, which then adopts those that are current (see
+    // installation::migrate_dlc()).
+    //
+    {
+      vector<path> ts;
+
+      for (const auto& a : m.archives)
+        ts.push_back (manifest_coordinator::resolve_path (a, root));
+
+      installation (root).migrate_dlc (ts);
+    }
+
     auto p (cc.plan (m, component_type::dlc, "dlc"));
 
     for (auto& i : p | views::filter ([] (const auto& x) {

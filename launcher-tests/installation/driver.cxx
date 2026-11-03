@@ -3,6 +3,7 @@
 
 #include <print>
 #include <string>
+#include <vector>
 #include <iostream>
 #include <filesystem>
 
@@ -11,13 +12,17 @@
 using namespace std;
 using namespace launcher;
 
-// Usage: argv[0] <command> [<argument>]
+// Usage: argv[0] <command> [<argument>...]
 //
 // Run the command on the installation in the current working directory and
 // print its result, if any, to stdout.
 //
 // migrate-clients
 //    Rename the clients installed under their legacy names.
+//
+// migrate-dlc <file>...
+//    Move the DLC files installed under zone/dlc/ to the specified
+//    destinations, relative to the installation root.
 //
 // retire <file>
 //    Move the file into the retired directory and print whether it moved.
@@ -36,11 +41,11 @@ main (int argc, char* argv[])
   {
     println (cerr,
              "error: invalid arguments\n"
-             "  info: usage: driver <command> [<argument>]");
+             "  info: usage: driver <command> [<argument>...]");
     return 1;
   };
 
-  if (argc < 2 || argc > 3)
+  if (argc < 2)
     return usage ();
 
   const string c (argv[1]);
@@ -48,11 +53,20 @@ main (int argc, char* argv[])
 
   installation ins (filesystem::current_path ());
 
-  if (c == "migrate-clients" && !a)
+  if (c == "migrate-clients" && argc == 2)
     ins.migrate_clients ();
+  else if (c == "migrate-dlc" && argc >= 3)
+  {
+    vector<filesystem::path> fs;
+
+    for (int i (2); i != argc; ++i)
+      fs.push_back (ins.root () / argv[i]);
+
+    ins.migrate_dlc (fs);
+  }
   else if (c == "retire" && a)
     println ("{}", ins.retire (argv[2]));
-  else if (c == "remove-retired" && !a)
+  else if (c == "remove-retired" && argc == 2)
     ins.remove_retired ();
   else if (c == "reset-cache" && a)
     println ("{}", ins.reset_cache (argv[2]));

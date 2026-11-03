@@ -76,6 +76,63 @@ namespace launcher
     migrate_client (root_, "iw4x (x64).exe", architecture::x64);
   }
 
+  void installation::
+  migrate_dlc (const vector<path>& fs) const
+  {
+    path d (root_ / "zone" / "iw4x" / "x86" / "dlc");
+    path l (root_ / "zone" / "dlc");
+
+    for (const path& t : fs)
+    {
+      if (t.parent_path () != d)
+        continue;
+
+      path f (l / t.filename ());
+
+      // Note that the legacy copy can be a symlink, which may dangle.
+      //
+      error_code ec;
+
+      if (!exists (symlink_status (f, ec)))
+        continue;
+
+      if (exists (t, ec))
+      {
+        remove (f, ec);
+
+        if (ec)
+          log::warning (categories::launcher (),
+                        "failed to remove {}: {}",
+                        to_utf8 (f),
+                        to_utf8_system_message (ec.message ()));
+        else
+          log::info (categories::launcher (),
+                     "removed {} which {} supersedes",
+                     to_utf8 (f),
+                     to_utf8 (t));
+
+        continue;
+      }
+
+      create_directories (d, ec);
+
+      if (!ec)
+        rename (f, t, ec);
+
+      if (ec)
+        log::warning (categories::launcher (),
+                      "failed to move {} to {}: {}",
+                      to_utf8 (f),
+                      to_utf8 (t),
+                      to_utf8_system_message (ec.message ()));
+      else
+        log::info (categories::launcher (),
+                   "moved {} to {}",
+                   to_utf8 (f),
+                   to_utf8 (t));
+    }
+  }
+
   bool installation::
   retire (const path& f) const
   {

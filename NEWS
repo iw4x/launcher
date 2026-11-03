@@ -23,3 +23,7 @@ Version 1.1.8-b.28
   * The Linux launcher runs on glibc 2.36 (Debian 12) and later. It links
     the C++ runtime and its dependencies statically, so it only requires
     glibc from the host.
+
+  * The launcher takes over the DLC files that earlier launchers installed
+    into zone/dlc/. The client moved them over the current copies at every
+    start, so each update downloaded them again.

@@ -38,6 +38,63 @@
   }
 }}
 
+: migrate-dlc
+:
+{{
+  d = zone/iw4x/x86/dlc
+
+  : move
+  : Test moving the legacy copy of a missing DLC file to its destination
+  :
+  {
+    mkdir -p zone/dlc
+    echo 'legacy' >=zone/dlc/mp_farm.ff
+
+    $* migrate-dlc $d/mp_farm.ff &!zone/dlc/mp_farm.ff &zone/iw4x/***
+
+    test -f zone/dlc/mp_farm.ff == 1
+    cat $d/mp_farm.ff >'legacy'
+  }
+
+  : existing
+  : Test removing the legacy copy of a DLC file that is installed
+  :
+  {
+    mkdir -p zone/dlc $d
+    echo 'legacy' >=zone/dlc/mp_farm.ff
+    echo 'current' >=$d/mp_farm.ff
+
+    $* migrate-dlc $d/mp_farm.ff &!zone/dlc/mp_farm.ff
+
+    test -f zone/dlc/mp_farm.ff == 1
+    cat $d/mp_farm.ff >'current'
+  }
+
+  : unlisted
+  : Test keeping the files of zone/dlc/ that the DLC doesn't install
+  :
+  {
+    mkdir -p zone/dlc
+    echo 'stock' >=zone/dlc/mp_crash.ff
+
+    $* migrate-dlc $d/mp_farm.ff
+
+    cat zone/dlc/mp_crash.ff >'stock'
+  }
+
+  : other
+  : Test ignoring the DLC files that go elsewhere
+  :
+  {
+    mkdir -p zone/dlc
+    echo 'legacy' >=zone/dlc/iw_dlc3_00.iwd
+
+    $* migrate-dlc main/iw4x/x86/iw_dlc3_00.iwd
+
+    cat zone/dlc/iw_dlc3_00.iwd >'legacy'
+  }
+}}
+
 : retire
 :
 {{
