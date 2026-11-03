@@ -1,0 +1,39 @@
+# Copyright (c) the IW4x authors (see the AUTHORS file).
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+.include common.testscript
+
+# Note that we only match the log lines that a test is about since the rest
+# of the log changes with the build and the time.
+#
+
+: missing-game
+: Test handling of a game executable that does not exist
+:
+{
+  $clone_launcher
+
+  $* $offline --game-exe missing.exe >>:~%EOO% &root/cache/*** != 0
+    %.*%*
+    %.+\[E\] exception caught in main: failed to canonicalize game binary path: .+missing\.exe: .+%
+    %.+\[E\] please report this to the IW4x developers on Discord: .+%
+    %.*%*
+    EOO
+}
+
+: missing-helper
+: Test handling of a missing steam.exe helper
+:
+if ($cxx.target.class == 'linux')
+{
+  $clone_launcher
+
+  touch root/iw4x.exe
+
+  $* $offline --arch x86 >>:~%EOO% &root/cache/*** != 0
+    %.*%*
+    %.+\[E\] exception caught in main: runtime dependency missing: steam\.exe%
+    %.+\[E\] please report this to the IW4x developers on Discord: .+%
+    %.*%*
+    EOO
+}

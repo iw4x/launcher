@@ -1,3 +1,6 @@
+// Copyright (c) the IW4x authors (see the AUTHORS file).
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 #pragma once
 
 #include <launcher/manifest/manifest-types.hxx>
@@ -15,12 +18,10 @@
 
 namespace launcher
 {
-  // Forward declarations for async operations.
-  //
   namespace asio = boost::asio;
   namespace json = boost::json;
 
-  // Hash value with algorithm type.
+  // Hash value in hex, as in the manifest.
   //
   struct hash
   {
@@ -44,12 +45,11 @@ namespace launcher
       return value.empty ();
     }
 
-    // String representation.
-    //
     std::string
     string () const;
 
-    // Verify hash against data.
+    // @@ These functions only check that the value is not empty. Nothing
+    //    calls them.
     //
     bool
     verify (const std::string& data) const;
@@ -66,9 +66,9 @@ namespace launcher
 
     launcher::hash hash;
     size_type size;
-    std::string path;
+    std::string path;                        // Relative to the installation.
     std::optional<std::string> asset_name;
-    std::optional<std::string> archive_name;
+    std::optional<std::string> archive_name; // Archive that contains it.
 
     manifest_file () : size (0) {}
 
@@ -106,6 +106,8 @@ namespace launcher
     compression_type compression;
     std::vector<manifest_file> files;
 
+    // Paths of the files in the archive that we don't install.
+    //
     std::vector<std::string> exclude;
 
     // Files to install under another name, as pairs of the path in the
@@ -127,7 +129,7 @@ namespace launcher
         url (std::move (u)),
         compression (c) {}
 
-    // Intentionally excludes files from comparison.
+    // Note that the comparison ignores the files, exclusions, and renames.
     //
     bool
     operator== (const manifest_archive& o) const noexcept
@@ -146,32 +148,40 @@ namespace launcher
     }
   };
 
-  // Main manifest class.
+  // Manifest of the files to install, either individually or from
+  // archives, in the JSON format:
+  //
+  // {
+  //   "archives": [{"name": ..., "url": ..., "size": ..., "blake3": ...}],
+  //   "files": [{"path": ..., "size": ..., "blake3": ...,
+  //              "asset_name": ..., "archive": ...}]
+  // }
+  //
+  // Where a DLC manifest has no archives and its files no archive. Note that
+  // parsing skips entries of the wrong type as well as files without a path
+  // and archives without a name.
   //
   class manifest
   {
   public:
-    manifest_format format;
+    manifest_format format; // @@ Unused.
     manifest_format kind;
     std::vector<manifest_archive> archives;
     std::vector<manifest_file> files;
 
-    // Constructors.
-    //
     manifest () : kind (manifest_format::update) {}
 
     explicit
     manifest (manifest_format f, manifest_format k = manifest_format::update)
       : format (f), kind (k) {}
 
-    // Parse from JSON string.
+    // Parse the manifest. Throw std::runtime_error if it is not valid JSON
+    // or not an object.
     //
     explicit
     manifest (const std::string& json_str,
               manifest_format k = manifest_format::update);
 
-    // Parse from JSON value.
-    //
     explicit
     manifest (const json::value& jv,
               manifest_format k = manifest_format::update);
@@ -179,42 +189,35 @@ namespace launcher
     bool
     operator== (const manifest&) const = default;
 
-    // Empty check.
-    //
     bool
     empty () const noexcept
     {
       return archives.empty () && files.empty ();
     }
 
-    // Serialize to JSON string.
-    //
     std::string
     string () const;
 
-    // Serialize to JSON value.
-    //
     json::value
     json () const;
 
-    // Link files to their archives.
+    // Copy each file with an archive name into the files of that archive.
     //
     void
     link_files ();
 
-    // Validate manifest integrity.
+    // @@ Always returns true.
     //
     bool
     validate () const;
 
-    // Async parse from JSON string with coroutine.
+    // As the constructor and validate() but as coroutines. Note that they
+    // don't suspend.
     //
     static asio::awaitable<manifest>
     parse_async (const std::string& json_str,
                  manifest_format k = manifest_format::update);
 
-    // Async validate with coroutine.
-    //
     asio::awaitable<bool>
     validate_async () const;
 
@@ -232,8 +235,6 @@ namespace launcher
     serialize_dlc () const;
   };
 
-  // Stream output.
-  //
   inline std::ostream&
   operator<< (std::ostream& o, const hash& h)
   {

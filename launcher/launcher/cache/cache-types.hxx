@@ -1,3 +1,6 @@
+// Copyright (c) the IW4x authors (see the AUTHORS file).
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 #pragma once
 
 #include <chrono>
@@ -15,55 +18,57 @@ namespace launcher
 {
   namespace fs = std::filesystem;
 
-  // File state as discovered on disk. Note that we don't differentiate between
-  // corrupted and missing at this stage. Unknown files are mostly left over
-  // from interrupted updates or manual meddling.
+  // State of an installed file relative to its cache record (see
+  // reconciler::stat()). Note that we only compare the file metadata, so a
+  // stale file is not necessarily corrupt, it is just no longer known to be
+  // intact.
   //
   enum class file_state
   {
-    valid,   // Mtime matches our cache.
-    stale,   // File exists but mtime is different.
-    missing, // File is gone entirely.
-    unknown  // We have never seen this file before.
+    valid,   // Metadata matches the record.
+    stale,   // Exists but its metadata differs from the record.
+    missing, // Has a record but no longer exists.
+    unknown  // Has no record.
   };
 
   std::ostream&
   operator<< (std::ostream& o, file_state s);
 
-  // Logical component groupings. We use these to perform partial verifications
-  // or to skip checking massive rawfiles when we are just updating the launcher
-  // itself.
+  // Installation component that a file belongs to. We track the version of
+  // each component separately, which lets us verify or update one of them
+  // without touching the rest (the rawfiles, for example, are large).
   //
   enum class component_type
   {
-    client,   // Main release artifacts.
-    rawfiles, // Content data.
-    dlc,      // Zone files (external).
-    helper,   // Platform-specific helpers (e.g., Steam integration).
-    launcher, // Our own executable.
-    client_x64,
-    assets_x64
+    client,     // IW4x client release.
+    rawfiles,   // IW4x game data.
+    dlc,        // DLC zone files.
+    helper,     // Platform-specific helpers (Steam integration, etc).
+    launcher,   // The launcher itself.
+    client_x64, // IW4x (mm) client release.
+    assets_x64  // IW4x (mm) game data.
   };
 
   std::ostream&
   operator<< (std::ostream& o, component_type c);
 
-  // Action to take on a specific file during reconciliation. Note that the
-  // verify action implies we will hash the file first. If the hash mismatches,
-  // the action seamlessly demotes to download.
+  // Action that reconciliation plans for a file. Note that a file to verify
+  // is hashed first and only downloaded if the hash doesn't match.
   //
   enum class reconcile_action
   {
-    none,     // Everything is fine.
-    download, // Fetch it from the mirror.
-    verify,   // Something looks off, hash it.
-    remove    // It shouldn't be here.
+    none,     // Up to date.
+    download, // Download from the release.
+    verify,   // Hash and download if it doesn't match.
+    remove    // Remove from the installation.
   };
 
   std::ostream&
   operator<< (std::ostream& o, reconcile_action a);
 
-  // Persistent metadata for files we have downloaded.
+  // Cache record of an installed file. The path is the normalized absolute
+  // path of the file (see reconciler::key()) and the modification time is
+  // the one the file had when we recorded it (see get_file_mtime()).
   //
   #pragma db object table("cached_files")
   class cached_file
@@ -135,10 +140,10 @@ namespace launcher
     std::string hash_;
   };
 
-  // Tracks the currently installed version tag for each component. Note that a
-  // component might technically be out of sync with this tag if a download was
-  // interrupted. This is why we rely on individual file hashes for the actual
-  // reconciliation.
+  // Installed release tag of a component and when we installed it. Note
+  // that an interrupted update can leave the files of a component out of
+  // sync with its tag, which is why reconciliation goes by the records of
+  // the individual files.
   //
   #pragma db object table("component_versions")
   class component_version
@@ -182,8 +187,8 @@ namespace launcher
     std::int64_t installed_at_;
   };
 
-  // Generic key-value store. We keep it untyped here since the higher layers
-  // know how to parse strings into bools or paths.
+  // Setting stored in the cache as a key and its value. The values are
+  // untyped and it is up to the user of a setting to interpret its value.
   //
   #pragma db object table("user_settings")
   class user_setting
@@ -214,17 +219,20 @@ namespace launcher
     std::string val_;
   };
 
-  // Blake3 hash digest.
+  // BLAKE3 digest in its hex representation.
   //
-  // An empty blake3_hash signals "no hash available" and is explicitly
-  // supported. Every non-empty hash must be exactly 64 hex characters
-  // (256-bit Blake3 output).
+  // The digest is either empty, which stands for no digest, or the 64 hex
+  // digits of a 256-bit BLAKE3 output, normalized to lower case.
   //
   class blake3_hash
   {
   public:
     blake3_hash () = default;
 
+    // Create the digest from its hex representation, ignoring whitespaces
+    // and case. Throw std::invalid_argument if the result is neither empty
+    // nor 64 hex digits.
+    //
     explicit
     blake3_hash (std::string hex);
 
@@ -244,11 +252,14 @@ namespace launcher
       return hex_;
     }
 
+    // Return true if the digest is not empty and matches the file. Return
+    // false if the file cannot be read.
+    //
     bool
     verify_file (const fs::path& p) const;
 
-    // Compute the Blake3 hash of a file and return the result. Returns an
-    // empty hash on I/O failure.
+    // Return the digest of the file or an empty digest if the file cannot be
+    // read.
     //
     static blake3_hash
     of_file (const fs::path& p);
@@ -272,9 +283,9 @@ namespace launcher
   std::ostream&
   operator<< (std::ostream& o, const blake3_hash& h);
 
-  // Record of what we need to do to a given file. Note that we default to the
-  // client component here. It is the most common case and saves us from
-  // sprinkling explicit initializers in the discovery loop.
+  // Planned action for a file together with what we know about its expected
+  // content. Note that the default-constructed item belongs to the client
+  // component, the most common case.
   //
   struct reconcile_item
   {
@@ -317,7 +328,7 @@ namespace launcher
     }
   };
 
-  // Aggregated totals used primarily by the UI to render progress and status.
+  // Totals of a reconciliation plan, which we report to the user.
   //
   struct reconcile_summary
   {
@@ -338,33 +349,41 @@ namespace launcher
     {
     }
 
+    // Return true if there is nothing to download and no file is stale or
+    // missing.
+    //
     bool
     up_to_date () const noexcept
     {
-      // We consider the state fully synchronized only if there is nothing to
-      // fetch and we don't have dangling references or stale files.
-      //
       return downloads_required == 0 &&
              files_stale == 0 &&
              files_missing == 0;
     }
   };
 
-  // Return mtime as seconds since epoch. We use int64_t instead of std::time_t
-  // to guarantee a 64-bit width regardless of the platform.
+  // Return the modification time of the file as a count of file clock
+  // ticks. Note that we only compare these values with each other, so their
+  // epoch and resolution don't matter. Throw std::filesystem::filesystem_error
+  // if the file cannot be examined.
   //
   std::int64_t
   get_file_mtime (const fs::path& p);
 
+  // Return the current time in seconds since the UNIX epoch.
+  //
   std::int64_t
   current_timestamp ();
 
-  // Blake3 is fast enough that we can usually compute it for the entire file in
-  // one go.
+  // Return the BLAKE3 digest of the file as 64 lower-case hex digits or an
+  // empty string if the file cannot be read.
   //
   std::string
   compute_blake3 (const fs::path& p);
 
+  // Return true if the digest of the file matches the expected one, ignoring
+  // whitespaces and case. Return false if the expected digest is empty or the
+  // file cannot be read.
+  //
   bool
   verify_blake3 (const fs::path& p, const std::string& h);
 }

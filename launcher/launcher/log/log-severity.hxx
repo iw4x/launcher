@@ -1,3 +1,6 @@
+// Copyright (c) the IW4x authors (see the AUTHORS file).
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 #pragma once
 
 #include <quill/core/LogLevel.h>
@@ -6,25 +9,14 @@ namespace launcher
 {
   namespace log
   {
-    // Minimum severity level.
+    // Lowest severity that we compile log statements for. Statements below
+    // it compile to nothing (see LAUNCHER_LOG_SEVERITY in launcher-log.hxx).
     //
-    // The idea here is that every log statement whose severity falls strictly
-    // below this threshold is to be removed by the compiler entirely. That is,
-    // the threshold is a compile-time constant so the optimizer can fold the
-    // guarding if constexpr in each dispatch struct to a no-op.
-    //
-    // Note that development builds open the full trace range.
-    //
-#if LAUNCHER_DEVELOP
-    inline constexpr quill::LogLevel
-      compiled_minimum_level (quill::LogLevel::TraceL3);
-#else
-    // TraceL3 for beta, change on release
-    //
-    // ... Actually, keep L3 on release as well, very useful for diagnostics.
+    // We compile in the whole trace range so that it only takes lowering the
+    // run-time threshold to get the trace, as the development build does
+    // (see launcher-log.cxx).
     //
     inline constexpr quill::LogLevel
       compiled_minimum_level (quill::LogLevel::TraceL3);
-#endif
   }
 }

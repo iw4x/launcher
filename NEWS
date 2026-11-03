@@ -1,0 +1,21 @@
+Version 1.1.8-b.28
+
+  * The repository is restarted as the launcher and launcher-tests
+    packages. The contributors of the earlier history are credited in
+    AUTHORS.
+
+  * Log messages issued during exit reach the log file.
+
+  * Path canonicalization errors name the offending path.
+
+  * The --build2-metadata option takes its argument, as build2 expects.
+
+  * HTTP requests that follow a 303 See Other redirect drop the body
+    headers of the original request.
+
+  * Replacing a cached file record also replaces its component.
+
+  * The indeterminate progress bar fits the terminal width.
+
+  * The Steam library artwork of IW4x (mm) is tagged MM and the artwork of
+    IW4x carries no tag, matching the client names.

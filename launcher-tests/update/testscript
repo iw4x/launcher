@@ -1,0 +1,169 @@
+# Copyright (c) the IW4x authors (see the AUTHORS file).
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+# Each test passes the versions on stdin, one per line.
+
+: parse
+:
+{{
+  test.options += -p
+
+  : release
+  :
+  $* <<EOI >>EOO
+    1.0.0
+    0.1.0
+    0.0.1
+    10.20.30
+    99999.99999.99999
+    EOI
+    1.0.0
+    0.1.0
+    0.0.1
+    10.20.30
+    99999.99999.99999
+    EOO
+
+  : prefix
+  : Test stripping the 'v' prefix of git tags
+  :
+  $* <<EOI >>EOO
+    v1.2.3
+    V1.2.3
+    v1.2.3-a.1
+    EOI
+    1.2.3
+    1.2.3
+    1.2.3-a.1
+    EOO
+
+  : prerelease
+  :
+  $* <<EOI >>EOO
+    1.2.3-a.1
+    1.2.3-a.499
+    1.2.3-b.1
+    1.2.3-b.499
+    EOI
+    1.2.3-a.1
+    1.2.3-a.499
+    1.2.3-b.1
+    1.2.3-b.499
+    EOO
+
+  : snapshot
+  :
+  $* <<EOI >>EOO
+    1.2.0-a.1.20260201010251
+    1.2.0-a.1.20260201010251.fe4660334ed0
+    1.2.0-b.7.20260201010251.abc123
+    EOI
+    1.2.0-a.1.20260201010251
+    1.2.0-a.1.20260201010251.fe4660334ed0
+    1.2.0-b.7.20260201010251.abc123
+    EOO
+
+  : snapshot-z
+  : Test mapping the .z development snapshot to sequence number 1
+  :
+  $* <<EOI >>EOO
+    1.2.0-a.1.z
+    1.1.8-b.7.Z
+    EOI
+    1.2.0-a.1.1
+    1.1.8-b.7.1
+    EOO
+
+  : invalid
+  :
+  {{
+    $* <''            2>"error: invalid version ''"            != 0 : empty
+    $* <'1'           2>"error: invalid version '1'"           != 0 : major
+    $* <'1.2'         2>"error: invalid version '1.2'"         != 0 : minor
+    $* <'1.'          2>"error: invalid version '1.'"          != 0 : dot-major
+    $* <'1.2.'        2>"error: invalid version '1.2.'"        != 0 : dot-minor
+    $* <'.1.2'        2>"error: invalid version '.1.2'"        != 0 : dot-first
+    $* <'a.b.c'       2>"error: invalid version 'a.b.c'"       != 0 : letters
+    $* <'1.2.3-x.1'   2>"error: invalid version '1.2.3-x.1'"   != 0 : prerelease
+    $* <'1.2.3-a.500' 2>"error: invalid version '1.2.3-a.500'" != 0 : alpha-max
+    $* <'1.2.3-b.500' 2>"error: invalid version '1.2.3-b.500'" != 0 : beta-max
+    $* <'1.2.3-a.1.x' 2>"error: invalid version '1.2.3-a.1.x'" != 0 : snapshot
+  }}
+}}
+
+: kind
+:
+$* -k <<EOI >>EOO
+  1.2.3
+  1.2.3-a.1
+  1.2.3-b.7
+  1.2.3-a.1.z
+  1.2.3-b.1.20260201010251
+  EOI
+  release
+  alpha 1
+  beta 7
+  alpha 1 snapshot
+  beta 1 snapshot
+  EOO
+
+: compare
+:
+{{
+  test.options += -c
+
+  : component
+  :
+  $* <<EOI >>EOO
+    1.2.3 1.2.3
+    1.0.0 2.0.0
+    2.0.0 1.0.0
+    1.1.0 1.2.0
+    1.2.1 1.2.2
+    1.2.2 1.2.1
+    EOI
+    0
+    -1
+    1
+    -1
+    -1
+    1
+    EOO
+
+  : prerelease
+  : Test that a release is newer than its pre-releases
+  :
+  $* <<EOI >>EOO
+    1.2.3 1.2.3-a.1
+    1.2.3 1.2.3-b.1
+    1.2.3-a.1 1.2.3-b.1
+    1.2.3-a.1 1.2.3-a.2
+    1.2.3-b.1 1.2.3-b.2
+    1.2.3-b.1 1.2.4-a.1
+    EOI
+    1
+    1
+    -1
+    -1
+    -1
+    -1
+    EOO
+
+  : snapshot
+  : Test that a snapshot is newer than its pre-release
+  :
+  $* <<EOI >>EOO
+    1.1.8-b.7 1.1.8-b.7.z
+    1.1.8-b.7.z 1.1.8-b.7.20260201010251
+    1.2.3-a.1.20260201010251 1.2.3-a.1.20260201010251.abc123
+    EOI
+    -1
+    -1
+    0
+    EOO
+
+  : snapshot-tag
+  : Test that a development snapshot is newer than its release tag
+  :
+  $* <'1.1.8-b.7.z v1.1.8-b.7' >'1'
+}}

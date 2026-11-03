@@ -1,0 +1,38 @@
+# Copyright (c) the IW4x authors (see the AUTHORS file).
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+# Suppress warnings coming from external libraries.
+#
+cxx.internal.scope = current
+
+cxx.std = latest
+
+using cxx
+
+hxx{*}: extension = hxx
+ixx{*}: extension = ixx
+txx{*}: extension = txx
+cxx{*}: extension = cxx
+
+if ($build.mode != 'skeleton')
+{
+  # Import the launcher executable, which the functional tests run, and the
+  # library with everything except its main(), which the test drivers link.
+  #
+  import! [metadata] launcher = launcher%exe{iw4x-launcher}
+  import libs = launcher%liba{launcher}
+}
+
+# With MinGW GCC the std::print() support for the Windows console is in a
+# separate library.
+#
+if ($cxx.target.system == 'mingw32' && $cxx.id == 'gcc')
+  cxx.libs += -lstdc++exp
+
+# Every exe{} in this project is by default a test.
+#
+exe{*}: test = true
+
+# The test target for cross-testing (running tests under Wine, etc).
+#
+test.target = $cxx.target

@@ -1,3 +1,6 @@
+// Copyright (c) the IW4x authors (see the AUTHORS file).
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 #include <launcher/update/update-discovery.hxx>
 
 #include <algorithm>
@@ -70,8 +73,8 @@ namespace launcher
       co_return update_info ();
     }
 
-    // Compare what we found with what we are running. Only bother returning
-    // the info if it's actually an upgrade.
+    // Compare what we found with what we are running and only return it if
+    // it's an upgrade.
     //
     if (ui.version > v)
     {
@@ -192,9 +195,8 @@ namespace launcher
     launcher::log::trace_l3 (categories::update{}, "found platform asset: {}", a->name);
 
     // While the release tag (e.g., "v1.2.3") is useful, the asset name
-    // usually contains the full, canonical version (including snapshot IDs,
-    // e.g., "1.2.3-a.1-20260201010251.fe4660334ed0"). Try to extract that
-    // first.
+    // usually contains the full version, including the snapshot (e.g.,
+    // 1.2.3-a.1.20260201010251.fe4660334ed0). So we try that first.
     //
     auto v (parse_asset_version (a->name));
     if (!v)
@@ -259,8 +261,8 @@ namespace launcher
       return nullopt;
     }
 
-    // Scan the assets. We look for the standard pattern:
-    // launcher-<version>-<platform>.<ext>
+    // Scan the assets for launcher-<version>-<platform>.<ext>. Note that we
+    // only check the prefix and that the platform and extension are there.
     //
     for (const auto& a : r.assets)
     {
@@ -314,7 +316,7 @@ namespace launcher
       }
     }
 
-    // Sanity check: suffix must appears after the prefix.
+    // Make sure the suffix comes after the prefix.
     //
     if (e == string::npos || e <= b)
     {

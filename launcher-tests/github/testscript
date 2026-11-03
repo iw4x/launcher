@@ -1,0 +1,148 @@
+# Copyright (c) the IW4x authors (see the AUTHORS file).
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+: release
+:
+{{
+  : full
+  :
+  $* release <<EOI >>EOO
+    {
+      "id": 1,
+      "tag_name": "v1.1.8-b.7",
+      "name": "IW4x 1.1.8 beta 7",
+      "body": "Changes.",
+      "draft": false,
+      "prerelease": true,
+      "author": {"login": "iw4x", "id": 2},
+      "assets": [
+        {
+          "id": 3,
+          "name": "iw4x.exe",
+          "size": 1024,
+          "browser_download_url": "https://example.org/iw4x.exe"
+        },
+        {
+          "id": 4,
+          "name": "update.json",
+          "size": 2,
+          "browser_download_url": "https://example.org/update.json"
+        }
+      ]
+    }
+    EOI
+    tag 'v1.1.8-b.7'
+    name 'IW4x 1.1.8 beta 7'
+    draft false
+    prerelease true
+    author 'iw4x'
+    asset iw4x.exe 1024 https://example.org/iw4x.exe
+    asset update.json 2 https://example.org/update.json
+    EOO
+
+  : null
+  : Test a release with null fields and no assets
+  :
+  $* release <<EOI >>EOO
+    {
+      "tag_name": "v1.0.0",
+      "name": null,
+      "body": null,
+      "draft": true,
+      "prerelease": false
+    }
+    EOI
+    tag 'v1.0.0'
+    name ''
+    draft true
+    prerelease false
+    author ''
+    EOO
+
+  : invalid-type
+  : Test rejecting a field of the wrong type
+  :
+  $* release <'{"tag_name": 1}' 2>>~/EOE/ != 0
+    /error: .+/
+    EOE
+
+  : invalid-json
+  :
+  $* release <'{"tag_name":' 2>>~/EOE/ != 0
+    /error: .+/
+    EOE
+}}
+
+: releases
+:
+$* releases <<EOI >>EOO
+  [
+    {"tag_name": "v1.1.8-b.7", "draft": false, "prerelease": true},
+    {"tag_name": "v1.1.8-b.6", "draft": false, "prerelease": true}
+  ]
+  EOI
+  v1.1.8-b.7
+  v1.1.8-b.6
+  EOO
+
+: asset
+:
+{{
+  r = '{"draft": false, "prerelease": false, "assets": [
+         {"name": "iw4x-1.2.0.zip", "size": 1, "browser_download_url": "u1"},
+         {"name": "iw4x.exe",       "size": 2, "browser_download_url": "u2"},
+         {"name": "iw4x-1.3.0.zip", "size": 3, "browser_download_url": "u3"}]}'
+
+  $* find iw4x.exe <$r >'iw4x.exe u2' : find
+
+  : find-missing
+  :
+  $* find iw4x <$r 2>"error: no asset matching 'iw4x'" != 0
+
+  : match-first
+  : Test that the first matching asset is found
+  :
+  $* match 'iw4x-.+\.zip' <$r >'iw4x-1.2.0.zip u1'
+
+  : match-whole
+  : Test that the expression must match the whole name
+  :
+  $* match 'iw4x' <$r 2>"error: no asset matching 'iw4x'" != 0
+}}
+
+: endpoint
+:
+{{
+  : releases
+  :
+  $* endpoint releases iw4x launcher >>EOO
+    https://api.github.com/repos/iw4x/launcher/releases
+    EOO
+
+  : latest
+  :
+  $* endpoint latest iw4x launcher >>EOO
+    https://api.github.com/repos/iw4x/launcher/releases/latest
+    EOO
+
+  : tag
+  :
+  $* endpoint tag iw4x launcher v1.0.0 >>EOO
+    https://api.github.com/repos/iw4x/launcher/releases/tags/v1.0.0
+    EOO
+}}
+
+: url
+:
+{{
+  : none
+  :
+  $* url 'https://api.github.com/x' >'https://api.github.com/x'
+
+  : sorted
+  : Test that the parameters come sorted by name, the last value winning
+  :
+  $* url 'https://api.github.com/x' per_page=100 page=2 page=3 >>EOO
+    https://api.github.com/x?page=3&per_page=100
+    EOO
+}}

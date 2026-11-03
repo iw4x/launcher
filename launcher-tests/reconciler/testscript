@@ -1,0 +1,202 @@
+# Copyright (c) the IW4x authors (see the AUTHORS file).
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+# Blake3 hashes, as b3sum prints them, named after the contents they are
+# for: the 5-byte 'data' and 'iw4x' lines and the empty input.
+#
+d = 51f855e8f080df9cbc2a561b6ddaad85e1bbf884ea4b73f3455e8c86202d0422
+i = 5acc27733250124332d5a025e3da8cb8a7c66ba58dcab53da5873946eb350bb3
+e = af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262
+
+# Manifest of a rawfiles release with the client in release.zip. Note that
+# the planner never plans update.json.
+#
++cat <<"EOI" >=manifest.json
+  {
+    "archives": [
+      {"name": "release.zip", "size": 100, "url": "u1", "blake3": "$e"},
+      {"name": "iw_23.iwd", "size": 5, "url": "u2", "blake3": "$d"}
+    ],
+    "files": [
+      {"path": "iw4x.exe", "size": 5, "blake3": "$i", "archive": "release.zip"},
+      {"path": "data.txt", "size": 5, "blake3": "$d"},
+      {"path": "update.json", "size": 2, "blake3": "$d"}
+    ]
+  }
+  EOI
+
+m = $~/manifest.json
+iwd = main/iw4x/x86/iw_23.iwd
+
+: plan
+:
+{{
+  : missing
+  : Test downloading everything into an empty installation
+  :
+  $* plan $m rawfiles 1.0.0 >>"EOO" &cache/***
+    download release.zip 100 $e
+    download $iwd 5 $d
+    download data.txt 5 $d
+    summary 3 110
+    EOO
+
+  : adopt
+  : Test adopting the untracked files whose hashes match
+  :
+  {
+    mkdir -p main/iw4x/x86
+    echo 'data' >=data.txt
+    echo 'iw4x' >=iw4x.exe
+    echo 'data' >=$iwd
+
+    $* plan $m rawfiles 1.0.0 >'summary 0 0' &cache/***
+
+    $* files rawfiles >>"EOO"
+      data.txt 1.0.0 5 $d
+      iw4x.exe 1.0.0 5 $i
+      $iwd 1.0.0 5 $d
+      EOO
+  }
+
+  : mismatch
+  : Test downloading the files that differ from the manifest
+  :
+  {
+    mkdir -p main/iw4x/x86
+    echo 'hello' >=data.txt
+    echo 'iw4y' >=iw4x.exe
+    echo 'iw4x' >=$iwd
+
+    $* plan $m rawfiles 1.0.0 >>"EOO" &cache/***
+      download release.zip 100 $e
+      download $iwd 5 $d
+      download data.txt 5 $d
+      summary 3 110
+      EOO
+
+    $* files rawfiles
+  }
+
+  : tracked
+  : Test trusting the tracked files of the version without hashing them
+  :
+  {
+    echo 'datx' >=data.txt
+
+    $* track rawfiles 1.0.0 data.txt &cache/***
+    $* plan $m rawfiles 1.0.0 >>"EOO"
+      download release.zip 100 $e
+      download $iwd 5 $d
+      summary 2 105
+      EOO
+  }
+
+  : version
+  : Test rehashing the tracked files of another version
+  :
+  {
+    echo 'data' >=data.txt
+    echo 'iw4y' >=iw4x.exe
+
+    $* track rawfiles 1.0.0 data.txt iw4x.exe &cache/***
+    $* plan $m rawfiles 2.0.0 >>"EOO"
+      download release.zip 100 $e
+      download $iwd 5 $d
+      summary 2 105
+      EOO
+
+    $* files rawfiles >>"EOO"
+      data.txt 2.0.0 5 $d
+      iw4x.exe 1.0.0 5 -
+      EOO
+  }
+}}
+
+: stat
+:
+{{
+  : unknown
+  :
+  {
+    echo 'data' >=f
+
+    $* stat f >'unknown' &cache/***
+  }
+
+  : valid
+  :
+  {
+    echo 'data' >=f
+
+    $* track rawfiles 1.0.0 f &cache/***
+    $* stat f >'valid'
+  }
+
+  : missing
+  :
+  {
+    touch --no-cleanup f
+
+    $* track rawfiles 1.0.0 f &cache/***
+    rm f
+    $* stat f >'missing'
+  }
+
+  : stale
+  : Test detecting a modified file by its modification time
+  :
+  {
+    echo 'data' >=f
+    $* set-mtime f
+
+    $* track rawfiles 1.0.0 f &cache/***
+    echo 'iw4x' >=f
+    $* stat f >'stale'
+  }
+
+  : size
+  : Test detecting a modified file by its size only in the mixed strategy
+  :
+  {
+    echo 'data' >=f
+    $* set-mtime f
+
+    $* track rawfiles 1.0.0 f &cache/***
+    echo 'hello' >=f
+    $* set-mtime f
+
+    $* stat f       >'valid'
+    $* stat f mixed >'stale'
+  }
+}}
+
+: clean
+: Test forgetting the tracked files that are no longer in the manifest
+:
+{
+  mkdir -p main/iw4x/x86
+  echo 'data' >=data.txt
+  echo 'iw4x' >=iw4x.exe
+  echo 'data' >=old.txt
+  echo 'data' >=$iwd
+
+  $* track rawfiles 1.0.0 data.txt iw4x.exe old.txt $iwd &cache/***
+  $* clean $m rawfiles >'old.txt'
+
+  $* files rawfiles >>"EOO"
+    data.txt 1.0.0 5 -
+    iw4x.exe 1.0.0 5 -
+    $iwd 1.0.0 5 -
+    EOO
+}
+
+: outdated
+:
+{
+  $* outdated client v1.0.0 >'true' &cache/***
+  $* stamp client v1.0.0
+  $* outdated client v1.0.0 >'false'
+  $* outdated client v1.1.0 >'true'
+  $* outdated rawfiles v1.0.0 >'true'
+}

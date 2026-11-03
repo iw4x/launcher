@@ -1,0 +1,22 @@
+# The identity register. It lists each contributor once, with the
+# preferred name and email, the other identities found in the revision
+# history (alias), and how the contributor is noted in AUTHORS (none, name,
+# or email). The AUTHORS and .mailmap files are generated from it.
+#
+: 1
+name: Greelan
+email: 53196309+Greelan@users.noreply.github.com
+alias: Greelan <greg@thebosmans.com>
+authors: name
+:
+name: RafaelNMeyer
+email: rafaelnmeyer@proton.me
+authors: name
+:
+name: Ruthless2kxx
+email: kyle2kxx@proton.me
+authors: name
+:
+name: William Roy
+email: wroy@proton.me
+authors: name

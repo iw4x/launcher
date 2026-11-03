@@ -1,3 +1,6 @@
+// Copyright (c) the IW4x authors (see the AUTHORS file).
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 #include <launcher/manifest/manifest-types.hxx>
 
 #include <algorithm>
@@ -7,7 +10,7 @@
 #include <sstream>
 #include <stdexcept>
 
-#include <launcher/blake3.h>
+#include <blake3.h>
 
 using namespace std;
 
@@ -26,8 +29,6 @@ namespace launcher
     blake3_hasher hasher;
     blake3_hasher_init (&hasher);
 
-    // Read and hash in sensible chunks.
-    //
     char buf[8192];
     while (ifs.read (buf, sizeof (buf)) || ifs.gcount () > 0)
     {
@@ -55,8 +56,6 @@ namespace launcher
     if (h1.size () != h2.size ())
       return false;
 
-    // Case-insensitive comparison.
-    //
     return equal (h1.begin (),
                   h1.end (),
                   h2.begin (),

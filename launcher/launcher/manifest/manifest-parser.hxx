@@ -1,3 +1,6 @@
+// Copyright (c) the IW4x authors (see the AUTHORS file).
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 #pragma once
 
 #include <launcher/manifest/manifest.hxx>
@@ -13,46 +16,36 @@ namespace launcher
 {
   namespace asio = boost::asio;
 
-  // Async manifest parser with parallel processing.
+  // Coroutine wrappers of manifest::parse_async() and
+  // manifest::validate_async().
+  //
+  // @@ The *_parallel() functions process the manifests one after another.
+  //    Nothing outside manifest-parser.cxx uses any of these functions.
   //
   class manifest_parser
   {
   public:
-    // Parse single manifest asynchronously.
-    //
     static asio::awaitable<manifest>
     parse (const std::string& json_str,
            manifest_format kind = manifest_format::update);
 
-    // Parse multiple manifests in parallel.
-    //
     static asio::awaitable<std::vector<manifest>>
     parse_parallel (const std::vector<std::string>& json_strings,
                     manifest_format kind = manifest_format::update);
 
-    // Validate manifest asynchronously.
-    //
     static asio::awaitable<bool>
     validate (const manifest& m);
 
-    // Validate multiple manifests in parallel.
-    //
     static asio::awaitable<std::vector<bool>>
     validate_parallel (const std::vector<manifest>& manifests);
   };
 
-  // Parse update manifest from JSON string.
-  //
   asio::awaitable<manifest>
   parse_update_manifest (const std::string& json_str);
 
-  // Parse DLC manifest from JSON string.
-  //
   asio::awaitable<manifest>
   parse_dlc_manifest (const std::string& json_str);
 
-  // Validate manifest with full integrity checks.
-  //
   asio::awaitable<bool>
   validate_manifest (const manifest& m);
 }

@@ -1,0 +1,50 @@
+# Copyright (c) the IW4x authors (see the AUTHORS file).
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+: bytes
+:
+{{
+  $* bytes 0          >'0 B'     : zero
+  $* bytes 1023       >'1023 B'  : bytes
+  $* bytes 1024       >'1.0 KiB' : kib
+  $* bytes 1572864    >'1.5 MiB' : mib
+  $* bytes 5368709120 >'5.0 GiB' : gib
+}}
+
+: speed
+:
+{{
+  $* speed 512      >'512 B/s'    : bytes
+  $* speed 2048     >'2.0 KiB/s'  : kib
+  $* speed 10485760 >'10.0 MiB/s' : mib
+}}
+
+: duration
+:
+{{
+  $* duration 0    >'00m00s'   : zero
+  $* duration 65   >'01m05s'   : minutes
+  $* duration 3725 >'1h02m05s' : hours
+}}
+
+: bar
+:
+{{
+  $* bar 0.5 10 >'[====>     ]' : half
+  $* bar 1   10 >'[=========>]' : full
+  $* bar 0.1 10 >'[>         ]' : start
+
+  : idle
+  : Test bouncing the marker across the bar at no progress
+  :
+  {
+    $* bar 0 10 0 >'[<=>       ]'
+    $* bar 0 10 7 >'[       <=>]'
+    $* bar 0 10 8 >'[      <=> ]'
+  }
+}}
+
+: indeterminate
+: Test that the bar of the unknown total is as wide as the others
+:
+$* indeterminate 10 >'[ <==>     ]'

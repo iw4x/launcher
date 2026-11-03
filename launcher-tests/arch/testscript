@@ -1,0 +1,92 @@
+# Copyright (c) the IW4x authors (see the AUTHORS file).
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+# Each test passes the architecture names on stdin, one per line.
+
+: parse
+:
+{{
+  : canonical
+  :
+  $* <<EOI >>EOO
+    x86
+    x64
+    EOI
+    x86
+    x64
+    EOO
+
+  : case
+  : Test that the names are case-insensitive
+  :
+  $* <<EOI >>EOO
+    X86
+    X64
+    AmD64
+    EOI
+    x86
+    x64
+    x64
+    EOO
+
+  : alias-x86
+  :
+  $* <<EOI >>EOO
+    32
+    i386
+    i686
+    win32
+    EOI
+    x86
+    x86
+    x86
+    x86
+    EOO
+
+  : alias-x64
+  :
+  $* <<EOI >>EOO
+    64
+    amd64
+    x86_64
+    x86-64
+    win64
+    EOI
+    x64
+    x64
+    x64
+    x64
+    x64
+    EOO
+
+  : invalid
+  :
+  {{
+    $* <''      2>"error: invalid architecture ''"      != 0 : empty
+    $* <'x'     2>"error: invalid architecture 'x'"     != 0 : short
+    $* <'x866'  2>"error: invalid architecture 'x866'"  != 0 : long
+    $* <'x86 '  2>"error: invalid architecture 'x86 '"  != 0 : space
+    $* <'86'    2>"error: invalid architecture '86'"    != 0 : number
+    $* <'arm64' 2>"error: invalid architecture 'arm64'" != 0 : unknown
+  }}
+}}
+
+: executable
+:
+$* -e <<EOI >>EOO
+  x86
+  x64
+  EOI
+  iw4x.exe
+  iw4x (mm).exe
+  EOO
+
+: label
+:
+$* -l <<EOI >>EOO
+  x86
+  x64
+  EOI
+  IW4x
+  IW4x (mm)
+  EOO

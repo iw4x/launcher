@@ -1,3 +1,6 @@
+// Copyright (c) the IW4x authors (see the AUTHORS file).
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 #include <launcher/http/http-endpoint.hxx>
 #include <stdexcept>
 
@@ -24,9 +27,8 @@ namespace launcher
   {
     string p (path_pattern);
 
-    // Substitute parameters into the path pattern. Note that the same
-    // parameter might appear multiple times, so we keep replacing until
-    // there are no more matches.
+    // Note that a placeholder can appear more than once. We continue after
+    // the value so that a value containing the placeholder doesn't loop.
     //
     for (const auto& [k, v] : ps)
     {
@@ -40,18 +42,12 @@ namespace launcher
       }
     }
 
-    // Verify we didn't miss anything. If there are still placeholders
-    // left, it means the caller failed to provide all the necessary pieces.
-    // Bail out.
-    //
     if (p.find ('{') != string::npos)
       throw invalid_argument ("missing parameters for endpoint path");
 
     string r (base_url);
 
-    // Combine the base URL and the path. We need to be careful with the
-    // boundary: if both have a slash, we end up with a double slash, and
-    // if neither has one, they run together.
+    // Join with exactly one /.
     //
     if (!p.empty ())
     {
@@ -70,15 +66,12 @@ namespace launcher
   string http_endpoint::
   build_url () const
   {
-    // Even without parameters, we should verify the pattern didn't expect
-    // any. Otherwise it's likely a buggy call and we should complain.
-    //
     if (path_pattern.find ('{') != string::npos)
       throw invalid_argument ("endpoint requires parameters but none provided");
 
     string r (base_url);
 
-    // Same boundary dance as above.
+    // As above.
     //
     if (!path_pattern.empty ())
     {

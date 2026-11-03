@@ -1,3 +1,6 @@
+// Copyright (c) the IW4x authors (see the AUTHORS file).
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 #pragma once
 
 #include <vector>
@@ -14,6 +17,9 @@
 
 namespace launcher
 {
+  // Queue of download tasks performed on the io_context, at most
+  // max_parallel at a time and in the order of their priority.
+  //
   class download_manager
   {
   public:
@@ -25,8 +31,7 @@ namespace launcher
     using batch_completion_callback =
       std::function<void (std::size_t completed, std::size_t failed)>;
 
-    // Constructors.
-    //
+  public:
     explicit
     download_manager (boost::asio::io_context& ioc,
                       std::size_t max_parallel = 1);
@@ -38,16 +43,15 @@ namespace launcher
     download_manager (const download_manager&) = delete;
     download_manager& operator= (const download_manager&) = delete;
 
-    // Configuration.
-    //
     void
     set_max_parallel (std::size_t n);
 
     std::size_t
     max_parallel () const;
 
-    // Task management.
+    // Tasks.
     //
+  public:
     std::shared_ptr<launcher::download_task>
     add_task (download_request req);
 
@@ -57,16 +61,18 @@ namespace launcher
     void
     add_task (std::shared_ptr<launcher::download_task> task);
 
-    // Access tasks.
-    //
     const std::vector<std::shared_ptr<launcher::download_task>>&
     tasks () const;
 
     std::vector<std::shared_ptr<launcher::download_task>>&
     tasks ();
 
-    // Progress and statistics.
+    void
+    clear ();
+
+    // Progress.
     //
+  public:
     std::size_t
     total_count () const;
 
@@ -88,23 +94,36 @@ namespace launcher
     download_progress
     overall_progress () const;
 
-    // Callbacks.
+    // Download.
+    //
+  public:
+    // Set the callback that download_all() calls for each task once it is
+    // finished, successfully or not.
     //
     void
     set_task_completion_callback (completion_callback cb);
 
+    // Set the callback that download_all() calls once all the tasks are
+    // finished.
+    //
     void
     set_batch_completion_callback (batch_completion_callback cb);
 
-    // Download operations (coroutine-based).
+    // Download all the tasks that are not yet finished, in the order of
+    // their priority. Note that a failed download doesn't fail the batch: it
+    // is reflected in the task and in the counts.
     //
     boost::asio::awaitable<void>
     download_all ();
 
+    // Download the task, trying its URLs in order, and set its error if the
+    // download fails.
+    //
     boost::asio::awaitable<void>
     download_task (std::shared_ptr<launcher::download_task> task);
 
-    // Control operations.
+    // Request every task to cancel, pause, or resume (see download_task for
+    // details).
     //
     void
     cancel_all ();
@@ -115,9 +134,6 @@ namespace launcher
     void
     resume_all ();
 
-    void
-    clear ();
-
   private:
     boost::asio::io_context& ioc_;
     std::size_t max_parallel_;
@@ -127,7 +143,7 @@ namespace launcher
     completion_callback on_task_complete_;
     batch_completion_callback on_batch_complete_;
 
-    // Helper: Sort tasks by priority.
+    // Return the tasks ordered by priority, highest first.
     //
     std::vector<std::shared_ptr<launcher::download_task>>
     sort_by_priority () const;

@@ -1,0 +1,214 @@
+# Copyright (c) the IW4x authors (see the AUTHORS file).
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+# Each test opens the database in its working directory, as cache/iw4x.db.
+
+# Blake3 hash of the 'data' line, as b3sum prints it.
+#
+h = 51f855e8f080df9cbc2a561b6ddaad85e1bbf884ea4b73f3455e8c86202d0422
+
+: file
+:
+{{
+  : store
+  :
+  $* <<"EOI" >>"EOO" &cache/***
+    store zone/a.ff 100 1.0.0 client 5 $h
+    find zone/a.ff
+    find zone/b.ff
+    EOI
+    zone/a.ff 100 1.0.0 client 5 $h
+    none
+    EOO
+
+  : replace
+  : Test replacing the record of a stored path
+  :
+  $* <<"EOI" >>EOO &cache/***
+    store a 100 1.0.0 client
+    store a 200 1.1.0 client 3 $h
+    store a 300 1.2.0 client 4
+    find a
+    count
+    EOI
+    a 300 1.2.0 client 4
+    1
+    EOO
+
+  : component-change
+  : Test moving the file of a stored path to another component
+  :
+  $* <<EOI >>EOO &cache/***
+    store a 100 1.0.0 client
+    store a 200 1.0.0 rawfiles
+    files client
+    files rawfiles
+    EOI
+    a 200 1.0.0 rawfiles 0
+    EOO
+
+  : persist
+  : Test that the records survive reopening the database
+  :
+  {
+    $* <'store a 100 1.0.0 client' &cache/***
+    $* <'find a' >'a 100 1.0.0 client 0'
+  }
+
+  : erase
+  :
+  $* <<EOI >>EOO &cache/***
+    store a 1 1.0.0 client
+    store b 1 1.0.0 client
+    erase a
+    files
+    EOI
+    b 1 1.0.0 client 0
+    EOO
+
+  : component
+  : Test the queries over the files of a component
+  :
+  $* <<EOI >>EOO &cache/***
+    store c 1 1.0.0 client
+    store a 1 1.0.0 client
+    store r 1 2.0.0 rawfiles
+    files client
+    count client
+    count rawfiles
+    erase-component client
+    files
+    EOI
+    a 1 1.0.0 client 0
+    c 1 1.0.0 client 0
+    2
+    1
+    r 1 2.0.0 rawfiles 0
+    EOO
+
+  : version
+  : Test selecting the files of a version
+  :
+  $* <<EOI >>EOO &cache/***
+    store a 1 1.0.0 client
+    store b 1 2.0.0 rawfiles
+    store c 1 2.0.0 client
+    files 2.0.0
+    EOI
+    b 1 2.0.0 rawfiles 0
+    c 1 2.0.0 client 0
+    EOO
+}}
+
+: version
+:
+$* <<EOI >>EOO &cache/***
+  version client
+  version client v1.0.0
+  version rawfiles v2.0.0
+  version client v1.1.0
+  version client
+  version rawfiles
+  erase-version client
+  version client
+  version rawfiles
+  EOI
+  none
+  v1.1.0
+  v2.0.0
+  none
+  v2.0.0
+  EOO
+
+: setting
+:
+$* <<EOI >>EOO &cache/***
+  setting launcher_version
+  setting launcher_version 1.0.0
+  setting launcher_version 1.1.0
+  setting launcher_version
+  erase-setting launcher_version
+  setting launcher_version
+  EOI
+  none
+  1.1.0
+  none
+  EOO
+
+: clear
+: Test clearing the files and versions while keeping the settings
+:
+$* <<EOI >>EOO &cache/***
+  store a 1 1.0.0 client
+  version client v1.0.0
+  setting k v
+  clear
+  count
+  version client
+  setting k
+  check
+  EOI
+  0
+  none
+  v
+  true
+  EOO
+
+: hash
+: Test the Blake3 hashes against those of b3sum
+:
+{{
+  : empty
+  :
+  {
+    touch f
+
+    $* <'hash f' >>EOO &cache/***
+      af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262
+      EOO
+  }
+
+  : content
+  :
+  {
+    echo 'data' >=f
+
+    $* <'hash f' >"$h" &cache/***
+  }
+
+  : missing
+  :
+  $* <'hash f' >'none' &cache/***
+
+  : verify
+  :
+  {
+    echo 'data' >=f
+    echo 'other' >=g
+
+    $* <<"EOI" >>EOO &cache/***
+      verify f $h
+      verify g $h
+      verify missing $h
+      EOI
+      true
+      false
+      false
+      EOO
+  }
+
+  : verify-case
+  : Test that the expected hash is case-insensitive
+  :
+  {
+    echo 'data' >=f
+
+    $* <"verify f $string.ucase($h)" >'true' &cache/***
+  }
+
+  : invalid
+  :
+  $* <'verify f abc' 2>>~/EOE/ &cache/*** != 0
+    /error: invalid blake3 hash length \(3 chars, expected 64\): abc/
+    EOE
+}}

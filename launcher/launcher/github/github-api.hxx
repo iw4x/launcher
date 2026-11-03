@@ -1,3 +1,6 @@
+// Copyright (c) the IW4x authors (see the AUTHORS file).
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 #pragma once
 
 #include <string>
@@ -20,21 +23,24 @@ namespace launcher
   namespace asio = boost::asio;
   namespace json = boost::json;
 
-  // GitHub API rate limit information.
+  // Rate limit as reported in the x-ratelimit-* response headers.
   //
   struct github_rate_limit
   {
-    std::uint32_t limit;       // Maximum number of requests per hour
-    std::uint32_t remaining;   // Number of requests remaining
-    std::uint64_t reset;       // Unix timestamp when the rate limit resets
-    std::uint32_t used;        // Number of requests used
+    std::uint32_t limit;       // Requests per window.
+    std::uint32_t remaining;   // Requests left in the window.
+    std::uint64_t reset;       // End of the window as a UNIX time.
+    std::uint32_t used;        // Requests made in the window.
 
     github_rate_limit ();
 
+    // Return true if there are no requests left.
+    //
     bool
     is_exceeded () const;
 
-    // Calculate seconds until reset.
+    // Return the number of seconds until the end of the window or 0 if it
+    // has already ended.
     //
     std::uint64_t
     seconds_until_reset () const;
@@ -44,23 +50,35 @@ namespace launcher
   //
   struct github_response
   {
-    unsigned status_code;
+    unsigned status_code; // 0 if the request itself failed.
     std::string body;
-    std::map<std::string, std::string> headers;
+    std::map<std::string, std::string> headers; // Names in lower case.
     std::optional<std::string> error_message;
     std::optional<github_rate_limit> rate_limit;
 
+    // Return true if the status is 2xx.
+    //
     bool
     success () const;
 
     bool
     empty () const;
 
+    // Return true if the status is 403 or 429.
+    //
+    // Note that GitHub responds with 403 to exceeding the primary rate limit
+    // and with 403 or 429 to exceeding a secondary one, but 403 can also
+    // mean that the request is forbidden for other reasons.
+    //
     bool
     is_rate_limited () const;
   };
 
-  // GitHub API traits for customization.
+  // Entity types and their JSON conversion.
+  //
+  // Note that the parse functions return a default entity if the value is
+  // not an object (or an empty vector if not an array) and throw
+  // boost::system::system_error if a field has a wrong type.
   //
   struct github_api_traits
   {
@@ -68,8 +86,6 @@ namespace launcher
     using response_type = github_response;
     using endpoint_type = github_endpoint;
 
-    // Type traits for GitHub entities.
-    //
     using user_type = github_user;
     using repository_type = github_repository;
     using release_type = github_release;
@@ -79,8 +95,6 @@ namespace launcher
     using branch_type = github_branch;
     using tag_type = github_tag;
 
-    // Parse JSON response into typed object.
-    //
     static user_type
     parse_user (const json::value& jv);
 
@@ -105,8 +119,6 @@ namespace launcher
     static tag_type
     parse_tag (const json::value& jv);
 
-    // Parse array responses.
-    //
     static std::vector<release_type>
     parse_releases (const json::value& jv);
 
@@ -122,8 +134,6 @@ namespace launcher
     static std::vector<issue_type>
     parse_issues (const json::value& jv);
 
-    // Serialize objects to JSON.
-    //
     static json::value
     to_json (const user_type& u);
 
@@ -133,18 +143,25 @@ namespace launcher
     static json::value
     to_json (const release_type& r);
 
-    // Default User-Agent header.
+    // Return the User-Agent header value, which GitHub requires.
     //
     static std::string
     user_agent ();
 
-    // API version header.
+    // Return the X-GitHub-Api-Version header value.
     //
     static std::string
     api_version ();
   };
 
-  // GitHub API client with async/coroutine support.
+  // GitHub REST API client.
+  //
+  // The client waits out the rate limit: before a request if the previous
+  // response exhausted it, and after a rate limited response, in which case
+  // it retries the request once.
+  //
+  // The get_*() functions throw std::runtime_error with the GitHub error
+  // message if the request fails.
   //
   class github_api
   {
@@ -163,8 +180,7 @@ namespace launcher
     using branch_type = traits_type::branch_type;
     using tag_type = traits_type::tag_type;
 
-    // Constructor.
-    //
+  public:
     explicit
     github_api (asio::io_context& ioc);
 
@@ -173,17 +189,15 @@ namespace launcher
     github_api (const github_api&) = delete;
     github_api& operator= (const github_api&) = delete;
 
-    // Set authentication token.
+    // Set the token that we send with every request as a bearer token.
     //
     void
     set_token (std::string token);
 
-    // Set proxy URL for HTTP/HTTPS traffic.
-    //
     void
     set_proxy (std::string proxy_url);
 
-    // Set progress callback for rate limit notifications.
+    // Called every second while we wait out the rate limit.
     //
     using progress_callback_type =
       std::function<void (const std::string& message, std::uint64_t seconds_remaining)>;
@@ -191,23 +205,25 @@ namespace launcher
     void
     set_progress_callback (progress_callback_type callback);
 
-    // Execute generic request.
+    // Perform the request and return the response. Note that a failed
+    // request is reported in the response (see github_response for details).
     //
     asio::awaitable<response_type>
     execute (request_type request);
 
-    // Repository operations.
+    // Requests.
     //
+  public:
     asio::awaitable<repository_type>
     get_repository (const std::string& owner, const std::string& repo);
 
-    // Release operations.
-    //
     asio::awaitable<std::vector<release_type>>
     get_releases (const std::string& owner,
                   const std::string& repo,
                   std::optional<std::uint32_t> per_page = std::nullopt);
 
+    // Note that the latest release is never a draft or a pre-release.
+    //
     asio::awaitable<release_type>
     get_latest_release (const std::string& owner,
                         const std::string& repo);
@@ -222,8 +238,6 @@ namespace launcher
                        const std::string& repo,
                        std::uint64_t id);
 
-    // Commit operations.
-    //
     asio::awaitable<std::vector<commit_type>>
     get_commits (const std::string& owner,
                  const std::string& repo,
@@ -234,8 +248,6 @@ namespace launcher
                 const std::string& repo,
                 const std::string& sha);
 
-    // Branch operations.
-    //
     asio::awaitable<std::vector<branch_type>>
     get_branches (const std::string& owner,
                   const std::string& repo);
@@ -245,14 +257,10 @@ namespace launcher
                 const std::string& repo,
                 const std::string& branch);
 
-    // Tag operations.
-    //
     asio::awaitable<std::vector<tag_type>>
     get_tags (const std::string& owner,
               const std::string& repo);
 
-    // Issue operations.
-    //
     asio::awaitable<std::vector<issue_type>>
     get_issues (const std::string& owner,
                 const std::string& repo,
@@ -263,8 +271,6 @@ namespace launcher
                const std::string& repo,
                std::uint64_t number);
 
-    // User operations.
-    //
     asio::awaitable<user_type>
     get_user (const std::string& username);
 
@@ -279,25 +285,26 @@ namespace launcher
     std::optional<github_rate_limit> last_rate_limit_;
     progress_callback_type progress_callback_;
 
-    // Ensure the HTTP client is initialized.
+    // Return the HTTP client, creating it if necessary.
     //
     http_client&
     ensure_client ();
 
-    // Convert http_response to github_response.
-    //
     response_type
     to_github_response (const http_response& r) const;
 
+    // Add the headers that GitHub expects, unless already present.
+    //
     void
     add_default_headers (http_request& req) const;
 
-    // Extract rate limit information from response headers.
+    // Return the rate limit if the headers contain any of the x-ratelimit-*
+    // headers.
     //
     static std::optional<github_rate_limit>
     extract_rate_limit (const std::map<std::string, std::string>& headers);
 
-    // Check and handle rate limiting.
+    // Wait until the end of the window if the rate limit is exceeded.
     //
     asio::awaitable<void>
     handle_rate_limit (const github_rate_limit&);

@@ -1,3 +1,6 @@
+// Copyright (c) the IW4x authors (see the AUTHORS file).
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 #pragma once
 
 #include <boost/asio/awaitable.hpp>
@@ -18,50 +21,50 @@ namespace launcher
 {
   namespace fs = std::filesystem;
 
-  // Reconciliation strictness.
-  //
-  // We offer a spectrum of paranoia: from believing the OS file timestamps
-  // (fast) to verifying content hashes (slow but safe).
+  // What a file has to match in its record to be considered intact (see
+  // reconciler::stat()).
   //
   enum class strategy
   {
-    mtime, // Trust mtime.
-    mixed, // Check mtime and size.
-    hash   // Verify content hash.
+    mtime, // Modification time.
+    mixed, // Modification time and size.
+    hash   // @@ Same as mixed since match() doesn't hash the file yet.
   };
 
-  // Filesystem versus database versus manifest synchronizer.
+  // Reconciler of an installation with a release manifest.
   //
-  // The idea here is to determine the minimum set of actions required to make
-  // the filesystem look like the manifest.
+  // It compares the installed files with their cache records and with the
+  // manifest, plans the downloads that bring the installation up to date,
+  // and records what gets installed.
   //
   class reconciler
   {
   public:
+    // Progress callback, called with the message, the number of items done,
+    // and their total.
+    //
     using progress_cb =
       std::function<void (const std::string& msg, size_t cur, size_t tot)>;
 
-    // By default, we trust the filesystem.
-    //
     static constexpr strategy def_strat = strategy::mtime;
 
-    // Whether to automatically prune orphaned files.
+    // Whether clean() also erases the records that it returns.
     //
     static constexpr bool auto_prune = true;
 
-    // We borrow the database reference, so it must outlive us. Note that we
-    // also hold onto the root install path for all resolutions.
+    // Note that the database must outlive the reconciler. The installation
+    // root is made canonical.
     //
     reconciler (cache_database& db, const fs::path& root);
 
     reconciler (const reconciler&) = delete;
     reconciler& operator= (const reconciler&) = delete;
 
+  public:
     // Configuration.
     //
 
-    // We allow hot-swapping the strategy, though usually this is determined at
-    // startup.
+    // Set and return the strategy.
     //
     void
     mode (strategy s);
@@ -69,36 +72,34 @@ namespace launcher
     strategy
     mode () const noexcept;
 
+    // Set the callback that reports the hashing progress (see plan()).
+    //
     void
     progress (progress_cb cb);
 
-    // Versioning.
+  public:
+    // Versions.
     //
 
-    // Check if the component is stale compared to the tag.
-    //
-    // We assume the database is the source of truth for what is currently
-    // installed. If the database says we have version X, and the remote is X,
-    // we return false (up-to-date) and assume the user hasn't corrupted files
-    // manually.
+    // Return true if the component is not installed or its installed version
+    // is not the tag. Note that this only looks at the recorded version and
+    // not at the files (see audit() for that).
     //
     bool
     outdated (component_type c, const std::string& tag) const;
 
-    // Peek at the database version. Return nullopt if the component has never
-    // been installed.
+    // Return the installed version of the component or nullopt if it is not
+    // installed.
     //
     std::optional<std::string>
     version (component_type c) const;
 
+  public:
     // Inspection.
     //
 
-    // Stat a single file.
-    //
-    // If the entry is provided, we compare the filesystem state against it
-    // using our current mode. If it is missing, we assume the file is untracked
-    // or new.
+    // Return the state of the file relative to its record. The second
+    // version takes the record that the caller already has.
     //
     file_state
     stat (const fs::path& p) const;
@@ -106,28 +107,31 @@ namespace launcher
     file_state
     stat (const fs::path& p, const cached_file& entry) const;
 
-    // Walk the entire database for this component and check every file against
-    // the filesystem. This is the heavy check we run if versions mismatch or if
-    // the user forced a verify.
+    // Return the state of every file of the component that we have a record
+    // of.
     //
     std::vector<std::pair<cached_file, file_state>>
     audit (component_type c) const;
 
+  public:
     // Planning.
     //
 
-    // Generate the to-do list.
+    // Return the downloads that bring the files and archives of the
+    // component in the manifest up to date with the version.
     //
-    // We iterate over the manifest. For every file or archive, we look it up in
-    // the database and check the filesystem. If anything is amiss (missing,
-    // modified, wrong version), we add a reconcile item.
+    // A file that has no up-to-date record but exists and matches the
+    // manifest hash is adopted: we record it instead of downloading it
+    // again. Note that this involves hashing such files, which we do in
+    // parallel, reporting the progress through the callback.
     //
     std::vector<reconcile_item>
     plan (const manifest& m, component_type c, const std::string& v);
 
-    // Helpers for the planner. We split these out to keep the logic manageable
-    // and to handle the slightly different semantics of archives (which need
-    // extraction) versus standalone files.
+    // Records of the component by their paths and the archive and file
+    // halves of plan(). Note that an archive with files in the manifest is
+    // extracted on installation and so we check it through its files,
+    // downloading it again if any of them is not intact.
     //
     using cache_map =
       std::unordered_map<std::string, cached_file>;
@@ -144,16 +148,18 @@ namespace launcher
                 const std::string& v,
                 const cache_map& cm);
 
+    // Return the totals of the plan.
+    //
     reconcile_summary
     summarize (const std::vector<reconcile_item>& items) const;
 
+  public:
     // Recording.
     //
 
-    // Commit a download to the database.
-    //
-    // We do this immediately after download (before extraction) so we don't
-    // re-download if the process crashes during extraction.
+    // Record the installed file as belonging to the version of the
+    // component, along with its current metadata and, if specified, its
+    // hash.
     //
     void
     track (const fs::path& p,
@@ -161,39 +167,38 @@ namespace launcher
            const std::string& v,
            const std::string& hash = "");
 
-    // Commit extracted files.
-    //
-    // We batch this because an archive might explode into thousands of files.
-    // Touching the database that many times is too slow.
+    // As above but for the files of an extracted archive, which we record in
+    // a single transaction since there can be thousands of them.
     //
     void
     track (const std::vector<fs::path>& ps,
            component_type c,
            const std::string& v);
 
-    // Finalize the update.
-    //
-    // Once the dust settles and all files are essentially correct, we stamp the
-    // component with the new version tag.
+    // Record the tag as the installed version of the component. We do this
+    // once all the files of the component are installed.
     //
     void
     stamp (component_type c, const std::string& tag);
 
+    // Erase the record of the file.
+    //
     void
     forget (const fs::path& p);
 
-    // Garbage collection.
-    //
-    // Scan the database for files belonging to our component but which are no
-    // longer in the manifest. Delete them from both.
+    // Return the records of the component for files that are no longer in
+    // the manifest and, if auto_prune is true, erase them. Note that the
+    // files themselves are left alone.
     //
     std::vector<std::string>
     clean (const manifest& m, component_type c);
 
-    // Resolution.
+  public:
+    // Paths.
     //
 
-    // Anchor the manifest relative path to our root.
+    // Return the absolute path of the manifest file or archive in the
+    // installation (see manifest_coordinator::resolve_path()).
     //
     fs::path
     path (const manifest_file& p) const;
@@ -201,15 +206,13 @@ namespace launcher
     fs::path
     path (const manifest_archive& a) const;
 
-    // Normalize the path to a string key for database lookups. We need to be
-    // careful about slashes here to ensure consistency across platforms.
+    // Return the record key of the file, which is its lexically normalized
+    // path.
     //
     std::string
     key (const fs::path& p) const;
 
-    // Access.
-    //
-
+  public:
     cache_database&
     database () noexcept;
 
@@ -223,10 +226,8 @@ namespace launcher
     void
     report (const std::string& msg, size_t cur, size_t tot);
 
-    // The actual comparison logic.
-    //
-    // If we are in mtime mode, we just check timestamps. If mixed, we check
-    // size too. If hash, we read the whole file.
+    // Return true if the file matches its record according to the strategy.
+    // Return false if the file cannot be examined.
     //
     bool
     match (const fs::path& p, const cached_file& entry) const;

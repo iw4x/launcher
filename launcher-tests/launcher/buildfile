@@ -1,0 +1,16 @@
+# Copyright (c) the IW4x authors (see the AUTHORS file).
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+# These tests run the launcher itself.
+#
+define common: file
+common{*}: extension = testscript
+
+./: testscript{* -common} common{common} $launcher
+
+testscript{*}: test = $launcher
+
+# The launcher belongs to another package, so don't clean it through this
+# dependency.
+#
+./: $launcher: clean = false

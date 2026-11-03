@@ -1,3 +1,6 @@
+// Copyright (c) the IW4x authors (see the AUTHORS file).
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 #pragma once
 
 #include <string>
@@ -7,12 +10,10 @@
 
 namespace launcher
 {
-  // GitHub API HTTP request parameters.
+  // GitHub API request, built up with the with_*() functions.
   //
   struct github_request
   {
-    // HTTP method.
-    //
     enum class method_type
     {
       get,
@@ -23,17 +24,15 @@ namespace launcher
     };
 
     method_type method;
-    std::string endpoint;
-    std::optional<std::string> token; // Bearer token
-    std::optional<std::string> body;  // Request body (JSON)
+    std::string endpoint;             // See github_endpoint.
+    std::optional<std::string> token; // Overrides the github_api token.
+    std::optional<std::string> body;  // JSON.
     std::map<std::string, std::string> headers;
     std::map<std::string, std::string> query_params;
 
     github_request ();
     github_request (method_type m, std::string ep);
 
-    // Builder methods.
-    //
     github_request&
     with_token (std::string t);
 
@@ -43,11 +42,11 @@ namespace launcher
     github_request&
     with_header (std::string key, std::string value);
 
+    // Note that the key and the value are used as is, without encoding.
+    //
     github_request&
     with_query (std::string key, std::string value);
 
-    // Common query parameters.
-    //
     github_request&
     with_per_page (std::uint32_t n);
 
@@ -55,20 +54,20 @@ namespace launcher
     with_page (std::uint32_t n);
 
     github_request&
-    with_state (const std::string& state); // "open", "closed", "all"
+    with_state (const std::string& state); // open, closed, or all.
 
     github_request&
-    with_sort (const std::string& sort); // "created", "updated", "pushed"
+    with_sort (const std::string& sort); // created, updated, or pushed.
 
     github_request&
-    with_direction (const std::string& dir); // "asc", "desc"
+    with_direction (const std::string& dir); // asc or desc.
 
-    // Build full URL with query parameters.
+    // Return the endpoint with the query parameters appended.
     //
     std::string
     url () const;
 
-    // Get HTTP method as string.
+    // Return the method name in upper case, for example, GET.
     //
     std::string
     method_string () const;

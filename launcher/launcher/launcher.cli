@@ -1,3 +1,6 @@
+// Copyright (c) the IW4x authors (see the AUTHORS file).
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 include <cstdint>; // std::uint64_t
 include <string>;
 include <vector>;
@@ -20,10 +23,7 @@ namespace launcher
 
     // build2 metadata export protocol.
     //
-    bool --build2-metadata
-    {
-      "Print the build2 metadata and exit."
-    };
+    std::uint64_t --build2-metadata; // Leave undocumented/hidden.
 
     // Common options.
     //

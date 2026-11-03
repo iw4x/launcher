@@ -1,3 +1,6 @@
+// Copyright (c) the IW4x authors (see the AUTHORS file).
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 #include <launcher/launcher-update.hxx>
 
 #include <atomic>
@@ -294,14 +297,14 @@ namespace launcher
     // Bake in the compiled version constants.
     //
     launcher_version v;
-    v.major = HELLO_VERSION_MAJOR;
-    v.minor = HELLO_VERSION_MINOR;
-    v.patch = HELLO_VERSION_PATCH;
+    v.major = LAUNCHER_VERSION_MAJOR;
+    v.minor = LAUNCHER_VERSION_MINOR;
+    v.patch = LAUNCHER_VERSION_PATCH;
 
     // Parse the full version string to get pre-release and snapshot info. For
     // stable releases these fields will be empty/zero.
     //
-    auto p (parse_launcher_version (HELLO_VERSION_STR));
+    auto p (parse_launcher_version (LAUNCHER_VERSION_STR));
     if (p)
     {
       v.pre_release = p->pre_release;

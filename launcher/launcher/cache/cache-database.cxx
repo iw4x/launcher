@@ -1,3 +1,6 @@
+// Copyright (c) the IW4x authors (see the AUTHORS file).
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 #include <launcher/cache/cache-database.hxx>
 
 #include <stdexcept>
@@ -14,8 +17,6 @@ namespace launcher
   cache_database::
   cache_database (const fs::path& d)
   {
-    // Construct the cache database and initialize the schema and pragmas.
-    //
     launcher::log::trace_l2 (categories::cache {},
                              "constructing cache_database");
     init (d);
@@ -27,9 +28,6 @@ namespace launcher
   bool cache_database::
   open () const noexcept
   {
-    // Check if the database is open. We might be called before init() in
-    // some flows, so this is useful.
-    //
     launcher::log::trace_l3 (categories::cache {},
                              "checking if cache database is open");
     return db_ != nullptr;
@@ -38,8 +36,6 @@ namespace launcher
   const fs::path& cache_database::
   path () const noexcept
   {
-    // Return the resolved path to the cache database.
-    //
     launcher::log::trace_l3 (categories::cache {},
                              "retrieving cache database path: {}",
                              path_.string ());
@@ -49,8 +45,6 @@ namespace launcher
   odb::sqlite::database& cache_database::
   db () noexcept
   {
-    // Access the mutable raw database handle.
-    //
     launcher::log::trace_l3 (categories::cache {},
                              "accessing mutable raw database handle");
     return *db_;
@@ -59,8 +53,6 @@ namespace launcher
   const odb::sqlite::database& cache_database::
   db () const noexcept
   {
-    // Access the const raw database handle.
-    //
     launcher::log::trace_l3 (categories::cache {},
                              "accessing const raw database handle");
     return *db_;
@@ -73,14 +65,12 @@ namespace launcher
                              "initializing cache database at root: {}",
                              d.string ());
 
-    // Stick the cache database into the standard cache directory layout.
+    // Create the cache directory if it doesn't exist yet.
     //
     fs::path c (d / dir_name);
 
     if (!fs::exists (c))
     {
-      // The cache directory does not exist, so create it.
-      //
       launcher::log::trace_l2 (categories::cache {},
                                "cache directory {} does not exist, creating it",
                                c.string ());
@@ -103,22 +93,20 @@ namespace launcher
                           "resolved database path to: {}",
                           path_.string ());
 
-    // Check if the file exists before we open the database. This way we
-    // know if we need to bootstrap the schema.
+    // See if the database exists before opening it, which creates it, since
+    // a new database needs its schema.
     //
     bool cr (!fs::exists (path_));
     if (cr)
       launcher::log::info (categories::cache {},
                            "database file missing, will bootstrap schema");
 
-    // Open with the create flag, which is the default for sqlite::database.
-    //
     launcher::log::trace_l2 (categories::cache {}, "opening sqlite database");
     db_ = make_unique<odb::sqlite::database> (path_.string (),
                                               SQLITE_OPEN_READWRITE |
                                                 SQLITE_OPEN_CREATE);
 
-    // Tweak the engine before doing anything else.
+    // Configure SQLite before anything else touches the database.
     //
     launcher::log::trace_l2 (categories::cache {}, "applying database pragmas");
     pragmas ();
@@ -134,9 +122,8 @@ namespace launcher
   void cache_database::
   schema ()
   {
-    // Note that ODB's create_schema() fails if the table already exists.
-    // Since it doesn't offer a clean "if_not_exists" check, we manually
-    // peek at sqlite_master to see if our tables are there.
+    // See if the tables exist. Note that create_schema() fails if they do
+    // and ODB offers no way to ask, so we look in sqlite_master ourselves.
     //
     bool ex (false);
     {
@@ -164,8 +151,8 @@ namespace launcher
       t.commit ();
     }
 
-    // Since create_schema() manages its own transaction, the previous check
-    // must be fully committed.
+    // Note that the transaction of the above check must be committed by now
+    // since we can only have one active transaction per thread.
     //
     if (!ex)
     {
@@ -184,16 +171,17 @@ namespace launcher
   void cache_database::
   pragmas ()
   {
-    // Drop down to the raw handle. ODB's execute() enforces a transaction
-    // but some pragmas (like WAL and synchronous) require being outside of
-    // one.
+    // Note that we use the SQLite handle directly since ODB's execute()
+    // requires a transaction and some of these pragmas (journal_mode, for
+    // example) cannot be changed inside one.
     //
     odb::connection_ptr c (db_->connection ());
     odb::sqlite::connection& sc (static_cast<odb::sqlite::connection&> (*c));
     sqlite3* h (sc.handle ());
 
-    // Enable WAL mode. This allows better concurrency if we ever have
-    // multiple processes, though currently we lock the whole thing.
+    // Use the write-ahead log. Note that it only makes a difference for
+    // concurrent access, which the exclusive locking below rules out for
+    // now.
     //
     if (wal)
     {
@@ -201,8 +189,8 @@ namespace launcher
       sqlite3_exec (h, "PRAGMA journal_mode=WAL", nullptr, nullptr, nullptr);
     }
 
-    // Prioritize performance. If something corrupts, we just rebuild the
-    // cache rather than paying a continuous synchronization penalty.
+    // Trade durability for speed. The database is a cache, so if a crash
+    // corrupts it, we can rebuild it by verifying the installed files.
     //
     launcher::log::trace_l3 (
       categories::cache {},
@@ -222,8 +210,6 @@ namespace launcher
   optional<cached_file> cache_database::
   find (const fs::path& p) const
   {
-    // Delegate to the string-based find.
-    //
     launcher::log::trace_l3 (categories::cache {},
                              "finding file in database by fs::path: {}",
                              p.string ());
@@ -237,8 +223,6 @@ namespace launcher
                              "querying database for path: {}",
                              p);
 
-    // Wrap the lookup in a short-lived read transaction.
-    //
     odb::transaction t (db_->begin ());
     shared_ptr<cached_file> f (db_->find<cached_file> (p));
     t.commit ();
@@ -264,21 +248,19 @@ namespace launcher
 
     odb::transaction t (db_->begin ());
 
-    // We cannot strictly use persist() because the file might already exist.
-    // Avoid relying on exceptions for control flow.
+    // Update the record if it exists and persist it otherwise. Note that
+    // persist() throws if the record exists and we don't want to use the
+    // exception for control flow.
     //
-    shared_ptr<cached_file> e (db_->find<cached_file> (f.path ()));
-
-    if (e)
+    // Note also that we replace the whole record, component included, since
+    // the file may have moved to another component.
+    //
+    if (db_->find<cached_file> (f.path ()))
     {
       launcher::log::trace_l3 (categories::cache {},
                                "updating existing entry for: {}",
                                f.path ());
-      e->set_mtime (f.mtime ());
-      e->set_version (f.version ());
-      e->set_size (f.size ());
-      e->set_hash (f.hash ());
-      db_->update (*e);
+      db_->update (f);
     }
     else
     {
@@ -301,23 +283,17 @@ namespace launcher
                              "batch storing {} files in database",
                              fs.size ());
 
-    // Batch updates inside a single transaction. This minimizes
-    // synchronization overhead.
+    // Store all the records in a single transaction, which is a lot faster
+    // than a transaction per record.
     //
     odb::transaction t (db_->begin ());
 
     for (const auto& f : fs)
     {
-      shared_ptr<cached_file> e (db_->find<cached_file> (f.path ()));
-
-      if (e)
-      {
-        e->set_mtime (f.mtime ());
-        e->set_version (f.version ());
-        e->set_size (f.size ());
-        e->set_hash (f.hash ());
-        db_->update (*e);
-      }
+      // As above.
+      //
+      if (db_->find<cached_file> (f.path ()))
+        db_->update (f);
       else
         db_->persist (f);
     }
@@ -513,8 +489,8 @@ namespace launcher
                          static_cast<int> (c),
                          v);
 
-    // Update the existing version. Insert a new one if this is the first
-    // time we see this component.
+    // Update the version if it exists and persist it otherwise (as in
+    // store()).
     //
     odb::transaction t (db_->begin ());
 
@@ -612,7 +588,7 @@ namespace launcher
                          k,
                          v);
 
-    // Overwrite or create the setting depending on whether it exists.
+    // As above.
     //
     odb::transaction t (db_->begin ());
 
@@ -680,8 +656,8 @@ namespace launcher
         const char* r (
           reinterpret_cast<const char*> (sqlite3_column_text (s, 0)));
 
-        // Run the SQLite integrity check. It returns multiple rows but if
-        // everything is fine, the first row should just be 'ok'.
+        // Note that the check returns a row per problem and a single 'ok'
+        // row if there are none.
         //
         if (r == nullptr || string (r) != "ok")
         {
@@ -713,8 +689,6 @@ namespace launcher
     launcher::log::warning (categories::cache {},
                             "clearing cache database (all files and versions)");
 
-    // Drop all cached entries and versions to reset the state.
-    //
     odb::transaction t (db_->begin ());
 
     db_->erase_query<cached_file> ();

@@ -1,0 +1,10 @@
+# Copyright (c) the IW4x authors (see the AUTHORS file).
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+# On Windows the launcher finds the Steam root in the registry, so the
+# driver would end up modifying the real installation. So we only test on
+# Linux, where the root is in the home directory that the tests redirect.
+#
+./: exe{driver}: include = ($cxx.target.class == 'linux')
+
+exe{driver}: {hxx ixx txx cxx}{**} $libs testscript

@@ -1,3 +1,6 @@
+// Copyright (c) the IW4x authors (see the AUTHORS file).
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 #pragma once
 
 #include <quill/Backend.h>
@@ -11,6 +14,9 @@
 
 namespace launcher
 {
+  // Log categories, one per area. Each category has its own logger, which
+  // lets us set the threshold per area.
+  //
   namespace categories
   {
     struct launcher {};
@@ -27,6 +33,8 @@ namespace launcher
 
   namespace log
   {
+    // Name of the category, which we print, and its run-time threshold.
+    //
     template <typename C>
     struct policy;
 
@@ -36,6 +44,7 @@ namespace launcher
       static constexpr std::string_view name      = "launcher";
       static constexpr quill::LogLevel  threshold = quill::LogLevel::Info;
     };
+
     template <>
     struct policy<categories::cache>
     {
@@ -117,6 +126,9 @@ namespace launcher
       }
     }
 
+    // Return the logger of the category or NULL if the launcher::logger
+    // instance doesn't exist.
+    //
     template <typename C>
     quill::Logger*
     logger () noexcept

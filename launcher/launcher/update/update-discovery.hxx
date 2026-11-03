@@ -1,3 +1,6 @@
+// Copyright (c) the IW4x authors (see the AUTHORS file).
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 #pragma once
 
 #include <boost/asio.hpp>
@@ -14,11 +17,9 @@ namespace launcher
 {
   namespace asio = boost::asio;
 
-  // Query GitHub for releases.
-  //
-  // We don't download the actual bits here, just figure out if there is
-  // anything worth downloading. We handle the GitHub API specifics and try to
-  // map their release model to our update_info.
+  // Launcher releases on GitHub, as update_info for the current platform.
+  // We only fetch the release metadata here (see update_installer for the
+  // download).
   //
   class update_discovery
   {
@@ -27,6 +28,8 @@ namespace launcher
     using release_type = github_release;
     using asset_type = github_asset;
 
+    // Called every second while we wait out the GitHub rate limit.
+    //
     using progress_callback_type =
       std::function<void (const std::string& message,
                           std::uint64_t seconds_remaining)>;
@@ -48,6 +51,9 @@ namespace launcher
     void
     set_progress_callback (progress_callback_type callback);
 
+    // If include is true, then also consider pre-releases. By default we
+    // only consider final releases.
+    //
     void
     set_include_prerelease (bool include);
 
@@ -57,34 +63,33 @@ namespace launcher
     // Discovery.
     //
 
-    // See if there is anything newer than current_version in owner/repo.
-    //
-    // Return the new version info if we find a candidate that is strictly
-    // greater than current_version and has a valid asset for our platform.
-    // Otherwise return empty info.
+    // Return the latest release in owner/repo (see fetch_latest_release())
+    // if it is newer than current_version and empty info otherwise.
     //
     asio::awaitable<update_info>
     check_for_update (const std::string& owner,
                       const std::string& repo,
                       const launcher_version& current_version);
 
-    // Just grab the latest one from owner/repo.
+    // Return the latest release in owner/repo, skipping drafts and, unless
+    // include_prerelease() is true, pre-releases. Return empty info if there
+    // is none or it has no asset for the current platform.
     //
-    // Note that we don't compare versions here. Its mostly useful if we just
-    // want to show the user what's currently out there.
+    // Note that we only look at the 20 most recent releases.
     //
     asio::awaitable<update_info>
     fetch_latest_release (const std::string& owner,
                           const std::string& repo);
 
-    // Fetch a specific release by tag.
+    // Return the release with the tag in owner/repo. Return empty info if
+    // there is none or it has no asset for the current platform.
     //
     asio::awaitable<update_info>
     fetch_release_by_tag (const std::string& owner,
                           const std::string& repo,
                           const std::string& tag);
 
-    // Access underlying API client.
+    // Return the underlying GitHub API client.
     //
     api_type&
     api () noexcept;
@@ -93,19 +98,19 @@ namespace launcher
     api () const noexcept;
 
   private:
-    // Convert GitHub release to update_info.
+    // Return the release as update_info. Return empty info if it has no
+    // asset for the current platform or we cannot determine its version.
     //
     update_info
     release_to_update_info (const release_type& release) const;
 
-    // Find the appropriate asset for the current platform.
+    // Return the release asset for the current platform, which is
+    // launcher-<version>-<platform>.zip on Windows and .tar.xz on Linux.
     //
     std::optional<asset_type>
     find_platform_asset (const release_type& release) const;
 
-    // Extract version from release asset name.
-    //
-    // launcher-<version>-<platform>.<ext>
+    // Return the version in the asset name (see find_platform_asset()).
     //
     std::optional<launcher_version>
     parse_asset_version (const std::string& asset_name) const;

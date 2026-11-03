@@ -1,130 +1,69 @@
-# IW4x Launcher
+# launcher - Launcher and updater for IW4x.
 
-<img width="3194" height="1744" alt="image" src="https://github.com/user-attachments/assets/592124b1-5b55-4172-82e6-3f72e147df69" />
+The `iw4x-launcher` executable keeps the IW4x installation in its directory
+up to date with the latest IW4x release and starts the selected IW4x client,
+through Proton on Linux. It also installs shortcuts for both clients, in
+Steam and on the desktop.
 
-## Getting Started
+This file contains setup instructions and other details for developing
+`launcher`. If you want to use `launcher` in your `build2`-based project,
+then see the accompanying package [`README.md`](launcher/README.md) file.
 
-IW4x launcher is built using the [build2](https://build2.org/build2-toolchain/doc/build2-toolchain-intro.xhtml#preface) build system. To get started, you'll need the staged toolchain, which you can grab as either source or binary packages. The pre-built binaries are available here:
+## Usage
 
-* [Staged Toolchain](https://stage.build2.org/0/0.18.0-a.0/bindist/)
-* [SHA256 Checksums](https://stage.build2.org/0/toolchain-bindist.sha256)
+The launcher requires the Steam version of Call of Duty: Modern Warfare 2
+(2009). Download the archive for your platform from the
+[releases](https://github.com/iw4x/launcher/releases) page, extract it into
+the game directory, and run `iw4x-launcher` from there.
 
-You'll also need a working GCC compiler. Use GCC if you're compiling on Linux, or MinGW if you're on Windows. If you need help setting these up, you can find installation instructions below:
+## Development
 
-* [GCC](https://gcc.gnu.org/)
-* [MinGW-w64](https://www.mingw-w64.org/)
+The development setup for `launcher` uses the standard `bdep`-based
+workflow. Note that development builds regenerate the files kept in
+`launcher/launcher/pregenerated/`. For this `bdep` builds the `cli` and
+`odb` compilers automatically and `xxd` comes from the system.
 
-### Consumption
+On Linux we build with GCC. For example:
 
-> [!NOTE]
-> **Consumption** is just `build2`'s term for building the package without actively modifying the code. These steps are great if you want to test the latest development builds, but we don't recommend them for regular users just looking to install and play the game.
-
-#### Windows
-
-```powershell
-# Create the build configuration:
-bpkg create -d launcher cc          ^
-  config.cxx=x86_64-w64-mingw32-g++ ^
-
+```
+git clone https://github.com/iw4x/launcher.git
 cd launcher
 
-# To build:
-bpkg build launcher@https://github.com/iw4x/launcher.git#main
-
-# To test:
-bpkg test launcher
-
-# To install:
-bpkg install launcher
-
-# To uninstall:
-bpkg uninstall launcher
-
-# To upgrade:
-bpkg fetch
-bpkg status launcher
-bpkg uninstall launcher
-bpkg build --upgrade --recursive launcher
-bpkg install launcher
+bdep init -C @gcc cc config.cxx=g++
+bdep update
+bdep test
 ```
 
-#### Linux
+We can also cross-compile for Windows with MinGW-w64 GCC and run the tests
+under Wine, with `WINEPATH` pointing to the directory that contains the
+MinGW runtime DLLs (`/usr/x86_64-w64-mingw32/sys-root/mingw/bin` on Fedora).
+For example:
 
-```bash
-# Create the build configuration:
-bpkg create -d launcher @gcc cc
-
-cd iw4x
-
-# To build:
-bpkg build launcher@https://github.com/iw4x/launcher.git#main
-
-# To test:
-bpkg test launcher
-
-# To install:
-bpkg install launcher
-
-# To uninstall:
-bpkg uninstall launcher
-
-# To upgrade:
-bpkg fetch
-bpkg status launcher
-bpkg uninstall launcher
-bpkg build --upgrade --recursive launcher
-bpkg install launcher
+```
+bdep init -C @mingw cc config.cxx=x86_64-w64-mingw32-g++ \
+  config.test.runner="env WINEPATH=/usr/x86_64-w64-mingw32/sys-root/mingw/bin wine"
+bdep update @mingw
+bdep test @mingw
 ```
 
-If you want to dive deeper into how these commands work, check out the [build2 package consumption guide](https://build2.org/build2-toolchain/doc/build2-toolchain-intro.xhtml#guide-consume-pkg).
+On Windows we build with MinGW-w64 GCC from PowerShell. For example:
 
-### Development
-
-> [!NOTE]
-> These instructions are meant for developers looking to modify and contribute to the IW4x launcher codebase. If you just want to compile and test the latest build, follow the **Consumption** steps above instead.
-
-#### Linux
-
-```bash
-# Clone the repository:
-git clone --recursive https://github.com/iw4x/launcher.git
-
+```
+git clone https://github.com/iw4x/launcher.git
 cd launcher
 
-# Create the build configuration:
-bdep init -C @gcc        \
-  config.cc.compiledb=./ \
-  cc
-
-# To build:
-b
-
-# To test:
-b test
+bdep init -C -@mingw cc config.cxx=g++
+bdep update
+bdep test
 ```
 
-#### Windows
+## Contributing
 
-```powershell
-# Clone the repository:
-git clone --recursive https://github.com/iw4x/launcher.git
-
-cd iw4x
-
-# Create the build configuration:
-bdep init -C -@mingw32 cc           ^
-  config.cxx=x86_64-w64-mingw32-g++ ^
-  config.cc.compiledb=./
-
-# To build:
-b
-
-# To test:
-b test
-```
-
-For more details on `bdep` and typical development workflows, take a look at the [build2 build system manual](https://build2.org/build2/doc/build2-build-system-manual.xhtml).
+See [CONTRIBUTING](.github/CONTRIBUTING.md).
 
 ## License
 
-IW4x launcher is licensed under the GNU General Public License v3.0 or later. See [LICENSE.md](LICENSE.md) for details.
+`launcher` is licensed under the GNU General Public License, version 3 or
+any later version.
+
+See [LICENSE](LICENSE.md), [LEGAL](LEGAL), and [AUTHORS](AUTHORS).

@@ -1,3 +1,6 @@
+// Copyright (c) the IW4x authors (see the AUTHORS file).
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 #include <launcher/manifest/manifest.hxx>
 
 #include <boost/asio/co_spawn.hpp>
@@ -35,11 +38,6 @@ namespace launcher
   {
     try
     {
-      // Parse the JSON string.
-      //
-      // We explicitly check that the root element is an object before proceeding,
-      // as a manifest must define properties like 'files' or 'archives'.
-      //
       json::value jv (json::parse (json_str));
 
       if (!jv.is_object ())
@@ -93,8 +91,6 @@ namespace launcher
   std::string manifest::
   string () const
   {
-    // Serialize the internal state back to a JSON string.
-    //
     return json::serialize (json ());
   }
 
@@ -119,8 +115,6 @@ namespace launcher
     {
       if (file.archive_name)
       {
-        // Find the archive with matching name.
-        //
         for (auto& archive : archives)
         {
           if (archive.name == *file.archive_name)
@@ -136,18 +130,13 @@ namespace launcher
   bool manifest::
   validate () const
   {
-    // In absence of manifest_traits, integrity checks can be
-    // evaluated generically directly on elements. Currently returning true.
     return true;
   }
 
   void manifest::
   parse_update (const json::object& obj)
   {
-    // Parse archives.
-    //
-    // The 'archives' array contains the raw .iwd or .ff files that need to be
-    // downloaded.
+    // Parse the archives.
     //
     if (obj.contains ("archives") && obj.at ("archives").is_array ())
     {
@@ -182,10 +171,7 @@ namespace launcher
       }
     }
 
-    // Parse individual files.
-    //
-    // These entries usually map specific assets to the archives that contain
-    // them, or stand-alone files.
+    // Parse the files.
     //
     if (obj.contains ("files") && obj.at ("files").is_array ())
     {
@@ -227,10 +213,7 @@ namespace launcher
   void manifest::
   parse_dlc (const json::object& obj)
   {
-    // Parse files.
-    //
-    // DLC manifests typically only contain a list of files (maps, weapons, etc.)
-    // without the strict archive structure of the base game update.
+    // As above but without the archive.
     //
     if (obj.contains ("files") && obj.at ("files").is_array ())
     {
@@ -271,8 +254,6 @@ namespace launcher
   {
     json::object obj;
 
-    // Serialize archives.
-    //
     if (!archives.empty ())
     {
       json::array archives_arr;
@@ -298,8 +279,6 @@ namespace launcher
       obj["archives"] = std::move (archives_arr);
     }
 
-    // Serialize files.
-    //
     if (!files.empty ())
     {
       json::array files_arr;
@@ -336,8 +315,6 @@ namespace launcher
   {
     json::object obj;
 
-    // Serialize files.
-    //
     if (!files.empty ())
     {
       json::array files_arr;
@@ -369,12 +346,6 @@ namespace launcher
   asio::awaitable<manifest> manifest::
   parse_async (const std::string& json_str, manifest_format k)
   {
-    // Offload parsing to the coroutine context.
-    //
-    // While Boost.JSON parsing is synchronous, wrapping it here allows callers
-    // to treat it uniformly with other async operations, potentially moving it
-    // to a thread pool if parsing large manifests becomes a bottleneck.
-    //
     co_return manifest (json_str, k);
   }
 

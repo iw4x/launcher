@@ -1,0 +1,20 @@
+# Copyright (c) the IW4x authors (see the AUTHORS file).
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+# Archive that Info-ZIP created on Linux with zip -X, the way the rawfiles
+# release script creates its archives. It holds run.sh with mode 0755 and
+# data.txt with mode 0644.
+#
+archive = $src_base/executable.zip
+
+# Windows has no execute bits to restore.
+#
+x = ($cxx.target.class != 'windows' ? ' executable' : '')
+
+: executable
+: Test restoring the execute bits recorded in the archive
+:
+$* $archive >>"EOO" &run.sh &data.txt
+  run.sh$x
+  data.txt
+  EOO

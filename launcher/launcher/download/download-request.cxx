@@ -1,3 +1,6 @@
+// Copyright (c) the IW4x authors (see the AUTHORS file).
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 #include <launcher/download/download-request.hxx>
 
 using namespace std;
@@ -21,10 +24,6 @@ namespace launcher
   bool download_request::
   valid () const
   {
-    // A request is only meaningful if we have somewhere to download from and
-    // somewhere to put it. We might later allow empty URLs if we are just
-    // verifying an existing target, but for now be strict.
-    //
     bool r (!urls.empty () && !target.empty ());
     return r;
   }
@@ -32,9 +31,8 @@ namespace launcher
   bool
   operator== (const download_request& x, const download_request& y)
   {
-    // Compare the lists and targets directly. Note that we rely on the
-    // vector equality here, which means the exact order of fallback URLs
-    // matters. This is usually what we want.
+    // Note that the order of the URLs matters since it is the order in which
+    // we try them.
     //
     bool r (x.urls == y.urls && x.target == y.target);
     return r;

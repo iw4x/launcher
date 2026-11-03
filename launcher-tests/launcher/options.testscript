@@ -1,0 +1,52 @@
+# Copyright (c) the IW4x authors (see the AUTHORS file).
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+# Note that the launcher handles these options before it changes into the
+# installation root, so we run it in place.
+
+: version
+:
+$* --version >~'/Launcher \d+\.\d+\.\d+.*/'
+
+: help
+:
+$* --help >>~%EOO%
+  usage: launcher [options]
+  options:
+  %.+%+
+  EOO
+
+: build2-metadata
+:
+$* --build2-metadata=1 >>~%EOO%
+  # build2 buildfile iw4x-launcher
+  export.metadata = 1 launcher
+  launcher.name = [string] iw4x-launcher
+  %launcher\.version = \[string\] '\d+\.\d+\.\d+.*'%
+  %launcher\.checksum = \[string\] '\d+\.\d+\.\d+.*'%
+  EOO
+
+: invalid
+: Test handling of invalid command lines
+:
+{{
+  : unknown
+  :
+  $* --unknown 2>"error: unknown option '--unknown'" != 0
+
+  : missing-value
+  :
+  $* --jobs 2>"error: missing value for option '--jobs'" != 0
+
+  : invalid-value
+  :
+  $* --jobs x 2>"error: invalid value 'x' for option '--jobs'" != 0
+
+  : missing-arch
+  :
+  $* --arch 2>"error: missing value for option '--arch'" != 0
+
+  : invalid-arch
+  :
+  $* --arch arm64 2>"error: invalid value 'arm64' for option '--arch'" != 0
+}}

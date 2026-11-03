@@ -1,3 +1,6 @@
+// Copyright (c) the IW4x authors (see the AUTHORS file).
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 #pragma once
 
 #include <cstdint>
@@ -9,16 +12,18 @@
 
 namespace launcher
 {
-  // Build2 standard version for launcher releases.
+  // Launcher release version, which is the part of the standard version
+  // that our releases use:
   //
-  // Format: <major>.<minor>.<patch>[-(a|b).<num>[.z|<snapsn>[.<snapid>]]]
+  // <major>.<minor>.<patch>[-(a|b).<num>[.(z|<snapsn>[.<snapid>])]]
   //
-  // Examples:
-  //   1.1.0                                 - final release
-  //   1.2.0-a.1                             - first alpha pre-release
-  //   1.2.0-b.2                             - second beta pre-release
-  //   1.2.0-a.1.z                           - alpha development snapshot
-  //   1.2.0-a.1.20260201010251.fe4660334ed0 - alpha snapshot
+  // For example:
+  //
+  // 1.1.0                                  Final release.
+  // 1.2.0-a.1                              First alpha.
+  // 1.2.0-b.2                              Second beta.
+  // 1.2.0-a.1.z                            Development snapshot after a.1.
+  // 1.2.0-a.1.20260201010251.fe4660334ed0  Snapshot after a.1.
   //
   struct launcher_version
   {
@@ -26,18 +31,18 @@ namespace launcher
     std::uint32_t minor = 0;
     std::uint32_t patch = 0;
 
-    // Pre-release: 0 = release, 1-499 = alpha, 500-999 = beta. The actual
-    // number is stored, e.g., alpha.2 = 2, beta.3 = 503.
+    // Pre-release number with betas offset by 500, so that the integer
+    // order is the version order. For example, a.2 is 2 and b.3 is 503. A
+    // final release has 0.
     //
     std::uint16_t pre_release = 0;
 
-    // Snapshot sequence number (0 = not a snapshot). For git, this is the
-    // commit timestamp in YYYYMMDDhhmmss form.
+    // Snapshot sequence number or 0 if this is not a snapshot. For git it is
+    // the commit time (YYYYMMDDhhmmss) and for the .z placeholder it is 1.
     //
     std::uint64_t snapshot_sn = 0;
 
-    // Snapshot id (empty if not specified). For git, this is the abbreviated
-    // commit id.
+    // Snapshot id, which for git is the abbreviated commit id. Can be empty.
     //
     std::string snapshot_id;
 
@@ -58,6 +63,9 @@ namespace launcher
     {
     }
 
+    // Return true if this is 0.0.0, which update_info uses to mean no
+    // update.
+    //
     bool
     empty () const noexcept
     {
@@ -104,13 +112,15 @@ namespace launcher
       return std::nullopt;
     }
 
-    // Compare versions. Returns negative if this < other, positive if this >
-    // other, zero if equal.
+    // Return a negative value if this version is less than v, 0 if they are
+    // equal, and a positive value otherwise.
     //
     int
     compare (const launcher_version& v) const noexcept;
 
-    // String representation (e.g., "1.2.0-a.1").
+    // Return the version in the standard form (e.g., 1.2.0-a.1).
+    //
+    // @@ The .z placeholder comes back as the .1 snapshot.
     //
     std::string
     string () const;
@@ -152,14 +162,16 @@ namespace launcher
     return os << v.string ();
   }
 
-  // Parse version string. Returns nullopt if parsing fails.
+  // Parse the version, which may have the v prefix of git tags (e.g.,
+  // v1.2.0). Return nullopt if it is invalid.
   //
-  // The input may optionally have a 'v' prefix (e.g., "v1.2.0").
+  // Note that we ignore what follows the patch number unless it starts with
+  // '-', so 1.2.0x is 1.2.0.
   //
   std::optional<launcher_version>
   parse_launcher_version (const std::string& s);
 
-  // Update check result.
+  // Outcome of an update check.
   //
   enum class update_status
   {
@@ -180,7 +192,7 @@ namespace launcher
     return os;
   }
 
-  // Update state enumeration.
+  // Update step, for progress reporting.
   //
   enum class update_state
   {
@@ -211,7 +223,8 @@ namespace launcher
     return os;
   }
 
-  // Platform identification for asset selection.
+  // Platform of a launcher release asset. It prints as the platform part of
+  // the asset name.
   //
   enum class platform_type
   {
@@ -232,12 +245,13 @@ namespace launcher
     return os;
   }
 
-  // Get the current platform.
+  // Return the platform that we are built for.
   //
   platform_type
   current_platform () noexcept;
 
-  // Update information from a GitHub release.
+  // Launcher release that we can update to and its asset for the current
+  // platform. Empty if there is none.
   //
   struct update_info
   {
@@ -248,7 +262,7 @@ namespace launcher
     std::string asset_name;
     std::uint64_t asset_size = 0;
     bool prerelease = false;
-    std::string body;  // release notes (markdown)
+    std::string body;  // Release notes (Markdown).
 
     bool
     empty () const noexcept
@@ -257,9 +271,7 @@ namespace launcher
     }
   };
 
-  // Update progress callback.
-  //
-  // Called during update with current state and progress (0.0-1.0).
+  // Progress callback. The progress of the step goes from 0.0 to 1.0.
   //
   using update_progress_callback =
     std::function<void (update_state state,

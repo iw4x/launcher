@@ -1,0 +1,172 @@
+# Copyright (c) the IW4x authors (see the AUTHORS file).
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+h = 51f855e8f080df9cbc2a561b6ddaad85e1bbf884ea4b73f3455e8c86202d0422
+
+: parse
+:
+{{
+  : update
+  :
+  $* parse <<"EOI" >>"EOO"
+    {
+      "archives": [
+        {"name": "release.zip", "size": 10, "url": "https://example.org/r",
+         "blake3": "$h"},
+        {"name": "iw_23.iwd", "size": 18446744073709551615}
+      ],
+      "files": [
+        {"path": "iw4x.exe", "size": 1, "blake3": "$h",
+         "archive": "release.zip"},
+        {"path": "zone/english/iw4x.ff", "size": 2, "asset_name": "iw4x.ff"},
+        {"path": "linux/companion", "size": 3, "archive": "missing.zip"}
+      ]
+    }
+    EOI
+    archive release.zip 10 https://example.org/r $h
+      file iw4x.exe 1 $h archive=release.zip
+    archive iw_23.iwd 18446744073709551615 - -
+    file iw4x.exe 1 $h archive=release.zip
+    file zone/english/iw4x.ff 2 - asset=iw4x.ff
+    file linux/companion 3 - archive=missing.zip
+    EOO
+
+  : skip
+  : Test skipping the malformed entries
+  :
+  $* parse <<EOI >>EOO
+    {
+      "archives": [1, {"size": 1}, {"name": "a.zip"}],
+      "files": ["x", {"size": 1}, {"path": "b"}]
+    }
+    EOI
+    archive a.zip 0 - -
+    file b 0 -
+    EOO
+
+  : dlc
+  : Test that DLC manifests have no archives
+  :
+  $* parse-dlc <<EOI >>EOO
+    {
+      "archives": [{"name": "a.zip"}],
+      "files": [{"path": "mp_bloc.ff", "size": 5, "archive": "a.zip"}]
+    }
+    EOI
+    file mp_bloc.ff 5 -
+    EOO
+
+  : empty
+  :
+  $* parse <:'' 2>'error: manifest JSON is empty' != 0
+
+  : not-object
+  :
+  $* parse <'[]' 2>>EOE != 0
+    error: failed to parse manifest: manifest JSON must be an object
+    EOE
+
+  : invalid
+  :
+  $* parse <'{' 2>>~/EOE/ != 0
+    /error: failed to parse manifest: .+/
+    EOE
+}}
+
+: serialize
+:
+$* serialize <<EOI >>EOO
+  {
+    "archives": [{"name": "a.zip", "url": "u", "size": 1}],
+    "files": [{"path": "b", "size": 2, "archive": "a.zip", "asset_name": "c"}]
+  }
+  EOI
+  {"archives":[{"size":1,"name":"a.zip","url":"u"}],"files":[{"size":2,"path":"b","asset_name":"c","archive":"a.zip"}]}
+  EOO
+
+: resolve
+:
+{{
+  : client
+  : Test installing the clients at the root under their current names
+  :
+  $* resolve <<EOI >>EOO
+    file iw4x.exe
+    file IW4X.EXE
+    file iw4x (x86).exe
+    file iw4x (mm).exe
+    file bin/iw4x.exe
+    EOI
+    iw4x.exe
+    IW4X.EXE
+    iw4x.exe
+    iw4x (mm).exe
+    bin/iw4x.exe
+    EOO
+
+  : zone
+  : Test mapping the zone files into the IW4x zone tree, idempotently
+  :
+  $* resolve <<EOI >>EOO
+    file zone/english/iw4x.ff
+    file zone\english\iw4x.ff
+    file zone/iw4x/x86/english/iw4x.ff
+    file zone/iw4x/x64/patch.ff
+    file codo/dlc/mp_bloc.ff
+    archive zone/dlc/mp_bloc.ff
+    EOI
+    zone/iw4x/x86/english/iw4x.ff
+    zone/iw4x/x86/english/iw4x.ff
+    zone/iw4x/x86/english/iw4x.ff
+    zone/iw4x/x64/patch.ff
+    zone/iw4x/x86/dlc/mp_bloc.ff
+    zone/iw4x/x86/dlc/mp_bloc.ff
+    EOO
+
+  : basegame
+  : Test mapping the legacy base game tree into the current one
+  :
+  $* resolve <<EOI >>EOO
+    file iw4x/images/foo.iwi
+    file main/iw4x/x86/images/foo.iwi
+    archive iw4x/iw_00.iwd
+    EOI
+    main/iw4x/x86/images/foo.iwi
+    main/iw4x/x86/images/foo.iwi
+    main/iw4x/x86/iw_00.iwd
+    EOO
+
+  : loose
+  : Test placing the loose archives and fastfiles by their extension
+  :
+  $* resolve <<EOI >>EOO
+    file iw_23.iwd
+    file data/IW_24.IWD
+    file mp_bloc.ff
+    file MP_BLOC.FF
+    archive iw_25.iwd
+    archive mp_nuked.ff
+    EOI
+    main/iw4x/x86/iw_23.iwd
+    main/iw4x/x86/IW_24.IWD
+    zone/iw4x/x86/dlc/mp_bloc.ff
+    zone/iw4x/x86/dlc/MP_BLOC.FF
+    main/iw4x/x86/iw_25.iwd
+    zone/iw4x/x86/dlc/mp_nuked.ff
+    EOO
+
+  : other
+  : Test installing zip archives at the root and the rest in place
+  :
+  $* resolve <<EOI >>EOO
+    file linux/companion
+    archive release.zip
+    archive dist/release.zip
+    archive other.bin
+    EOI
+    linux/companion
+    release.zip
+    release.zip
+    other.bin
+    EOO
+}}

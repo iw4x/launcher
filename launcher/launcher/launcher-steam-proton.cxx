@@ -1,3 +1,6 @@
+// Copyright (c) the IW4x authors (see the AUTHORS file).
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 #include <launcher/launcher-steam-proton.hxx>
 
 #include <cerrno>
@@ -12,7 +15,7 @@
 #include <boost/asio/steady_timer.hpp>
 #include <boost/asio/use_awaitable.hpp>
 
-#include <boost/process.hpp>
+#include <boost/process/v1.hpp>
 
 #include <launcher/launcher-log.hxx>
 
@@ -21,7 +24,7 @@ using namespace std::chrono_literals;
 
 namespace launcher
 {
-  namespace bp = boost::process;
+  namespace bp = boost::process::v1;
 
   namespace
   {

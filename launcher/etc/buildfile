@@ -1,0 +1,15 @@
+# Copyright (c) the IW4x authors (see the AUTHORS file).
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+# Maintainer scripts. We distribute them with the package but don't install
+# them.
+#
+./: private/exe{compose-artwork}
+
+# Note that the script doesn't import any modules, so we have to select the
+# bash rule with a hint.
+#
+[rule_hint=bash] private/exe{compose-artwork}: private/in{compose-artwork}
+{
+  install = false
+}

@@ -1,3 +1,6 @@
+// Copyright (c) the IW4x authors (see the AUTHORS file).
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 #pragma once
 
 #include <optional>
@@ -9,6 +12,8 @@
 
 namespace launcher
 {
+  // HTTP response. A default-constructed response is empty, with status 0.
+  //
   class http_response
   {
   public:
@@ -69,6 +74,8 @@ namespace launcher
       return status_code () >= 500 && status_code () < 600;
     }
 
+    // Return true for a client or server error.
+    //
     bool
     is_error () const noexcept
     {
@@ -105,6 +112,8 @@ namespace launcher
       return get_header ("Content-Type");
     }
 
+    // Return the Content-Length header value if present and valid.
+    //
     std::optional<std::uint64_t>
     content_length () const;
 
@@ -139,6 +148,8 @@ namespace launcher
     }
   };
 
+  // Print the status line, for example, HTTP/1.1 200 OK.
+  //
   std::ostream&
   operator << (std::ostream& o, const http_response& r);
 }

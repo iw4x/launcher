@@ -1,0 +1,80 @@
+# Copyright (c) the IW4x authors (see the AUTHORS file).
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+# Note that the concurrency hint 1 stands for a single thread and 0 for the
+# default (see BOOST_ASIO_CONCURRENCY_HINT_*).
+#
+
+: context
+:
+$* context
+
+: pool
+:
+{{
+  $* pool 1 >'1' : single
+  $* pool 2 >'0' : multiple
+}}
+
+: hint
+: Test that the configuration has room for the value and its sign
+:
+{{
+  $* hint -1         >'-1'         : negative
+  $* hint 1          >'1'          : one
+  $* hint 12         >'12'         : two
+  $* hint 2147483647 >'2147483647' : max
+}}
+
+: get
+:
+{{
+  : value
+  :
+  $* get int signed uint unsigned bool true bool false <<EOI >>EOO
+    test.signed=-42
+    test.unsigned=42
+    test.true=1
+    test.false=0
+    EOI
+    -42
+    42
+    true
+    false
+    EOO
+
+  : limits
+  :
+  $* get llong min llong max ullong umax <<EOI >>EOO
+    test.min=-9223372036854775808
+    test.max=9223372036854775807
+    test.umax=18446744073709551615
+    EOI
+    -9223372036854775808
+    9223372036854775807
+    18446744073709551615
+    EOO
+
+  : missing
+  :
+  $* get int missing bool missing <:'' >>EOO
+    123
+    true
+    EOO
+
+  : out-of-range
+  :
+  $* get llong over llong under ullong uover uchar narrow bool bool <<EOI >>EOO
+    test.over=9223372036854775808
+    test.under=-9223372036854775809
+    test.uover=18446744073709551616
+    test.narrow=256
+    test.bool=2
+    EOI
+    out of range
+    out of range
+    out of range
+    out of range
+    out of range
+    EOO
+}}

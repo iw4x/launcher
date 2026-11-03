@@ -1,0 +1,122 @@
+# Copyright (c) the IW4x authors (see the AUTHORS file).
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+: get
+:
+{{
+  : body
+  :
+  $* get /file <'/file 200 hello world' >>EOO
+    status 200
+    body hello world
+    > GET /file
+    EOO
+
+  : empty
+  : Test a response without body
+  :
+  $* get /empty <'/empty 204' >>EOO
+    status 204
+    > GET /empty
+    EOO
+
+  : error
+  : Test returning an error status to the caller
+  :
+  $* get /missing <'/missing 404 not here' >>EOO
+    status 404
+    body not here
+    > GET /missing
+    EOO
+}}
+
+: redirect
+:
+{{
+  : follow
+  :
+  $* get /moved <<EOI >>EOO
+    /moved 302 /file
+    /file 200 hello
+    EOI
+    status 200
+    body hello
+    > GET /moved
+    > GET /file
+    EOO
+
+  : see-other
+  : Test changing POST to GET on 303 See Other
+  :
+  $* post /form data <<EOI >>EOO
+    /form 303 /result
+    /result 200 done
+    EOI
+    status 200
+    body done
+    > POST /form
+    > GET /result
+    EOO
+
+  : loop
+  : Test giving up on a redirect loop
+  :
+  $* get /loop <'/loop 302 /loop' >>EOO 2>>EOE != 0
+    > GET /loop
+    > GET /loop
+    > GET /loop
+    > GET /loop
+    > GET /loop
+    > GET /loop
+    > GET /loop
+    > GET /loop
+    > GET /loop
+    > GET /loop
+    EOO
+    error: maximum redirects exceeded
+    EOE
+}}
+
+: download
+:
+{{
+  : full
+  :
+  $* download /file <'/file 200 0123456789' >>EOO &download
+    bytes 10
+    file 0123456789
+    > GET /file
+    EOO
+
+  : resume
+  : Test resuming a partial download with a byte range
+  :
+  {
+    cat <:'01234' >=download
+
+    $* download /file 5 <'/file 200 0123456789' >>EOO
+      bytes 10
+      file 0123456789
+      > GET /file range=bytes=5-
+      EOO
+  }
+
+  : redirect
+  :
+  $* download /moved <<EOI >>EOO &download
+    /moved 302 /file
+    /file 200 data
+    EOI
+    bytes 4
+    file data
+    > GET /moved
+    > GET /file
+    EOO
+
+  : error
+  : Test failing on an error status
+  :
+  $* download /missing <'/missing 404' >'> GET /missing' &download 2>>EOE != 0
+    error: download failed: Not Found (404)
+    EOE
+}}

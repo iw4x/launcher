@@ -1,3 +1,6 @@
+# Copyright (c) the IW4x authors (see the AUTHORS file).
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 # Glue buildfile that "pulls" all the packages in the project.
 #
 import pkgs = [dir_paths] $process.run_regex(\

@@ -1,3 +1,6 @@
+// Copyright (c) the IW4x authors (see the AUTHORS file).
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 #include <launcher/progress/progress-tracker.hxx>
 
 #include <sstream>
@@ -108,19 +111,17 @@ namespace launcher
     if (ind)
     {
       o << " <==> ";
-      for (int i (5); i < w; ++i)
+      for (int i (6); i < w; ++i)
         o << " ";
     }
     else if (p == 0.0f && w > 3)
     {
-      // Idle animation: bounce a <=> marker across the bar width.
+      // Bounce the <=> marker from one end of the bar to the other.
       //
-      int marker_len (3);  // "<=>"
+      int marker_len (3);
       int travel (w - marker_len);
       if (travel < 1) travel = 1;
 
-      // Ping-pong: 0..travel-1 then travel-1..0
-      //
       int cycle (travel * 2);
       int pos (static_cast<int> (frame % static_cast<unsigned> (cycle)));
 

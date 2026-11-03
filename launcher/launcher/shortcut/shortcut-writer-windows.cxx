@@ -1,3 +1,6 @@
+// Copyright (c) the IW4x authors (see the AUTHORS file).
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 #include <launcher/shortcut/shortcut-writer.hxx>
 
 #include <cstddef>
@@ -25,6 +28,9 @@ namespace launcher
         throw system_error (static_cast<int> (r), system_category (), w);
     }
 
+    // Initialize COM on this thread for the guard's lifetime. If the thread
+    // already uses the other apartment model, then use it as is.
+    //
     class com_guard
     {
     public:
@@ -55,6 +61,8 @@ namespace launcher
       bool owned_ = false;
     };
 
+    // Owning pointer to a COM interface.
+    //
     template <typename I>
     class com_ptr
     {
@@ -130,6 +138,9 @@ namespace launcher
       return r;
     }
 
+    // Join the arguments, quoting them the way CommandLineToArgvW() splits
+    // a command line.
+    //
     wstring
     command_line (const vector<string>& as)
     {
@@ -184,6 +195,8 @@ namespace launcher
       return r;
     }
 
+    // Return true if the shortcut file exists with these properties.
+    //
     bool
     matches (const fs::path& p,
              const wstring& tg,

@@ -1,3 +1,6 @@
+// Copyright (c) the IW4x authors (see the AUTHORS file).
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 #pragma once
 
 #include <launcher/progress/progress-types.hxx>
@@ -19,6 +22,8 @@ namespace launcher
 {
   namespace asio = boost::asio;
 
+  // Progress of a single transfer, labeled for display.
+  //
   class progress_entry
   {
   public:
@@ -70,6 +75,14 @@ namespace launcher
     progress_tracker tracker_;
   };
 
+  // Terminal progress display of the transfers that are in progress.
+  //
+  // The update loop computes the speeds and the overall progress and the
+  // render loop passes the result to the renderer, both on the io_context.
+  //
+  // Note that the overall total only grows: it includes the totals of the
+  // completed entries that we have removed.
+  //
   class progress_manager
   {
   public:
@@ -90,15 +103,25 @@ namespace launcher
     void start ();
     asio::awaitable<void> stop ();
 
+    // Add an entry for a transfer, which the caller then updates through
+    // its metrics.
+    //
     std::shared_ptr<progress_entry>
     add_entry (std::string label);
 
+    // Remove the entry, counting it as completed if its state is completed.
+    //
     void
     remove_entry (std::shared_ptr<progress_entry> entry);
 
+    // Add a message to the log lines, which keeps the last
+    // progress_renderer::max_log_messages.
+    //
     void
     add_log (std::string message);
 
+    // Show the message in a box over the progress.
+    //
     void
     show_dialog (std::string title, std::string message);
 

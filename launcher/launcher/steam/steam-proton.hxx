@@ -1,3 +1,6 @@
+// Copyright (c) the IW4x authors (see the AUTHORS file).
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 #pragma once
 
 #include <launcher/steam/steam-types.hxx>
@@ -16,26 +19,32 @@ namespace launcher
   namespace fs = std::filesystem;
   namespace asio = boost::asio;
 
-  // Proton detection status.
+  // Outcome of looking for Proton.
+  //
+  // @@ Nothing uses this enumeration.
   //
   enum class proton_status
   {
-    not_found,       // Proton not installed
-    found,           // Proton found and ready
-    incompatible     // Proton found but incompatible
+    not_found,       // Not installed.
+    found,           // Installed and usable.
+    incompatible     // Installed but unusable.
   };
 
   std::string
   to_string (proton_status);
 
-  // Proton version information.
+  // Proton installation in steamapps/common/.
+  //
+  // The version is the one in the directory name (e.g., 9.0 for Proton
+  // 9.0), experimental for Proton - Experimental, and the name itself if
+  // we cannot parse it.
   //
   struct proton_version
   {
-    fs::path path;           // Full path to Proton installation
-    std::string name;        // Display name (e.g., "Proton 9.0")
-    std::string version;     // Version string (e.g., "9.0")
-    bool experimental;       // Is this an experimental version?
+    fs::path path;           // Installation directory.
+    std::string name;        // Directory name.
+    std::string version;
+    bool experimental;
 
     proton_version () = default;
 
@@ -44,45 +53,50 @@ namespace launcher
         experimental (false) {}
   };
 
-  // Proton environment configuration.
+  // Environment for running a program through Proton.
   //
   struct proton_environment
   {
-    fs::path steam_root;               // Steam installation root
-    fs::path compatdata_path;          // STEAM_COMPAT_DATA_PATH
-    fs::path client_install_path;      // STEAM_COMPAT_CLIENT_INSTALL_PATH
-    fs::path proton_bin;               // Path to proton executable
-    std::uint32_t appid;               // Steam App ID
-    bool enable_logging;               // Enable Proton logging
-    fs::path log_dir;                  // Log directory (if logging enabled)
+    fs::path steam_root;               // Steam installation directory.
+    fs::path compatdata_path;          // Wine prefix.
+    fs::path client_install_path;      // Steam client directory.
+    fs::path proton_bin;               // The proton script.
+    std::uint32_t appid;
+    bool enable_logging;
+    fs::path log_dir;                  // If logging is enabled.
 
     proton_environment ()
       : appid (0), enable_logging (false) {}
 
-    // Build environment variables map.
+    // Return the variables to add to the environment of a program run
+    // through Proton.
+    //
+    // @@ SteamAppId and SteamGameId are always 10190, whatever appid is.
     //
     std::map<std::string, std::string>
     build_env_map () const;
   };
 
-  // Proton ghost process result.
+  // Outcome of the Steam probe (see run_ghost_process()).
   //
   enum class ghost_result
   {
-    steam_running,      // Steam is running and initialized
-    steam_not_running,  // Steam is not running
-    error               // Error occurred during check
+    steam_running,      // Steam is running and its API initializes.
+    steam_not_running,
+    error               // We could not run the probe.
   };
 
   std::string
   to_string (ghost_result);
 
-  // Proton manager for detecting and managing Proton installations.
+  // Proton installations of a Steam library and the programs that we run
+  // through them.
   //
   class proton_manager
   {
   public:
-    // Constructor.
+    // If force_steam_runtime is true, then run programs in the Steam Linux
+    // Runtime container, which we otherwise only do on the Steam Deck.
     //
     explicit
     proton_manager (asio::io_context& ioc, bool force_steam_runtime = false);
@@ -90,26 +104,21 @@ namespace launcher
     proton_manager (const proton_manager&) = delete;
     proton_manager& operator= (const proton_manager&) = delete;
 
-    // Detect available Proton versions in Steam.
-    //
-    // Scans the Steam installation for all available Proton versions
-    // and returns them sorted by version (newest first).
+    // Return the Proton installations of the Steam installed in steam_path,
+    // best first (see version_compare()).
     //
     asio::awaitable<std::vector<proton_version>>
     detect_proton_versions (const fs::path& steam_path);
 
-    // Find the best Proton version.
-    //
-    // Returns the newest/best available Proton version, or nullopt if
-    // none found.
+    // Return the best Proton installation if there is any and nullopt
+    // otherwise.
     //
     asio::awaitable<std::optional<proton_version>>
     find_best_proton (const fs::path& steam_path);
 
-    // Build Proton environment for a specific app.
-    //
-    // Creates the environment configuration needed to run an application
-    // through Proton.
+    // Return the environment for running the app through proton. If
+    // enable_logging is true, then Proton logs into proton_logs/ in the
+    // current directory.
     //
     proton_environment
     build_environment (const fs::path& steam_path,
@@ -117,27 +126,27 @@ namespace launcher
                        std::uint32_t appid,
                        bool enable_logging = false);
 
-    // Create steam_appid.txt file.
-    //
-    // Creates the steam_appid.txt file needed by Steamworks SDK to
-    // identify the application.
+    // Write the app id into steam_appid.txt in directory. The Steam API
+    // reads it to find out which app it runs as. Throw std::runtime_error
+    // on failures.
     //
     asio::awaitable<void>
     create_steam_appid (const fs::path& directory, std::uint32_t appid);
 
-    // Run ghost process to check Steam status.
+    // Find out if Steam is running by having our Steam helper, run through
+    // Proton, initialize the Steam API.
     //
-    // Launches our steam.exe helper through Proton to check if Steam is
-    // running and the API can be initialized.
+    // On the Steam Deck we look for the steam process instead, starting
+    // Steam if there is none. Note that we exit if Steam doesn't start.
     //
     asio::awaitable<ghost_result>
     run_ghost_process (const proton_environment& env,
                        const fs::path& steam_helper_exe);
 
-    // Launch application through Proton.
-    //
-    // Launches the specified executable through Proton with the given
-    // environment and arguments.
+    // Start the executable through Proton, detached from us and in its
+    // directory, passing the arguments. On the Steam Deck, and if
+    // force_steam_runtime is true, run it in the Steam Linux Runtime
+    // container. Return false if we could not start it.
     //
     asio::awaitable<bool>
     launch_through_proton (const proton_environment& env,
@@ -145,21 +154,20 @@ namespace launcher
                            const std::vector<std::string>& args = {});
 
   private:
-    // Parse version from Proton directory name.
+    // Return the version in a Proton directory name, experimental for
+    // Proton - Experimental, and nullopt if there is none.
     //
     std::optional<std::string>
     parse_version (const std::string& name);
 
-    // Compare Proton versions for sorting.
+    // Return true if a is preferable to b.
     //
     static bool
     version_compare (const proton_version& a, const proton_version& b);
 
-    // Force Steam runtime container
-    //
     bool force_steam_runtime_;
 
-    // IO context reference.
+    // @@ Nothing uses the io_context.
     //
     asio::io_context& ioc_;
   };

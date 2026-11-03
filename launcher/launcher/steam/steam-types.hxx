@@ -1,3 +1,6 @@
+// Copyright (c) the IW4x authors (see the AUTHORS file).
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 #pragma once
 
 #include <string>
@@ -11,7 +14,9 @@ namespace launcher
 {
   namespace fs = std::filesystem;
 
-  // VDF value types.
+  // Kind of a value in Valve's text key-values format.
+  //
+  // @@ Nothing uses this enumeration.
   //
   enum class vdf_value_type
   {
@@ -19,15 +24,17 @@ namespace launcher
     object
   };
 
-  // Steam library folder information.
+  // Steam library folder, as recorded in libraryfolders.vdf.
+  //
+  // @@ Nothing uses this struct.
   //
   struct steam_library
   {
-    std::string label;                       // Library label/name
-    fs::path path;                           // Absolute path to library folder
-    std::uint64_t contentid;                 // Content ID
-    std::uint64_t totalsize;                 // Total size in bytes
-    std::map<std::string, std::string> apps; // App ID -> install path mappings
+    std::string label;                       // Name that the user gave it.
+    fs::path path;
+    std::uint64_t contentid;
+    std::uint64_t totalsize;                 // In bytes.
+    std::map<std::string, std::string> apps; // Installed apps by app id.
 
     steam_library () = default;
 
@@ -36,36 +43,40 @@ namespace launcher
           contentid (0), totalsize (0) {}
   };
 
-  // Steam app manifest information (appmanifest_*.acf).
+  // Steam app manifest (steamapps/appmanifest_<appid>.acf).
+  //
+  // @@ Nothing uses this struct.
   //
   struct steam_app_manifest
   {
-    std::uint32_t appid;                         // Application ID
-    std::string name;                            // Application name
-    std::string installdir;                      // Installation directory name
-    fs::path fullpath;                           // Full installation path
-    std::uint64_t size_on_disk;                  // Size on disk in bytes
-    std::uint32_t buildid;                       // Build ID
-    std::string last_updated;                    // Last update timestamp
-    std::map<std::string, std::string> metadata; // Additional metadata
+    std::uint32_t appid;
+    std::string name;
+    std::string installdir;                      // Under steamapps/common/.
+    fs::path fullpath;                           // Completed installdir.
+    std::uint64_t size_on_disk;                  // In bytes.
+    std::uint32_t buildid;
+    std::string last_updated;                    // Unix time, as recorded.
+    std::map<std::string, std::string> metadata; // Remaining fields.
 
     steam_app_manifest ()
         : appid (0), size_on_disk (0), buildid (0) {}
   };
 
-  // Steam configuration paths for different platforms.
+  // Locations of the Steam installation files.
+  //
+  // @@ Nothing uses this struct.
   //
   struct steam_config_paths
   {
-    fs::path steam_root;         // Main Steam installation directory
-    fs::path config_vdf;         // config.vdf location
-    fs::path libraryfolders_vdf; // libraryfolders.vdf location
-    fs::path steamapps;          // steamapps directory
+    fs::path steam_root;         // Steam installation directory.
+    fs::path config_vdf;
+    fs::path libraryfolders_vdf;
+    fs::path steamapps;
 
     steam_config_paths () = default;
   };
 
-  // Steam app IDs for MW2.
+  // Steam app ids of Modern Warfare 2.
   //
   namespace steam_appid
   {
@@ -73,7 +84,9 @@ namespace launcher
     constexpr std::uint32_t mw2_singleplayer = 10180;
   }
 
-  // Error codes for Steam operations.
+  // Steam operation errors.
+  //
+  // @@ Nothing uses this enumeration.
   //
   enum class steam_error
   {

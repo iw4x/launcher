@@ -1,3 +1,6 @@
+// Copyright (c) the IW4x authors (see the AUTHORS file).
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 #ifdef _WIN32
 #  include <winsock2.h>
 #  include <windows.h>
@@ -21,7 +24,7 @@
 #include <boost/asio.hpp>
 #include <boost/asio/experimental/awaitable_operators.hpp>
 
-#include <boost/process.hpp>
+#include <boost/process/v1.hpp>
 
 #include <launcher/arch/arch.hxx>
 
@@ -41,9 +44,11 @@
 #  include <launcher/launcher-steam-proton.hxx>
 #endif
 
+#include <launcher/utility.hxx>
+#include <launcher/installation.hxx>
 #include <launcher/version.hxx>
 
-namespace process = boost::process;
+namespace process = boost::process::v1;
 namespace asio = boost::asio;
 namespace views = std::views;
 namespace ranges = std::ranges;
@@ -108,52 +113,6 @@ namespace launcher
       log::warning (categories::launcher (),
                   std::forward<decltype (args)> (args)...);
     });
-
-    string
-    to_utf8 (const path& p)
-    {
-      auto s (p.u8string ());
-      return string (s.begin (), s.end ());
-    }
-
-    path
-    from_utf8 (string_view s)
-    {
-      return path (reinterpret_cast<const char8_t*> (s.data ()),
-                   reinterpret_cast<const char8_t*> (s.data () + s.size ()));
-    }
-
-    // On Windows, system error messages (error_code::message(),
-    // system_error::what()) are encoded in the ANSI codepage (e.g.
-    // CP1251 on Russian installs). Convert to UTF-8 so our log output
-    // isn't garbled. On other platforms this is a no-op pass-through.
-    //
-    string
-    to_utf8_system_message ([[maybe_unused]] const string& s)
-    {
-#ifdef _WIN32
-      int n (static_cast<int> (s.size ()));
-      int wn (MultiByteToWideChar (CP_ACP, 0, s.data (), n, nullptr, 0));
-
-      if (wn > 0)
-      {
-        wstring w (static_cast<size_t> (wn), L'\0');
-        MultiByteToWideChar (CP_ACP, 0, s.data (), n, w.data (), wn);
-
-        int un (WideCharToMultiByte (
-          CP_UTF8, 0, w.data (), wn, nullptr, 0, nullptr, nullptr));
-
-        if (un > 0)
-        {
-          string r (static_cast<size_t> (un), '\0');
-          WideCharToMultiByte (
-            CP_UTF8, 0, w.data (), wn, r.data (), un, nullptr, nullptr);
-          return r;
-        }
-      }
-#endif
-      return s;
-    }
 
     path
     self_path ()
@@ -272,160 +231,6 @@ namespace launcher
 
       return a;
     }
-
-    void
-    migrate_client_executable (const path& root,
-                               const char* legacy,
-                               architecture a)
-    {
-      path f (root / from_utf8 (legacy));
-      path t (root / from_utf8 (architecture_executable (a)));
-
-      error_code ec;
-
-      if (!exists (f, ec) || exists (t, ec))
-        return;
-
-      rename (f, t, ec);
-
-      if (ec)
-        warning ("failed to rename {} to {}: {}",
-                 to_utf8 (f),
-                 to_utf8 (t),
-                 to_utf8_system_message (ec.message ()));
-      else
-        info ("renamed {} to {}", to_utf8 (f), to_utf8 (t));
-    }
-
-    // Earlier launchers installed the clients as "iw4x (x86).exe" and
-    // "iw4x (x64).exe". Move them to their current names.
-    //
-    void
-    migrate_client_executables (const path& root)
-    {
-      migrate_client_executable (root, "iw4x (x86).exe", architecture::x86);
-      migrate_client_executable (root, "iw4x (x64).exe", architecture::x64);
-    }
-  }
-
-  string
-  path_digest (const path& p)
-  {
-    std::hash<string> h;
-    string r (std::to_string (h (to_utf8 (p))));
-
-    trace_l3 ("computed path digest for {}: {}", to_utf8 (p), r);
-    return r;
-  }
-
-  path
-  resolve_cache_root ()
-  {
-    path d (current_path () / "cache");
-
-    trace_l2 ("cache root: {}", to_utf8 (d));
-
-    error_code ec;
-
-    create_directories (d, ec);
-
-    if (ec)
-      throw system_error (ec,
-                          "failed to create cache directory: " + to_utf8 (d));
-
-    return d;
-  }
-
-  namespace
-  {
-    // Return the directory of the files that were moved out of the way
-    // because they could not be removed (see retire_file()).
-    //
-    path
-    retired_directory ()
-    {
-      return resolve_cache_root () / "retired";
-    }
-
-    // Move a file that cannot be removed or overwritten out of the way.
-    //
-    // On Windows a module that is loaded by some process cannot be removed
-    // or overwritten but it can be renamed. Normally such a module belongs
-    // to the game and the user can simply exit it. But companion64.dll is
-    // loaded by the game into the Steam client and stays there until Steam
-    // exits. So we rename such a file into the retired directory and remove
-    // it on a later run, once nothing has it loaded anymore (see
-    // remove_retired_files()).
-    //
-    // Note that the retired directory is in the cache which is in the
-    // installation root. So the rename is always within the same volume,
-    // which is what makes it work for a loaded module.
-    //
-    // Return true if the file was moved.
-    //
-    bool
-    retire_file (const path& f)
-    {
-      error_code ec;
-
-      path d (retired_directory ());
-      create_directories (d, ec);
-
-      if (ec)
-      {
-        warning ("failed to create retired directory {}: {}",
-                 to_utf8 (d),
-                 to_utf8_system_message (ec.message ()));
-        return false;
-      }
-
-      // An earlier copy of the same file may still be retired and in use,
-      // so make the name unique.
-      //
-      path t (d / (path_digest (f) + "_" +
-                   std::to_string (
-                     chrono::system_clock::now ().time_since_epoch ().count ()) +
-                   "_" + to_utf8 (f.filename ())));
-
-      rename (f, t, ec);
-
-      if (ec)
-      {
-        warning ("failed to retire {}: {}",
-                 to_utf8 (f),
-                 to_utf8_system_message (ec.message ()));
-        return false;
-      }
-
-      info ("retired {} which is in use by another process", to_utf8 (f));
-      return true;
-    }
-
-    // Remove the files retired by earlier runs. A file that is still in use
-    // stays for the next run.
-    //
-    void
-    remove_retired_files ()
-    {
-      path d (retired_directory ());
-      error_code ec;
-
-      if (!exists (d, ec))
-        return;
-
-      for (directory_iterator i (d, ec), e; !ec && i != e; i.increment (ec))
-      {
-        error_code rc;
-        remove (i->path (), rc);
-
-        if (rc)
-          trace_l2 ("retired file {} is still in use: {}",
-                    to_utf8 (i->path ()),
-                    to_utf8_system_message (rc.message ()));
-        else
-          trace_l2 ("removed retired file {}", to_utf8 (i->path ()));
-      }
-    }
   }
 
   // Return true if the new version was started and this process should
@@ -510,7 +315,9 @@ namespace launcher
     };
 
     error_code e;
-    path sd (weakly_canonical (resolve_cache_root () / "staging", e));
+    installation ins (ir);
+
+    path sd (weakly_canonical (ins.cache () / "staging", e));
 
     if (e)
       throw system_error (e,
@@ -757,7 +564,7 @@ namespace launcher
       // this both the rename and the copy below would fail.
       //
       if (exists (d.dst) && !remove (d.dst, e))
-        retire_file (d.dst);
+        ins.retire (d.dst);
 
       rename (d.tmp, d.dst, e);
 
@@ -1232,15 +1039,15 @@ namespace launcher
     if (exe.empty ())
       throw runtime_error ("game binary unspecified");
 
-    path bin (root / from_utf8 (exe));
+    path f (root / from_utf8 (exe));
     error_code ec;
 
-    bin = canonical (bin, ec);
+    path bin (canonical (f, ec));
 
     if (ec)
       throw system_error (ec,
                           "failed to canonicalize game binary path: " +
-                            to_utf8 (bin));
+                            to_utf8 (f));
 
     proton_coordinator proton (io, force_steam_runtime);
 
@@ -1265,12 +1072,14 @@ namespace launcher
       if (wine_exe.empty ())
         throw runtime_error ("wine is not installed or not in PATH");
 
-      wine_exe = canonical (wine_exe, ec);
+      path p (canonical (wine_exe, ec));
 
       if (ec)
         throw system_error (ec,
                             "failed to canonicalize wine executable path: " +
                               to_utf8 (wine_exe));
+
+      wine_exe = move (p);
 
       vector<string> wa;
       wa.push_back (to_utf8 (bin));
@@ -1300,15 +1109,15 @@ namespace launcher
     if (exe.empty ())
       throw runtime_error ("game binary unspecified");
 
-    path bin (root / from_utf8 (exe));
+    path f (root / from_utf8 (exe));
     error_code ec;
 
-    bin = canonical (bin, ec);
+    path bin (canonical (f, ec));
 
     if (ec)
       throw system_error (ec,
                           "failed to canonicalize game binary path: " +
-                            to_utf8 (bin));
+                            to_utf8 (f));
 
     info ("launching native game process: {}", to_utf8 (bin));
 
@@ -1342,13 +1151,31 @@ try
 {
   options opt (argc, argv);
 
+  // Handle --build2-metadata (see also buildfile).
+  //
+  if (opt.build2_metadata_specified ())
+  {
+    auto& o (cout);
+
+    // Note that the export.metadata variable should be the first non-
+    // blank/comment line.
+    //
+    o << "# build2 buildfile iw4x-launcher" << "\n"
+      << "export.metadata = 1 launcher" << "\n"
+      << "launcher.name = [string] iw4x-launcher" << "\n"
+      << "launcher.version = [string] '" << LAUNCHER_VERSION_FULL << "'\n"
+      << "launcher.checksum = [string] '" << LAUNCHER_VERSION_FULL << "'\n";
+
+    return 0;
+  }
+
   // Handle --version.
   //
   if (opt.version ())
   {
     auto& o (cout);
 
-    o << "Launcher " << HELLO_VERSION_ID << "\n";
+    o << "Launcher " << LAUNCHER_VERSION_ID << "\n";
 
     return 0;
   }
@@ -1359,7 +1186,7 @@ try
   {
     auto& o (cout);
 
-    o << "usage: launcher[options]" << "\n"
+    o << "usage: launcher [options]" << "\n"
       << "options:" << "\n";
 
     opt.print_usage (o);
@@ -1391,7 +1218,24 @@ try
 
   active_logger = new logger;
 
-  remove_retired_files ();
+  // The installation root is the current working directory (which
+  // reanchor_cwd() has already set to the launcher binary's directory).
+  //
+  path cwd (current_path ());
+
+  error_code root_ec;
+
+  path root (canonical (cwd, root_ec));
+
+  if (root_ec)
+    throw system_error (root_ec,
+                        "failed to canonicalize installation root: " +
+                          to_utf8 (cwd));
+
+  info ("installation root: {}", to_utf8 (root));
+
+  installation ins (root);
+  ins.remove_retired ();
 
   asio::io_context io;
 
@@ -1442,65 +1286,9 @@ try
       return 0;
   }
 
-  // The installation root is the current working directory (which
-  // reanchor_cwd() has already set to the launcher binary's directory).
+  // Start afresh if the cache belongs to another launcher version.
   //
-  path root (current_path ());
-
-  error_code root_ec;
-
-  root = canonical (root, root_ec);
-
-  if (root_ec)
-    throw system_error (root_ec,
-                        "failed to canonicalize installation root: " +
-                          to_utf8 (root));
-
-  info ("installation root: {}", to_utf8 (root));
-
-  // Check if launcher version changed, if so wipe local cache directory.
-  //
-  {
-    string current_ver (HELLO_VERSION_ID);
-    string scope_ver_key ("launcher_version");
-
-    string saved_ver;
-    {
-      cache_database db (root);
-      saved_ver = db.setting_value (scope_ver_key);
-    }
-
-    if (saved_ver != current_ver)
-    {
-      error_code ec;
-      path cache_dir (root / "cache");
-
-      if (exists (cache_dir, ec))
-      {
-        info (
-          "launcher version changed ({} -> {}), wiping local cache directory: "
-          "{}",
-          saved_ver.empty () ? "none" : saved_ver,
-          current_ver,
-          to_utf8 (cache_dir));
-
-        remove_all (cache_dir, ec);
-
-        if (ec)
-          warning ("failed to remove cache directory: {}",
-                   to_utf8_system_message (ec.message ()));
-
-        // Recreate it since the database was inside.
-        //
-        create_directories (cache_dir, ec);
-      }
-
-      // Re-open the database after potential wipe and save new version.
-      //
-      cache_database db (root);
-      db.setting (scope_ver_key, current_ver);
-    }
-  }
+  ins.reset_cache (LAUNCHER_VERSION_ID);
 
   if (!opt.no_shortcuts ())
   {
@@ -1508,7 +1296,7 @@ try
     sc.refresh ();
   }
 
-  migrate_client_executables (root);
+  ins.migrate_clients ();
 
   if (!opt.skip_remote ())
   {

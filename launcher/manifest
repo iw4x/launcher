@@ -2,30 +2,33 @@
 name: launcher
 version: 1.1.8-b.27.z
 language: c++
-summary: launcher C++ executable
+project: launcher
+summary: Launcher and updater for IW4x.
 license: GPL-3.0-or-later ; GNU General Public License v3.0 or later.
+topics: game, launcher, updater, Steam, Proton
 description-file: README.md
+changes-file: NEWS
 url: https://github.com/iw4x/launcher
+src-url: https://github.com/iw4x/launcher
 email: wroy@proton.me
-#build-error-email: wroy@proton.me
+build-error-email: wroy@proton.me
 depends: * build2 >= 0.18.0
 depends: * bpkg >= 0.18.0
 depends: * cli == 1.2.0 ? ($config.launcher.develop)
 depends: * odb == 2.6.0 ? ($config.launcher.develop)
 requires: xxd ? ($config.launcher.develop) ; Embeds the shortcut artwork.
-depends: * xxd ^8.2.3075 ; Embeds the manifest test archive.
-depends: { libboost-asio libboost-beast libboost-json libboost-filesystem libboost-process } == 1.87.0
-depends: { libssl libcrypto } == 3.3.1
+depends: libboost-asio == 1.91.0
+depends: libboost-beast == 1.91.0
+depends: libboost-json == 1.91.0
+depends: libboost-process == 1.91.0
+depends: libboost-system == 1.91.0
+depends: libssl == 3.3.1
+depends: libcrypto == 3.3.1
 depends: libftxui == 4.1.1
+depends: libblake3 == 1.8.7
 depends: libminiz == 3.0.2
 depends: libodb == 2.6.0
 depends: libodb-sqlite == 2.6.0
 depends: libquill == 10.1.0
-
-# CI configuration.
-#
-
-builds: default experimental ; Only modern compilers are supported.
-builds: -clang
-builds: -macos
-builds: -freebsd
+tests: launcher-tests == $
+builds: default : &( +linux +windows ) ; Only Linux and Windows are supported.

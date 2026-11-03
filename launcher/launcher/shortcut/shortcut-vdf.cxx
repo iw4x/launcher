@@ -1,3 +1,6 @@
+// Copyright (c) the IW4x authors (see the AUTHORS file).
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 #include <launcher/shortcut/shortcut-vdf.hxx>
 
 #include <algorithm>
@@ -11,7 +14,7 @@ namespace launcher
 {
   namespace
   {
-    constexpr char vdf_end (0x08);
+    constexpr char vdf_end (0x08); // Terminates an object.
 
     void
     put_text (vector<char>& d, const string& s)
@@ -33,6 +36,9 @@ namespace launcher
     }
   }
 
+  // Cursor into the document being parsed. Note that reading past the end
+  // throws.
+  //
   class vdf_object::reader
   {
   public:

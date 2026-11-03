@@ -1,3 +1,6 @@
+// Copyright (c) the IW4x authors (see the AUTHORS file).
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 #pragma once
 
 #include <string>
@@ -13,52 +16,45 @@ namespace launcher
 {
   namespace fs = std::filesystem;
 
-  // Download request represents a single download operation.
+  // Request to download a file.
   //
   struct download_request
   {
-    // Source URLs (fallback order).
+    // URLs to download from, tried in order until one succeeds.
     //
     std::vector<std::string> urls;
 
-    // Target file path.
-    //
     fs::path target;
 
-    // Optional size hint.
+    // Size of the file if known, which lets us report the progress of a
+    // resumed download before the server tells us the size.
     //
     std::optional<std::uint64_t> expected_size;
 
-    // Priority.
-    //
     download_priority priority {download_priority::normal};
 
-    // Resume support.
+    // Whether to resume from a partial target that already exists.
     //
     bool resume {true};
 
-    // Timeout settings.
-    //
     std::chrono::seconds connect_timeout {30};
     std::chrono::seconds transfer_timeout {300};
 
-    // Rate limiting (bytes per second, 0 = no limit).
+    // Rate limit in bytes per second, 0 for none.
     //
     std::uint64_t rate_limit_bytes_per_second {0};
 
-    // Request metadata.
+    // @@ Callers set the name but nothing reads it or the description.
     //
-    std::string name;        // Human-readable name
-    std::string description; // Optional description
+    std::string name;
+    std::string description;
 
-    // Constructors.
-    //
     download_request () = default;
 
     download_request (std::string url, fs::path tgt);
     download_request (std::vector<std::string> us, fs::path tgt);
 
-    // Validation.
+    // Return true if there is a URL to download from and a target.
     //
     bool
     valid () const;

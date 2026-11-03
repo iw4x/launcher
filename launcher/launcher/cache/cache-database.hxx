@@ -1,3 +1,6 @@
+// Copyright (c) the IW4x authors (see the AUTHORS file).
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 #pragma once
 
 #include <launcher/cache/cache-types.hxx>
@@ -20,39 +23,38 @@ namespace launcher
 {
   namespace fs = std::filesystem;
 
-  // Main database handle.
-  //
-  // Note that ODB handles connection pooling internally so we just hold the
-  // pointer.
+  // Launcher cache: the SQLite database with the records of the installed
+  // files, the installed component versions, and the settings.
   //
   class cache_database
   {
   public:
-    // Hide the database inside the cache directory so we don't clutter the
-    // user's game root.
+    // Database file name and the directory, relative to the installation
+    // root, that contains it.
     //
     static constexpr const char* db_name = "iw4x.db";
     static constexpr const char* dir_name = "cache";
 
-    // Start schema version at 1.
-    //
-    // If the cached_file object changes, we bump this. ODB can handle
-    // migration, but since this is just a cache, we might also consider a
-    // wipe-and-rebuild strategy on mismatch instead of complex migrations.
+    // Schema version. Note that we don't migrate the schema since the cache
+    // is wiped whenever the launcher version changes (see
+    // installation::reset_cache()).
     //
     static constexpr unsigned int schema_ver = 1;
 
-    // If the database file is missing, we want ODB to generate the schema for
-    // us immediately.
+    // Whether to create the schema of an existing database if its tables are
+    // missing. The schema of a new database is always created.
     //
     static constexpr bool auto_create = true;
 
-    // SQLite defaults to a rollback journal which blocks readers during
-    // writes. Since the game (reader) and launcher (writer) run concurrently,
-    // WAL is mandatory here.
+    // Whether to use the write-ahead log instead of the rollback journal.
     //
     static constexpr bool wal = true;
 
+    // Open the cache database of the installation root, creating the cache
+    // directory, the database, and its schema if they don't exist yet. Throw
+    // std::runtime_error if the cache directory cannot be created and
+    // odb::exception if the database cannot be opened.
+    //
     explicit
     cache_database (const fs::path& root);
 
@@ -61,18 +63,18 @@ namespace launcher
 
     ~cache_database ();
 
-    // Check if the unique_ptr is actually holding an active database.
+    // Return true if the database is open.
     //
     bool
     open () const noexcept;
 
+    // Return the path of the database file.
+    //
     const fs::path&
     path () const noexcept;
 
-    // Accessors for the raw ODB handle.
-    //
-    // These are useful if we need to run custom queries outside the helpers
-    // defined below.
+    // Return the underlying ODB database, for queries that the functions
+    // below don't cover.
     //
     odb::sqlite::database&
     db () noexcept;
@@ -80,12 +82,12 @@ namespace launcher
     const odb::sqlite::database&
     db () const noexcept;
 
-    //
-    // File queries.
+  public:
+    // File records. A file is identified by its normalized absolute path
+    // (see reconciler::key()).
     //
 
-    // Lookup by either the database string key or a filesystem path. The path
-    // version simply converts to a string before querying.
+    // Return the record of the file or nullopt if there is none.
     //
     std::optional<cached_file>
     find (const std::string& p) const;
@@ -93,35 +95,31 @@ namespace launcher
     std::optional<cached_file>
     find (const fs::path& p) const;
 
-    // Upsert the file. If it already exists in the database, ODB updates it.
-    // Otherwise, it inserts a new record.
+    // Store the record, replacing the existing record of the same file, if
+    // any. The second version stores all the records in a single
+    // transaction.
     //
     void
     store (const cached_file& f);
 
-    // Batch store optimization.
-    //
-    // We wrap this in a single transaction in the implementation to avoid the
-    // overhead of committing on a per-file basis.
-    //
     void
     store (const std::vector<cached_file>& fs);
 
+    // Erase the record of the file, the records of the files, or the records
+    // of all the files of the component, respectively.
+    //
     void
     erase (const std::string& p);
 
     void
     erase (const std::vector<std::string>& ps);
 
-    // Erase all files belonging to a specific component.
-    //
     void
     erase (component_type c);
 
+    // Return all the records, the records of the component, or the records
+    // of the version, respectively.
     //
-    // Bulk retrievals.
-    //
-
     std::vector<cached_file>
     files () const;
 
@@ -131,28 +129,28 @@ namespace launcher
     std::vector<cached_file>
     files (const std::string& v) const;
 
+    // Return the number of all the records or of the records of the
+    // component, respectively.
     //
-    // Stats.
-    //
-
     std::size_t
     count () const;
 
     std::size_t
     count (component_type c) const;
 
-    //
-    // Version tracking.
+  public:
+    // Component versions.
     //
 
-    // Track the installed version of each component separately.
-    //
-    // This allows us to know if an update is needed without the overhead of
-    // hashing every single file.
+    // Return the installed version of the component or nullopt if it is not
+    // installed.
     //
     std::optional<component_version>
     version (component_type c) const;
 
+    // Record the tag as the installed version of the component, installed
+    // now.
+    //
     void
     version (component_type c, const std::string& tag);
 
@@ -162,28 +160,35 @@ namespace launcher
     std::vector<component_version>
     versions () const;
 
-    // User settings.
+  public:
+    // Settings.
     //
 
+    // Return the setting or nullopt if it is not set.
+    //
     std::optional<user_setting>
     setting (const std::string& key) const;
 
+    // Return the value of the setting or the empty string if it is not set.
+    //
     std::string
     setting_value (const std::string& key) const;
 
+    // Set the value of the setting, adding the setting if necessary.
+    //
     void
     setting (const std::string& key, const std::string& value);
 
     void
     erase_setting (const std::string& key);
 
-    // Transaction wrappers.
+  public:
+    // Transactions.
     //
 
-    // Generic transaction wrapper.
-    //
-    // If the functor throws, we let the transaction destructor rollback. If
-    // it succeeds, we commit.
+    // Call the function in a transaction, committing the transaction if the
+    // function returns and rolling it back if it throws. The second version
+    // returns the result of the function.
     //
     template <typename F>
     void
@@ -206,27 +211,23 @@ namespace launcher
       return r;
     }
 
-    //
+  public:
     // Maintenance.
     //
 
-    // Reclaim filesystem space.
-    //
-    // Note that SQLite doesn't return filesystem space automatically on
-    // delete, so we have to explicitly ask for it via vacuum.
+    // Shrink the database file to its content. Note that SQLite doesn't
+    // release the space of erased records on its own.
     //
     void
     vacuum ();
 
-    // Run 'PRAGMA integrity_check'.
-    //
-    // This is a good idea to run on startup if we suspect a crash occurred
-    // previously.
+    // Return true if the SQLite integrity check passes.
     //
     bool
     check () const;
 
-    // Drop all tables and data.
+    // Erase all the file records and component versions. Note that the
+    // settings are kept.
     //
     void
     clear ();
@@ -235,15 +236,13 @@ namespace launcher
     void
     init (const fs::path& root);
 
-    // Check schema_catalog.
-    //
-    // If the table doesn't exist, we create it. If the version doesn't match,
-    // we migrate (or fail, depending on how we configure the migration).
+    // Create the schema unless its tables already exist.
     //
     void
     schema ();
 
-    // Setup database pragmas (WAL, synchronous modes, etc).
+    // Configure SQLite for our use of the database (see the implementation
+    // for details).
     //
     void
     pragmas ();

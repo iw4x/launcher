@@ -1,3 +1,6 @@
+// Copyright (c) the IW4x authors (see the AUTHORS file).
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 #include <launcher/github/github-endpoint.hxx>
 
 #include <sstream>
@@ -8,10 +11,7 @@ namespace launcher
 {
   namespace
   {
-    // Variadic helper to stitch together the API URL components. We use an
-    // ostringstream here since it handles type conversions, though we might
-    // want to keep an eye on allocation overhead if this gets hot in a tight
-    // loop.
+    // Return the API base URL followed by the arguments.
     //
     template <typename... A>
     string
@@ -23,12 +23,6 @@ namespace launcher
       return os.str ();
     }
   }
-
-  // Repository specific endpoints.
-  //
-  // We assume the owner and repo strings are already properly URL-encoded
-  // before they get here to avoid bad requests.
-  //
 
   string github_endpoint::
   repo (const string& o, const string& r)
@@ -45,9 +39,6 @@ namespace launcher
   string github_endpoint::
   repo_release_latest (const string& o, const string& r)
   {
-    // Grab the latest published release. Note that this skips pre-releases and
-    // drafts, which is usually exactly what we want for normal fetching.
-    //
     return build_endpoint ("/repos/", o, "/", r, "/releases/latest");
   }
 
@@ -62,9 +53,6 @@ namespace launcher
   {
     return build_endpoint ("/repos/", o, "/", r, "/releases/", to_string (i));
   }
-
-  // Commits, branches, and tags.
-  //
 
   string github_endpoint::
   repo_commits (const string& o, const string& r)
@@ -96,9 +84,6 @@ namespace launcher
     return build_endpoint ("/repos/", o, "/", r, "/tags");
   }
 
-  // Issues.
-  //
-
   string github_endpoint::
   repo_issues (const string& o, const string& r)
   {
@@ -110,9 +95,6 @@ namespace launcher
   {
     return build_endpoint ("/repos/", o, "/", r, "/issues/", to_string (n));
   }
-
-  // Users and organizations.
-  //
 
   string github_endpoint::
   user (const string& u)
@@ -138,23 +120,15 @@ namespace launcher
     return build_endpoint ("/orgs/", on, "/repos");
   }
 
-  // Global or authenticated-user specific endpoints.
-  //
-
   string github_endpoint::
   user_authenticated ()
   {
-    // Resolves based on the currently provided authentication token.
-    //
     return build_endpoint ("/user");
   }
 
   string github_endpoint::
   rate_limit ()
   {
-    // Useful to poll before we do a heavy batch of requests to make sure we
-    // don't get arbitrarily throttled by the GitHub API.
-    //
     return build_endpoint ("/rate_limit");
   }
 }

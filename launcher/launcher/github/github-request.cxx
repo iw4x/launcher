@@ -1,3 +1,6 @@
+// Copyright (c) the IW4x authors (see the AUTHORS file).
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 #include <launcher/github/github-request.hxx>
 
 #include <sstream>
@@ -21,8 +24,6 @@ namespace launcher
   github_request& github_request::
   with_token (string t)
   {
-    // Stash the token so we can inject it into the authorization header later.
-    //
     token = move (t);
     return *this;
   }
@@ -44,9 +45,6 @@ namespace launcher
   github_request& github_request::
   with_query (string k, string v)
   {
-    // Just keep it in the map for now. We will construct the actual query
-    // string later when url() is called.
-    //
     query_params[move (k)] = move (v);
     return *this;
   }
@@ -54,8 +52,6 @@ namespace launcher
   github_request& github_request::
   with_per_page (uint32_t n)
   {
-    // GitHub uses 'per_page' to dictate pagination limits.
-    //
     return with_query ("per_page", to_string (n));
   }
 
@@ -89,13 +85,9 @@ namespace launcher
     ostringstream os;
     os << endpoint;
 
-    // Only append the query string if we actually have parameters to send.
-    //
     if (!query_params.empty ())
     {
-      // keep track of the first parameter to handle the separator
-      //
-      bool f (true);
+      bool f (true); // First parameter.
 
       for (const auto& [k, v] : query_params)
       {
@@ -111,9 +103,6 @@ namespace launcher
   string github_request::
   method_string () const
   {
-    // Map our internal enum to the uppercase string representations that
-    // the underlying HTTP client expects.
-    //
     switch (method)
     {
       case method_type::get:     return "GET";
@@ -123,8 +112,6 @@ namespace launcher
       case method_type::delete_: return "DELETE";
     }
 
-    // Fall back to GET just in case we end up with something unexpected.
-    //
-    return "GET";
+    return "GET"; // Unreachable.
   }
 }

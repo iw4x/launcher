@@ -1,3 +1,6 @@
+// Copyright (c) the IW4x authors (see the AUTHORS file).
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 #pragma once
 
 // The numeric version format is AAAAABBBBBCCCCCDDDE where:
@@ -19,16 +22,16 @@
 // 3.0.0-b.2    0000299999999995020
 // 2.2.0-a.1.z  0000200001999990011
 //
-#define HELLO_VERSION       $launcher.version.project_number$ULL
-#define HELLO_VERSION_STR   "$launcher.version.project$"
-#define HELLO_VERSION_ID    "$launcher.version.project_id$"
-#define HELLO_VERSION_FULL  "$launcher.version$"
+#define LAUNCHER_VERSION       $launcher.version.project_number$ULL
+#define LAUNCHER_VERSION_STR   "$launcher.version.project$"
+#define LAUNCHER_VERSION_ID    "$launcher.version.project_id$"
+#define LAUNCHER_VERSION_FULL  "$launcher.version$"
 
-#define HELLO_VERSION_MAJOR $launcher.version.major$
-#define HELLO_VERSION_MINOR $launcher.version.minor$
-#define HELLO_VERSION_PATCH $launcher.version.patch$
+#define LAUNCHER_VERSION_MAJOR $launcher.version.major$
+#define LAUNCHER_VERSION_MINOR $launcher.version.minor$
+#define LAUNCHER_VERSION_PATCH $launcher.version.patch$
 
-#define HELLO_PRE_RELEASE   $launcher.version.pre_release$
+#define LAUNCHER_PRE_RELEASE   $launcher.version.pre_release$
 
-#define HELLO_SNAPSHOT_SN   $launcher.version.snapshot_sn$ULL
-#define HELLO_SNAPSHOT_ID   "$launcher.version.snapshot_id$"
+#define LAUNCHER_SNAPSHOT_SN   $launcher.version.snapshot_sn$ULL
+#define LAUNCHER_SNAPSHOT_ID   "$launcher.version.snapshot_id$"

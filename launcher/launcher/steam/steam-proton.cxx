@@ -1,6 +1,9 @@
+// Copyright (c) the IW4x authors (see the AUTHORS file).
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 #include <launcher/steam/steam-proton.hxx>
 
-#include <boost/process.hpp>
+#include <boost/process/v1.hpp>
 #include <boost/asio/use_awaitable.hpp>
 #include <boost/asio/steady_timer.hpp>
 
@@ -19,10 +22,7 @@ using namespace std::chrono_literals;
 
 namespace launcher
 {
-  namespace bp = boost::process;
-
-  // Helpers
-  //
+  namespace bp = boost::process::v1;
 
   string
   to_string (proton_status s)
@@ -50,6 +50,8 @@ namespace launcher
     return "unknown";
   }
 
+  // Return true if we run on SteamOS, that is, on the Steam Deck.
+  //
   bool
   is_steam_deck ()
   {
@@ -64,7 +66,7 @@ namespace launcher
 
     for (string l; getline (f, l); )
     {
-      // Look for OS ID. SteamOS identifies itself clearly here.
+      // SteamOS identifies itself in the ID field.
       //
       if (l.find ("ID=") == 0)
       {
@@ -82,6 +84,8 @@ namespace launcher
     return false;
   }
 
+  // Return true if there is a process named steam.
+  //
   static bool
   _pgrep_is_steam_running ()
   {
@@ -106,13 +110,13 @@ namespace launcher
     launcher::log::trace_l2 (categories::steam{}, "building proton environment map");
     map<string, string> env;
 
-    // Tell generated logs to use a predictable filename (steam-10190.log).
+    // Proton names its log after the game id (steam-10190.log).
     //
     env["SteamAppId"] = "10190";
     env["SteamGameId"] = "10190";
 
-    // These are the magic environment variables Proton needs to know where
-    // to put its fake Windows C: drive and where to look for Steam libraries.
+    // Proton creates the Wine prefix in STEAM_COMPAT_DATA_PATH and finds the
+    // Steam client through STEAM_COMPAT_CLIENT_INSTALL_PATH.
     //
     env["STEAM_COMPAT_DATA_PATH"] = compatdata_path.string ();
     env["STEAM_COMPAT_CLIENT_INSTALL_PATH"] = client_install_path.string ();
@@ -120,8 +124,8 @@ namespace launcher
     launcher::log::trace_l3 (categories::steam{}, "STEAM_COMPAT_DATA_PATH = {}", env["STEAM_COMPAT_DATA_PATH"]);
     launcher::log::trace_l3 (categories::steam{}, "STEAM_COMPAT_CLIENT_INSTALL_PATH = {}", env["STEAM_COMPAT_CLIENT_INSTALL_PATH"]);
 
-    // If we are on Deck, we need LAA or the 32-bit address space may gets
-    // exhausted.
+    // On the Steam Deck we make the game large address aware since it can
+    // otherwise run out of its 32-bit address space.
     //
     if (is_steam_deck ())
     {
@@ -253,9 +257,8 @@ namespace launcher
   asio::awaitable<vector<proton_version>> proton_manager::
   detect_proton_versions (const fs::path& steam_path)
   {
-    // We are going to scan the `steamapps/common` directory. It's a bit
-    // of a brute-force approach, but it's the most reliable way to find
-    // what's actually installed on disk.
+    // Scan steamapps/common/. It's a bit brute-force but it's the most
+    // reliable way to find out what's installed.
     //
     auto executor (co_await asio::this_coro::executor);
 
@@ -279,7 +282,7 @@ namespace launcher
 
         string name (entry.path ().filename ().string ());
 
-        // Filter for directories starting with "Proton".
+        // Only consider the Proton* directories.
         //
         if (name.find ("Proton") != 0)
           continue;
@@ -301,7 +304,7 @@ namespace launcher
         pv.experimental = (name.find ("Experimental") != string::npos);
 
         auto v (parse_version (name));
-        pv.version = v ? *v : name; // Fallback to full name if parsing fails.
+        pv.version = v ? *v : name; // Fall back to the name.
 
         launcher::log::debug (categories::steam{}, "found valid proton installation: {} (version: {})", pv.name, pv.version);
         r.push_back (move (pv));
@@ -309,13 +312,13 @@ namespace launcher
     }
     catch (const fs::filesystem_error& e)
     {
-      // If we can't read the directory (permissions?), just warn and return
-      // whatever we found so far.
+      // If we can't read the directory (permissions?), log and return what
+      // we have found so far.
       //
       launcher::log::error (categories::steam{}, "failed to scan for Proton: {}", e.what ());
     }
 
-    // Sort newest/best first.
+    // Sort best first.
     //
     sort (r.begin (), r.end (), version_compare);
 
@@ -352,8 +355,8 @@ namespace launcher
 
     env.steam_root = steam_path;
 
-    // The compatdata directory is where the Wine prefix lives. We map it
-    // by AppID so it doesn't conflict with other games.
+    // The Wine prefix lives in compatdata/<appid>/, which keeps it separate
+    // from the prefixes of other games.
     //
     env.compatdata_path = steam_path / "steamapps" / "compatdata" /
                           std::to_string (appid);
@@ -372,9 +375,6 @@ namespace launcher
   asio::awaitable<void> proton_manager::
   create_steam_appid (const fs::path& dir, uint32_t appid)
   {
-    // Proton/Steam API needs to see steam_appid.txt next to the executable
-    // to know what game context to initialize.
-    //
     auto executor (co_await asio::this_coro::executor);
 
     fs::path f (dir / "steam_appid.txt");
@@ -433,7 +433,8 @@ namespace launcher
     // For now we just grep for the process. It's brittle and we lose the
     // handshake, but it's what works.
     //
-    // @@ TODO: This really belongs in setup_for_launch() in steam-proton.cxx.
+    // @@ This really belongs in setup_for_launch() in
+    //    launcher-steam-proton.cxx.
     //
     if (is_steam_deck ())
     {
@@ -477,8 +478,8 @@ namespace launcher
       launcher::log::error (categories::steam{}, "failed to start steam within the timeout period");
       launcher::log::error (categories::steam{}, "falling back to wine is not supported on steamdeck");
 
-      // @@ TODO: We should probably propagate this properly instead of
-      // just nuking the process.
+      // @@ We should probably return ghost_result::error and let the caller
+      //    decide.
       //
       exit (1);
     }
@@ -516,8 +517,8 @@ namespace launcher
 
       launcher::log::trace_l3 (categories::steam{}, "ghost process stdout: {}", r);
 
-      // Keep the error output around in the logs so we can actually
-      // debug it when the probe fails.
+      // Log the error output, which is what we need to debug a failed
+      // probe.
       //
       string l;
       while (getline (er, l))

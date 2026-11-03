@@ -1,0 +1,140 @@
+# Copyright (c) the IW4x authors (see the AUTHORS file).
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+# See the driver for the bytes and tree notations.
+
+: parse
+:
+{{
+  : empty
+  :
+  $* parse <'08'
+
+  : shortcuts
+  : Test a document in the form Steam writes shortcuts.vdf
+  :
+  $* parse <<EOI >>EOO
+    00 'shortcuts' 00
+      00 '0' 00
+        02 'appid' 00 11 22 33 84
+        01 'AppName' 00 'Some Game 0' 00
+        01 'Exe' 00 '"/opt/game/run"' 00
+        01 'LaunchOptions' 00 00
+        00 'tags' 00 08
+      08
+      00 '1' 00
+        02 'appid' 00 01 00 00 00
+        01 'AppName' 00 'Some Game 1' 00
+      08
+    08
+    08
+    EOI
+    shortcuts {
+      0 {
+        appid : -2077023727
+        AppName = 'Some Game 0'
+        Exe = '"/opt/game/run"'
+        LaunchOptions = ''
+        tags {}
+      }
+      1 {
+        appid : 1
+        AppName = 'Some Game 1'
+      }
+    }
+    EOO
+
+  : invalid
+  :
+  {{
+    : empty
+    :
+    $* parse <'' 2>>EOE != 0
+      error: truncated key-values document
+      EOE
+
+    : object
+    :
+    $* parse <"00 'a' 00" 2>>EOE != 0
+      error: truncated key-values document
+      EOE
+
+    : key
+    :
+    $* parse <'01' 2>>EOE != 0
+      error: unterminated string in key-values document
+      EOE
+
+    : string
+    :
+    $* parse <"01 'a' 00 'b'" 2>>EOE != 0
+      error: unterminated string in key-values document
+      EOE
+
+    : number
+    :
+    $* parse <"02 'a' 00 01 02" 2>>EOE != 0
+      error: truncated number in key-values document
+      EOE
+
+    : type
+    :
+    $* parse <"07 'a' 00 08" 2>>EOE != 0
+      error: unsupported key-values entry type 7
+      EOE
+
+    : trailing
+    :
+    $* parse <'08 08' 2>>EOE != 0
+      error: trailing data after key-values document
+      EOE
+  }}
+}}
+
+: serialize
+:
+{{
+  : bytes
+  :
+  $* serialize <<EOI >"00 'k' 00 02 'n' 00 fe ff ff ff 01 's' 00 'v' 00 08 08"
+    k {
+      n : -2
+      s = 'v'
+    }
+    EOI
+
+  : replace
+  : Test replacing entries in place, including with another kind
+  :
+  $* serialize <<EOI | $* parse >>EOO
+    appid : 1
+    AppName = 'Some Game'
+    tags {}
+    AppName = 'Renamed'
+    appid : -2
+    tags = 'gone'
+    FlatpakAppID = ''
+    EOI
+    appid : -2
+    AppName = 'Renamed'
+    tags = 'gone'
+    FlatpakAppID = ''
+    EOO
+
+  : erase
+  : Test erasing an existing and a missing entry
+  :
+  $* serialize <<EOI | $* parse >'b : 1'
+    a = 'x'
+    b : 1
+    - a
+    - c
+    EOI
+
+  : nul
+  : Test rejecting a string with an embedded NUL
+  :
+  $* serialize <<'EOI' 2>'error: embedded NUL in key-values string' != 0
+    k = 'has\0nul'
+    EOI
+}}

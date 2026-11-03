@@ -1,3 +1,6 @@
+// Copyright (c) the IW4x authors (see the AUTHORS file).
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 #include <launcher/manifest/manifest-parser.hxx>
 #include <boost/asio/experimental/awaitable_operators.hpp>
 
@@ -48,8 +51,6 @@ namespace launcher
     co_return r;
   }
 
-  // Standalone functions.
-  //
   asio::awaitable<manifest>
   parse_update_manifest (const std::string& json_str)
   {

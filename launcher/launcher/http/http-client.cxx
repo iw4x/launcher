@@ -1,3 +1,6 @@
+// Copyright (c) the IW4x authors (see the AUTHORS file).
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 #include <launcher/http/http-client.hxx>
 
 #include <filesystem>
@@ -38,13 +41,13 @@ namespace launcher
   constexpr uint8_t socks5_userpass_ver  = 0x01;
   constexpr uint8_t socks5_reply_ok      = 0x00;
 
-  // Size of the buffer used when streaming download bodies.
+  // Size of the buffer that we read the download body into.
   //
   constexpr size_t download_buffer_size  = 8192;
 
-  // Limit on the size of response headers. Beast defaults to 8KB which some
-  // servers exceed (GitHub release redirects, for example, carry a large
-  // Content-Security-Policy).
+  // Limit on the size of the response header. Beast's default of 8KB is
+  // too small for some servers (GitHub release redirects, for example, come
+  // with a large Content-Security-Policy).
   //
   constexpr uint32_t response_header_limit = 64 * 1024;
 
@@ -58,7 +61,11 @@ namespace launcher
       string target;
     };
 
-    // Parse the target URL into discrete components.
+    // Split the URL into its parts. The scheme defaults to http, the port
+    // to the scheme's default, and the target to /.
+    //
+    // Note that we don't handle the user information or IPv6 addresses
+    // (see parse_proxy_url() for the former).
     //
     url_parts
     parse_url (const string& u)
@@ -67,8 +74,6 @@ namespace launcher
       size_t p (0);
       size_t i (u.find ("://", p));
 
-      // Figure out the scheme.
-      //
       if (i != string::npos)
       {
         r.scheme = u.substr (0, i);
@@ -85,8 +90,6 @@ namespace launcher
       string a (u.substr (p, e - p));
       size_t c (a.find (':'));
 
-      // Extract the host and port.
-      //
       if (c != string::npos)
       {
         r.host = a.substr (0, c);
@@ -98,8 +101,6 @@ namespace launcher
         r.port = (r.scheme == "https") ? "443" : "80";
       }
 
-      // Keep the target path intact.
-      //
       if (e < u.size ())
         r.target = u.substr (e);
       else
@@ -108,8 +109,6 @@ namespace launcher
       return r;
     }
 
-    // Map our method to the Beast verb.
-    //
     http_beast::verb
     to_beast_verb (http_method m)
     {
@@ -134,8 +133,10 @@ namespace launcher
       return static_cast<http_status> (static_cast<uint16_t> (s));
     }
 
-    // Return true if the proxy URL uses a SOCKS scheme (socks5, socks5h,
-    // socks4, socks4a).
+    // Return true if the proxy uses one of the socks schemes.
+    //
+    // @@ We speak SOCKS5 to the socks4 and socks4a proxies as well. We also
+    //    always send the host name, as socks5h implies.
     //
     bool
     is_socks_proxy (const url_parts& p)
@@ -144,8 +145,7 @@ namespace launcher
              p.scheme == "socks4a" || p.scheme == "socks4";
     }
 
-    // Return true if the proxy scheme is one we can handle (plain HTTP
-    // or one of the SOCKS variants).
+    // Return true if the proxy scheme is http or one of the socks schemes.
     //
     bool
     is_supported_proxy_scheme (const string& s)
@@ -155,10 +155,9 @@ namespace launcher
              s == "socks4a" || s == "socks4";
     }
 
-    // Validate a proxy URL and throw a descriptive error when the scheme
-    // is unsupported or misspelled. Called early, before any connection
-    // attempt, so the user sees a clear message instead of a cryptic
-    // 10053/connection-aborted at the protocol level.
+    // Throw std::runtime_error if the proxy scheme is not supported. We check
+    // this before connecting since otherwise a mistyped scheme only shows up
+    // as an aborted connection.
     //
     void
     validate_proxy_url (const string& proxy_url)
@@ -180,9 +179,7 @@ namespace launcher
           "socks4://, socks4a://");
     }
 
-    // Parse optional userinfo (user:pass) from the proxy URL.
-    //
-    // The standard form is socks5://user:pass@host:port.
+    // User information of the proxy URL, empty if there is none.
     //
     struct proxy_userinfo
     {
@@ -202,7 +199,7 @@ namespace launcher
       size_t at (proxy_url.find ('@', p));
       if (at == string::npos) return r;
 
-      // Make sure the '@' comes before the host portion (before any /).
+      // An @ after the first / is part of the target.
       //
       size_t sl (proxy_url.find ('/', p));
       if (sl != string::npos && at > sl) return r;
@@ -221,16 +218,11 @@ namespace launcher
       return r;
     }
 
-    // Parse a proxy URL into url_parts, stripping any userinfo component
-    // so that host/port are extracted correctly.
+    // Split the proxy URL into its parts, ignoring the user information.
     //
     url_parts
     parse_proxy_url (const string& proxy_url)
     {
-      // Remove userinfo if present
-      //
-      // scheme://user:pass@host:port -> scheme://host:port
-      //
       string u (proxy_url);
 
       size_t p (0);
@@ -248,9 +240,11 @@ namespace launcher
       return parse_url (u);
     }
 
-    // TCP connection through an HTTP proxy using the CONNECT method. On success
-    // the returned tcp_stream is connected to the proxy and ready for
-    // tunnelling (e.g. TLS handshake to the origin).
+    // Connect the stream to the HTTP proxy and ask it to open a tunnel to
+    // the destination with CONNECT. On return the stream behaves as if
+    // connected to the destination.
+    //
+    // Throw std::runtime_error if the proxy refuses.
     //
     asio::awaitable<void>
     proxy_connect (beast::tcp_stream& stream,
@@ -268,8 +262,6 @@ namespace launcher
       stream.expires_after (connect_timeout);
       co_await stream.async_connect (eps, asio::use_awaitable);
 
-      // Ask the proxy to open a tunnel to the destination.
-      //
       string authority (dest_host + ":" + dest_port);
 
       http_beast::request<http_beast::empty_body> creq (
@@ -291,11 +283,12 @@ namespace launcher
           "proxy CONNECT failed: " + std::to_string (cres.result_int ()));
     }
 
-    // TCP connection through a SOCKS5 proxy (RFC 1928).
+    // Connect the stream to the SOCKS5 proxy (RFC 1928) and ask it to
+    // connect to the destination, authenticating with the user information
+    // of the proxy URL, if any (RFC 1929). On return the stream behaves as
+    // if connected to the destination.
     //
-    // Supports both no-authentication and username/password authentication (RFC
-    // 1929). On success the tcp_stream is connected through the proxy to
-    // dest_host:dest_port and ready for use (e.g. TLS handshake).
+    // Throw std::runtime_error if the proxy refuses.
     //
     asio::awaitable<void>
     socks5_connect (beast::tcp_stream& stream,
@@ -307,8 +300,6 @@ namespace launcher
                     chrono::milliseconds connect_timeout,
                     chrono::milliseconds request_timeout)
     {
-      // Connect to the SOCKS5 proxy server.
-      //
       tcp::resolver rv (ioc);
       auto eps (co_await rv.async_resolve (
         proxy.host, proxy.port, asio::use_awaitable));
@@ -321,7 +312,7 @@ namespace launcher
       proxy_userinfo ui (parse_proxy_userinfo (proxy_url));
       bool has_auth (!ui.user.empty ());
 
-      // Client greeting (RFC 1928 §4)
+      // Offer the authentication methods.
       //
       // | VER | NMETHODS | METHODS  |
       // | 1   | 1        | 1 to 255 |
@@ -331,13 +322,13 @@ namespace launcher
 
       if (has_auth)
       {
-        greeting[1] = 0x02;                        // 2 methods
+        greeting[1] = 0x02;                        // Number of methods.
         greeting[2] = socks5_auth_none;
         greeting[3] = socks5_auth_userpass;
       }
       else
       {
-        greeting[1] = 0x01;                        // 1 method
+        greeting[1] = 0x01;                        // Number of methods.
         greeting[2] = socks5_auth_none;
       }
 
@@ -345,7 +336,7 @@ namespace launcher
       co_await asio::async_write (
         stream, asio::buffer (greeting, glen), asio::use_awaitable);
 
-      // Server method selection
+      // Read the method that the proxy selected.
       //
       // | VER | METHOD |
       // | 1   | 1      |
@@ -361,7 +352,7 @@ namespace launcher
         throw runtime_error (
           "SOCKS5 proxy: no acceptable authentication method");
 
-      // Username/password sub-negotiation (RFC 1929)
+      // Authenticate with the user name and password.
       //
       if (choice[1] == socks5_auth_userpass)
       {
@@ -404,7 +395,7 @@ namespace launcher
           std::to_string (static_cast<int> (choice[1])));
       }
 
-      // CONNECT request (RFC 1928 §4)
+      // Ask the proxy to connect to the destination by name.
       //
       // | VER | CMD | RSV   | ATYP | DST.ADDR | DST.PORT |
       // | 1   | 1   | X'00' | 1    | Variable | 2        |
@@ -420,7 +411,7 @@ namespace launcher
       creq.reserve (7 + dest_host.size ());
       creq.push_back (socks5_version);
       creq.push_back (socks5_cmd_connect);
-      creq.push_back (0x00);                                   // RSV
+      creq.push_back (0x00);                                   // Reserved.
       creq.push_back (socks5_atyp_domain);
       creq.push_back (static_cast<uint8_t> (dest_host.size ()));
       creq.insert (creq.end (), dest_host.begin (), dest_host.end ());
@@ -430,13 +421,11 @@ namespace launcher
       co_await asio::async_write (
         stream, asio::buffer (creq), asio::use_awaitable);
 
-      // CONNECT reply
+      // Read the reply. Its size depends on the type of the bound address,
+      // so read the fixed part first.
       //
       // | VER | REP | RSV   | ATYP | BND.ADDR | BND.PORT |
       // | 1   | 1   | X'00' | 1    | Variable | 2        |
-      //
-      // Read the fixed 4-byte header first, then consume the variable-length
-      // bound address + 2-byte port.
       //
       uint8_t hdr[4];
       co_await asio::async_read (
@@ -464,14 +453,14 @@ namespace launcher
           string ("SOCKS5 proxy connect failed: ") + msg);
       }
 
-      // Drain the bound address so the stream is clean for the caller.
+      // Skip the bound address and port, which we don't need.
       //
       size_t drain (0);
       switch (hdr[3])
       {
-        case 0x01: drain = 4 + 2; break;   // IPv4 + port
-        case 0x04: drain = 16 + 2; break;  // IPv6 + port
-        case 0x03: // Domain: 1-byte length + name + port
+        case 0x01: drain = 4 + 2; break;   // IPv4 address.
+        case 0x04: drain = 16 + 2; break;  // IPv6 address.
+        case 0x03: // Name, preceded by its length.
         {
           uint8_t len;
           co_await asio::async_read (
@@ -501,20 +490,14 @@ namespace launcher
   void http_session::
   configure_ssl ()
   {
-    // Load certificates if provided, otherwise fallback to defaults.
-    //
     if (!traits_.ssl_cert_file.empty ())
       ssl_ctx_.load_verify_file (traits_.ssl_cert_file);
     else
       ssl_ctx_.set_default_verify_paths ();
 
-    // Toggle peer verification based on traits.
-    //
     ssl_ctx_.set_verify_mode (
       traits_.verify_ssl ? ssl::verify_peer : ssl::verify_none);
 
-    // Apply standard security workarounds and disable old protocols.
-    //
     ssl_ctx_.set_options (ssl::context::default_workarounds |
                           ssl::context::no_sslv2 |
                           ssl::context::no_sslv3 |
@@ -592,7 +575,7 @@ namespace launcher
   {
     const auto& t (session_.traits ());
 
-    // Bail out if we're caught in a redirect loop.
+    // @@ This follows one redirect less than max_redirects.
     //
     if (rc >= t.max_redirects)
       throw runtime_error ("maximum redirects exceeded");
@@ -614,7 +597,7 @@ namespace launcher
         url_parts np (parse_url (*l));
         n.set_header ("Host", np.host);
 
-        // Downgrade POST/PUT to GET on 303 See Other.
+        // A 303 means that the result is to be retrieved with GET.
         //
         if (rs.status == http_status::see_other)
         {
@@ -622,6 +605,13 @@ namespace launcher
           {
             n.method = http_method::get;
             n.body = nullopt;
+
+            // The headers describing the body must go with it. Otherwise
+            // the server waits for a body that never comes.
+            //
+            n.headers.remove ("Content-Length");
+            n.headers.remove ("Content-Type");
+            n.headers.remove ("Transfer-Encoding");
           }
         }
 
@@ -648,7 +638,8 @@ namespace launcher
 
     stream s (c, x);
 
-    // Configure SNI for TLS.
+    // Send the host name in the TLS handshake (SNI), which servers that
+    // host several names need to pick the certificate.
     //
     if (!SSL_set_tlsext_host_name (s.native_handle (), p.host.c_str ()))
     {
@@ -661,8 +652,6 @@ namespace launcher
 
     if (!t.proxy_url.empty ())
     {
-      // Tunnel through the proxy, then TLS-handshake.
-      //
       url_parts pp (parse_proxy_url (t.proxy_url));
 
       if (is_socks_proxy (pp))
@@ -683,8 +672,6 @@ namespace launcher
       co_await l.async_connect (as, asio::use_awaitable);
     }
 
-    // Establish the connection and perform the handshake.
-    //
     co_await s.async_handshake (ssl::stream_base::client, asio::use_awaitable);
 
     beast_req br;
@@ -695,8 +682,6 @@ namespace launcher
     for (const auto& h : rq.headers)
       br.set (h.name, h.value);
 
-    // Assign body if it exists.
-    //
     if (rq.body)
     {
       br.body () = *rq.body;
@@ -705,16 +690,12 @@ namespace launcher
 
     l.expires_after (t.request_timeout);
 
-    // Dispatch the request.
-    //
     co_await http_beast::async_write (s, br, asio::use_awaitable);
 
     beast::flat_buffer b;
     http_beast::response_parser<beast_res::body_type> ps;
     ps.header_limit (response_header_limit);
 
-    // Read the response back.
-    //
     co_await http_beast::async_read (s, b, ps, asio::use_awaitable);
 
     beast_res bres (ps.release ());
@@ -730,9 +711,10 @@ namespace launcher
     if (!bres.body ().empty ())
       rs.body = bres.body ();
 
-    // Gracefully shut down the TCP connection so the peer sees a clean
-    // close rather than a RST (which triggers WSAECONNABORTED / 10053
-    // on Windows).
+    // Shut down the connection before closing it. Otherwise, the peer gets
+    // a reset, which Windows reports as an aborted connection (10053).
+    //
+    // Note that we skip the TLS shutdown.
     //
     beast::error_code ec;
     beast::get_lowest_layer (s).socket ().shutdown (
@@ -754,8 +736,8 @@ namespace launcher
 
     beast::tcp_stream s (c);
 
-    // SOCKS proxies are transparent tunnels, so the request target is
-    // always the path.  HTTP proxies require an absolute URI.
+    // Through an HTTP proxy the request target is the absolute URL.
+    // Through a SOCKS proxy, as directly, it is the path.
     //
     bool use_absolute_target (false);
 
@@ -765,18 +747,12 @@ namespace launcher
 
       if (is_socks_proxy (pp))
       {
-        // SOCKS tunnel: after handshake the stream looks like a direct
-        // connection to the origin.
-        //
         co_await socks5_connect (s, c, pp, t.proxy_url,
                                  p.host, p.port,
                                  t.connect_timeout, t.request_timeout);
       }
       else
       {
-        // HTTP proxy: connect to the proxy and use an absolute URI as
-        // the request target.
-        //
         tcp::resolver rv (c);
         auto as (co_await rv.async_resolve (
           pp.host, pp.port, asio::use_awaitable));
@@ -813,16 +789,12 @@ namespace launcher
 
     s.expires_after (t.request_timeout);
 
-    // Send over the wire.
-    //
     co_await http_beast::async_write (s, br, asio::use_awaitable);
 
     beast::flat_buffer b;
     http_beast::response_parser<beast_res::body_type> ps;
     ps.header_limit (response_header_limit);
 
-    // Collect the response.
-    //
     co_await http_beast::async_read (s, b, ps, asio::use_awaitable);
 
     beast_res bres (ps.release ());
@@ -868,15 +840,13 @@ namespace launcher
 
     const auto& t (session_.traits ());
 
-    // Prevent redirect loops.
+    // As above.
     //
     if (rc >= t.max_redirects)
       throw runtime_error ("maximum redirects exceeded");
 
     http_request rq (http_method::get, u);
 
-    // Setup the byte range if we are resuming.
-    //
     if (rs)
       rq.set_header ("Range", "bytes=" + std::to_string (*rs) + "-");
 
@@ -898,10 +868,9 @@ namespace launcher
     uint64_t off (rs ? *rs : 0);
     uint64_t tot (0);
 
-    // Generic transfer lambda to handle both plaintext and TLS streams uniformly.
-    //
-    // For plaintext HTTP via a proxy the request target must be an absolute
-    // URI; for everything else (direct or tunnelled) we use the path.
+    // Send the request over the connected stream, plain or TLS, and write
+    // the body into the file. The target is absolute for a plain request
+    // through an HTTP proxy (see request_tcp() for details).
     //
     auto transfer = [&] (auto& s, bool absolute_target = false) -> asio::awaitable<uint64_t>
     {
@@ -924,8 +893,7 @@ namespace launcher
       ps.header_limit (response_header_limit);
       ps.body_limit (numeric_limits<uint64_t>::max ());
 
-      // Only read the header initially so we can check for redirects
-      // and setup our buffer before pulling the body.
+      // Read the header first to see if it is a redirect.
       //
       co_await http_beast::async_read_header (s, b, ps, asio::use_awaitable);
 
@@ -957,18 +925,15 @@ namespace launcher
       auto start (steady_clock::now ());
       uint64_t tr (0);
 
-      // Stream the body chunks into the file.
-      //
       while (!ps.is_done ())
       {
         l.expires_after (t.request_timeout);
 
         co_await http_beast::async_read_some (s, b, ps, asio::use_awaitable);
 
-        // The actual body bytes written into db is the buffer space
-        // consumed by the parser, not the stream-level byte count
-        // returned by async_read_some (which includes HTTP framing
-        // overhead such as chunk headers for chunked responses).
+        // Note that the body size is what the parser consumed of the
+        // buffer. The size that async_read_some() returns includes the
+        // framing, such as the chunk headers.
         //
         size_t n (download_buffer_size - ps.get ().body ().size);
 
@@ -981,7 +946,8 @@ namespace launcher
           if (cb)
             cb (off, tot);
 
-          // Apply rate limiting if requested.
+          // Sleep until we are back under the rate limit, measured over
+          // windows of about a second.
           //
           if (rl > 0)
           {

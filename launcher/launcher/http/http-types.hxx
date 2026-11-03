@@ -1,3 +1,6 @@
+// Copyright (c) the IW4x authors (see the AUTHORS file).
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 #pragma once
 
 #include <cassert>
@@ -13,7 +16,7 @@
 
 namespace launcher
 {
-  // HTTP method (verb).
+  // HTTP method.
   //
   enum class http_method
   {
@@ -41,13 +44,13 @@ namespace launcher
   //
   enum class http_status : std::uint16_t
   {
-    // Informational (1xx)
+    // Informational (1xx).
     continue_                       = 100,
     switching_protocols             = 101,
     processing                      = 102,
     early_hints                     = 103,
 
-    // Success (2xx)
+    // Success (2xx).
     ok                              = 200,
     created                         = 201,
     accepted                        = 202,
@@ -59,7 +62,7 @@ namespace launcher
     already_reported                = 208,
     im_used                         = 226,
 
-    // Redirection (3xx)
+    // Redirection (3xx).
     multiple_choices                = 300,
     moved_permanently               = 301,
     found                           = 302,
@@ -69,7 +72,7 @@ namespace launcher
     temporary_redirect              = 307,
     permanent_redirect              = 308,
 
-    // Client error (4xx)
+    // Client error (4xx).
     bad_request                     = 400,
     unauthorized                    = 401,
     payment_required                = 402,
@@ -100,7 +103,7 @@ namespace launcher
     request_header_fields_too_large = 431,
     unavailable_for_legal_reasons   = 451,
 
-    // Server error (5xx)
+    // Server error (5xx).
     internal_server_error           = 500,
     not_implemented                 = 501,
     bad_gateway                     = 502,
@@ -140,7 +143,9 @@ namespace launcher
     operator== (const http_field&) const = default;
   };
 
-  // HTTP headers collection.
+  // HTTP header fields in the order that they were added.
+  //
+  // Note that the functions that look up a field by name ignore the case.
   //
   struct http_headers
   {
@@ -152,18 +157,26 @@ namespace launcher
     http_headers (fields_type f)
       : fields (std::move (f)) {}
 
+    // Replace every field with this name with a single one.
+    //
     void
     set (std::string name, std::string value);
 
+    // Add a field even if one with this name is already present.
+    //
     void
     add (std::string name, std::string value);
 
+    // Return the value of the first field with this name, if any.
+    //
     std::optional<std::string>
     get (const std::string& name) const;
 
     bool
     contains (const std::string& name) const;
 
+    // Remove every field with this name.
+    //
     void
     remove (const std::string& name);
 
@@ -213,6 +226,8 @@ namespace launcher
     }
   };
 
+  // Note that the comparison is exact, including the order and the case.
+  //
   bool
   operator== (const http_headers& x, const http_headers& y) noexcept;
 
@@ -238,11 +253,9 @@ namespace launcher
   std::ostream&
   operator << (std::ostream& o, const http_version& v);
 
-  // HTTP error with a machine-readable status code.
-  //
-  // Thrown when a request completes but the server returns an unacceptable
-  // status (e.g. 416 Range Not Satisfiable during a download). Callers can
-  // inspect the status without parsing an exception message string.
+  // Error status in the response to a request that otherwise succeeded, for
+  // example, 416 to a download that we resume. The status is available
+  // so that the caller can react to specific ones.
   //
   class http_status_error : public std::runtime_error
   {

@@ -1,3 +1,6 @@
+// Copyright (c) the IW4x authors (see the AUTHORS file).
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 #include <launcher/update/update-installer.hxx>
 
 #include <algorithm>
@@ -14,7 +17,7 @@
 #  include <unistd.h>
 #endif
 
-#include <boost/process.hpp>
+#include <boost/process/v1.hpp>
 #include <miniz.h>
 
 #include <launcher/launcher-log.hxx>
@@ -86,7 +89,7 @@ namespace launcher
     {
       // We treat the update as a pipeline of artifacts: download -> extract
       // -> swap. We need to track the intermediate files (archive, binary) so
-      // we can scrub them in cleanup () regardless of whether we succeed or
+      // we can scrub them in cleanup() regardless of whether we succeed or
       // exception out.
       //
 
@@ -125,7 +128,7 @@ namespace launcher
 
       if (!r.success)
       {
-        // The swap failed. We attempt to rollback changes to restore the
+        // The swap failed. We attempt to roll back the changes to restore the
         // original binary. If this also fails, we are likely leaving the user
         // with no launcher, but there isn't much else we can do at this
         // level.
@@ -156,7 +159,7 @@ namespace launcher
     launcher::log::warning (categories::update{}, "initiating rollback procedure");
 
     // If we didn't get far enough to define these paths, there is nothing
-    // to rollback.
+    // to roll back.
     //
     if (r.backup_path.empty () || r.installed_path.empty ())
     {
@@ -206,8 +209,8 @@ namespace launcher
   cleanup ()
   {
     launcher::log::trace_l3 (categories::update{}, "cleaning up {} temporary files/directories", temp_files_.size ());
-    // Best-effort cleanup. If we fail to delete a temp file (e.g., AV lock),
-    // we just ignore it.
+    // Best-effort cleanup. If we fail to delete a temporary file (e.g., an
+    // antivirus lock), we ignore it.
     //
     error_code ec;
     for (const auto& p : temp_files_)
@@ -246,7 +249,7 @@ namespace launcher
     //
     // Our workaround is a batch script trampoline:
     //
-    // 1. Write a .bat that waits for us to die.
+    // 1. Write a .bat that gives us 2 seconds to exit.
     // 2. Launch the .bat detached.
     // 3. Exit this process.
     // 4. .bat wakes up, launches the new binary, and deletes itself.
@@ -314,8 +317,8 @@ namespace launcher
     return false;
 
 #else
-    // On POSIX, things are civilized. We just mark the new binary executable
-    // and replace the current process image.
+    // On POSIX, things are civilized. We mark the new binary executable and
+    // replace the current process image.
     //
     launcher::log::trace_l2 (categories::update{}, "applying executable permissions to new binary");
     error_code ec;
@@ -378,9 +381,10 @@ namespace launcher
     }
 #endif
 
-    // Fallback: if the OS calls fail, we return the CWD. This is wrong
-    // if the user ran us as `./bin/launcher` from root, but it's
-    // better than throwing.
+    // If the OS calls fail, we fall back to the current directory.
+    //
+    // @@ That's a directory, so the update would fail anyway. Should we
+    //    throw instead?
     //
     fs::path c (fs::current_path (ec));
     launcher::log::warning (categories::update{}, "failed native resolution for executable path, falling back to CWD: {}", c.string ());
@@ -492,8 +496,8 @@ namespace launcher
     {
       launcher::log::trace_l3 (categories::update{}, "extracting as .tar.xz format");
 
-      boost::process::child c (
-        boost::process::search_path ("tar"),
+      boost::process::v1::child c (
+        boost::process::v1::search_path ("tar"),
         "-xJf", ap.string (),
         "-C", d.string ());
 
@@ -514,7 +518,7 @@ namespace launcher
 
     launcher::log::trace_l2 (categories::update{}, "extraction complete, searching for executable");
 
-    // We don't make assumption about the exact internal structure of the
+    // We don't make assumptions about the exact internal structure of the
     // archive (e.g., if there is a top-level directory or not), so we
     // recursively scan for anything that looks like our binary.
     //
@@ -588,9 +592,8 @@ namespace launcher
       fs::rename (t, b, ec);
       if (ec)
       {
-        // On Windows, the running executable is locked. We can't rename it,
-        // but sometimes we can move it or copy it. If rename fails, we try
-        // copy.
+        // If we cannot rename it, then at least copy it, so that there is a
+        // backup.
         //
         launcher::log::trace_l3 (categories::update{}, "rename failed ({}), falling back to copy for backup", ec.message ());
         fs::copy_file (t, b, fs::copy_options::overwrite_existing, ec);
@@ -606,8 +609,9 @@ namespace launcher
       r.backup_path = b;
     }
 
-    // Rename .new to target. This is atomic on POSIX, but not on Windows if
-    // the target exists (which it shouldn't, we just moved it).
+    // Rename .new to the target. This is atomic on POSIX. On Windows it
+    // isn't if the target exists, which is only the case if we copied it to
+    // the backup above.
     //
     launcher::log::trace_l3 (categories::update{}, "renaming staged binary into place");
     fs::rename (s, t, ec);

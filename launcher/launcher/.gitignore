@@ -1,14 +1,2 @@
-iw4x-launcher
-
-# CLI output directory.
-#
-!pregenerated/launcher
-
-# Unit tests.
-#
-*.test
-!*.test.cxx
-
-# Testscript output directory (can be symlink).
-#
-test-launcher
+/iw4x-launcher
+/version.hxx

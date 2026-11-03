@@ -1,3 +1,6 @@
+// Copyright (c) the IW4x authors (see the AUTHORS file).
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 #pragma once
 
 #include <string>
@@ -7,13 +10,14 @@
 
 namespace launcher
 {
-  // GitHub REST API data types.
+  // Entities of the GitHub REST API, with the subset of the JSON fields that
+  // we use. Note that the parsers (see github_api_traits) only set the
+  // fields present in the JSON object.
   //
-  // These types represent the core GitHub entities returned by the API.
-  // They follow the GitHub REST API v3 specification.
+  // Each entity is empty if its identifying field is empty.
   //
 
-  // GitHub user/organization.
+  // User or organization.
   //
   struct github_user
   {
@@ -22,7 +26,7 @@ namespace launcher
     std::string node_id;
     std::string avatar_url;
     std::string html_url;
-    std::string type; // "User" or "Organization"
+    std::string type; // User or Organization.
 
     github_user () = default;
     github_user (std::string l, std::uint64_t i);
@@ -31,7 +35,7 @@ namespace launcher
     empty () const;
   };
 
-  // GitHub repository.
+  // Repository.
   //
   struct github_repository
   {
@@ -55,7 +59,7 @@ namespace launcher
     empty () const;
   };
 
-  // GitHub release asset.
+  // Release asset.
   //
   struct github_asset
   {
@@ -64,11 +68,11 @@ namespace launcher
     std::string name;
     std::string label;
     std::string content_type;
-    std::string state; // "uploaded", "open"
+    std::string state; // uploaded or open.
     std::uint64_t size;
     std::uint64_t download_count;
     std::string browser_download_url;
-    std::string url; // API URL
+    std::string url; // API URL, see browser_download_url for the file.
 
     github_asset () = default;
     github_asset (std::string n, std::string u, std::uint64_t s);
@@ -77,7 +81,7 @@ namespace launcher
     empty () const;
   };
 
-  // GitHub release.
+  // Release.
   //
   struct github_release
   {
@@ -89,7 +93,7 @@ namespace launcher
     std::string tag_name;
     std::string target_commitish;
     std::string name;
-    std::string body; // Markdown description
+    std::string body; // Description in Markdown.
     bool draft;
     bool prerelease;
     user_type author;
@@ -104,16 +108,20 @@ namespace launcher
     bool
     empty () const;
 
-    // Find asset by name or pattern.
+    // Return the first asset with this name, if any.
     //
     std::optional<asset_type>
     find_asset (const std::string& name) const;
 
+    // Return the first asset whose entire name matches this ECMAScript
+    // regular expression, if any. Throw std::regex_error if the pattern is
+    // invalid.
+    //
     std::optional<asset_type>
     find_asset_regex (const std::string& pattern) const;
   };
 
-  // GitHub commit.
+  // Commit.
   //
   struct github_commit
   {
@@ -133,7 +141,7 @@ namespace launcher
     empty () const;
   };
 
-  // GitHub issue/pull request.
+  // Issue or pull request.
   //
   struct github_issue
   {
@@ -145,7 +153,7 @@ namespace launcher
     std::string title;
     std::string body;
     user_type user;
-    std::string state; // "open", "closed"
+    std::string state; // open or closed.
     bool locked;
     std::vector<std::string> labels;
     std::string html_url;
@@ -157,7 +165,7 @@ namespace launcher
     empty () const;
   };
 
-  // GitHub branch.
+  // Branch.
   //
   struct github_branch
   {
@@ -174,7 +182,7 @@ namespace launcher
     empty () const;
   };
 
-  // GitHub tag.
+  // Tag.
   //
   struct github_tag
   {
@@ -192,6 +200,9 @@ namespace launcher
     empty () const;
   };
 
+  // Note that the entities compare equal if their ids and their names
+  // (login for a user, tag for a release) are equal.
+  //
   bool operator== (const github_user& x, const github_user& y) noexcept;
 
   bool operator== (const github_asset& x, const github_asset& y) noexcept;

@@ -1,3 +1,6 @@
+// Copyright (c) the IW4x authors (see the AUTHORS file).
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 #pragma once
 
 #include <optional>
@@ -9,6 +12,8 @@
 
 namespace launcher
 {
+  // HTTP request. The URL can be absolute or a path.
+  //
   class http_request
   {
   public:
@@ -38,6 +43,8 @@ namespace launcher
                   std::string b,
                   http_version v = http_version (1, 1));
 
+    // Return the path and the query of the URL or / if there is no path.
+    //
     std::string
     target () const;
 
@@ -95,9 +102,13 @@ namespace launcher
       return body.has_value ();
     }
 
+    // Add the Content-Length, Host, and User-Agent headers, unless present.
+    //
     void
     normalize ();
 
+    // Return true if there is a URL.
+    //
     bool
     valid () const noexcept
     {
@@ -111,6 +122,8 @@ namespace launcher
     }
   };
 
+  // Print the request line, for example, GET https://iw4x.io/ HTTP/1.1.
+  //
   std::ostream&
   operator << (std::ostream& o, const http_request& r);
 }

@@ -1,0 +1,229 @@
+#!/usr/bin/env bash
+
+# Copyright (c) the IW4x authors (see the AUTHORS file).
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+# Compose the Steam library artwork of the IW4x clients.
+#
+# Usage: compose-artwork [-h|--help] <branding-dir> <output-dir>
+#
+# Compose the artwork from the source images and the font in <branding-dir>,
+# a checkout of the IW4x branding repository, and write it to <output-dir>
+# as <client>-<image>.png, where <client> is x86 or x64 and <image> is one
+# of:
+#
+# icon    256x256   The rounded mark that Steam shows in lists.
+# cover   600x900   The portrait capsule in the library grid.
+# wide    920x430   The horizontal capsule and the library header.
+# hero   1920x620   The banner behind the library page.
+# logo   1280x720   The transparent overlay that Steam draws over the hero.
+#
+# The two clients sit side by side in the library, so each set has its own
+# accent color and the IW4x (mm) set is also tagged MM under the wordmark.
+#
+# We commit the result to launcher/launcher/shortcut/artwork/, from where the
+# launcher embeds it, so this only needs to run when the branding changes.
+# For example, from the repository root in a forwarded configuration:
+#
+# launcher/etc/private/compose-artwork ../branding \
+#   launcher/launcher/shortcut/artwork
+#
+# Note that this script requires ImageMagick 7.
+#
+usage="usage: $0 [-h|--help] <branding-dir> <output-dir>"
+
+trap 'exit 1' ERR
+set -o errtrace # Trap in functions and subshells.
+set -o pipefail # Fail if any pipeline command fails.
+
+function info () { echo "$*" 1>&2; }
+function error () { info "error: $*"; exit 1; }
+
+function usage_error () # <message>
+{
+  info "error: $1"
+  info "  info: run '$0 --help' for more information"
+  exit 1
+}
+
+# Parse the command line.
+#
+bdir=
+odir=
+
+while [[ "$#" -gt 0 ]]; do
+  case "$1" in
+    -h|--help)
+      info "$usage"
+      exit 0
+      ;;
+    -*)
+      usage_error "unknown option '$1'"
+      ;;
+    *)
+      if [[ -z "$bdir" ]]; then
+        bdir="${1%/}"
+      elif [[ -z "$odir" ]]; then
+        odir="${1%/}"
+      else
+        usage_error "unexpected argument '$1'"
+      fi
+      shift
+      ;;
+  esac
+done
+
+if [[ -z "$bdir" ]]; then
+  usage_error "branding directory expected"
+fi
+
+if [[ -z "$odir" ]]; then
+  usage_error "output directory expected"
+fi
+
+# Make sure we have everything that we need before we write anything.
+#
+mark_svg="$bdir/iw4x-logo.svg"
+word_svg="$bdir/iw4x-banner.svg"
+round_svg="$bdir/iw4x-logo-padding-round.svg"
+font="$bdir/BankGothic Bold.ttf"
+
+for f in "$mark_svg" "$word_svg" "$round_svg" "$font"; do
+  if [[ ! -f "$f" ]]; then
+    error "'$f' does not exist"
+  fi
+done
+
+if ! command -v magick >/dev/null 2>&1; then
+  error "unable to find magick (ImageMagick 7)"
+fi
+
+mkdir -p "$odir"
+
+# Keep the intermediate images in a temporary directory, which we remove on
+# exit, successful or not.
+#
+tmp="$(mktemp -d)"
+trap "rm -rf '$tmp'" EXIT
+
+# Background color of the brand. Note that the shipped icon already uses it.
+#
+background='#222226'
+
+# Shades of green that the source images use for the brand accent and that
+# we replace with the accent color of each client.
+#
+brand_greens=('#89BD24' '#86BC25')
+
+# Accent color and wordmark tag of each client. The x86 client has no tag.
+#
+declare -A accents=([x86]='#86BC25' [x64]='#F5CE64')
+declare -A tags=([x86]='' [x64]='MM')
+
+# Copy the SVG image replacing the brand greens with the accent color.
+#
+function recolor () # <from> <to> <accent>
+{
+  local g
+
+  cp "$1" "$2"
+
+  for g in "${brand_greens[@]}"; do
+    sed -i -e "s/$g/$3/Ig" "$2"
+  done
+}
+
+# Print the magick arguments that render the tag in the accent color and
+# place it on the canvas. Print nothing if the tag is empty so that the
+# untagged set keeps the same layout without the label. Note that we print
+# one argument per line so that the caller can read them back into an array
+# with mapfile.
+#
+function label_arguments () # <tag> <color> <size> <kerning> <gravity> <offset>
+{
+  if [[ -n "$1" ]]; then
+    printf '%s\n'                                                   \
+      '(' -background none -fill "$2" -font "$font" -pointsize "$3" \
+          -kerning "$4" "label:$1" ')'                              \
+      -gravity "$5" -geometry "$6" -composite
+  fi
+}
+
+# Compose each image of the client, with mark.png, word.png, and round.svg
+# of the client already in the temporary directory.
+#
+function compose_icon () # <output>
+{
+  magick -background none -density 200 "$tmp/round.svg" -resize 256x256 \
+    -strip "$1"
+}
+
+function compose_cover () # <tag> <accent> <output>
+{
+  local l
+  mapfile -t l < <(label_arguments "$1" "$2" 84 14 north +0+610)
+
+  magick -size 600x900 "xc:$background"                                  \
+    '(' "$tmp/mark.png" -resize 330x330 ')'                              \
+    -gravity north -geometry +0+210 -composite                           \
+    "${l[@]}"                                                            \
+    -strip "$3"
+}
+
+function compose_wide () # <tag> <accent> <output>
+{
+  local l
+  mapfile -t l < <(label_arguments "$1" "$2" 54 11 center +0+115)
+
+  magick -size 920x430 "xc:$background"                                  \
+    '(' "$tmp/word.png" -resize 540x ')'                                 \
+    -gravity center -geometry +0-45 -composite                           \
+    "${l[@]}"                                                            \
+    -strip "$3"
+}
+
+function compose_hero () # <output>
+{
+  magick -size 1920x620 "xc:$background"                                 \
+    '(' "$tmp/mark.png" -resize x1120 -alpha set                         \
+        -channel A -evaluate multiply 0.13 +channel ')'                  \
+    -gravity east -geometry -130-30 -composite                           \
+    -strip "$1"
+}
+
+function compose_logo () # <tag> <accent> <output>
+{
+  local l
+  mapfile -t l < <(label_arguments "$1" "$2" 92 20 center +0+140)
+
+  magick -size 1280x720 xc:none                                          \
+    '(' "$tmp/word.png" -resize 940x ')'                                 \
+    -gravity center -geometry +0-70 -composite                           \
+    "${l[@]}"                                                            \
+    -strip "$3"
+}
+
+# Compose the artwork of each client.
+#
+for c in x86 x64; do
+  a="${accents[$c]}"
+  t="${tags[$c]}"
+
+  # Recolor the source images and render the mark and the wordmark, trimmed
+  # to their content, for the compositions below.
+  #
+  recolor "$mark_svg"  "$tmp/mark.svg"  "$a"
+  recolor "$word_svg"  "$tmp/word.svg"  "$a"
+  recolor "$round_svg" "$tmp/round.svg" "$a"
+
+  magick -background none -density 200 "$tmp/mark.svg" -trim +repage \
+    "$tmp/mark.png"
+  magick -background none -density 400 "$tmp/word.svg" -trim +repage \
+    "$tmp/word.png"
+
+  compose_icon            "$odir/$c-icon.png"
+  compose_cover "$t" "$a" "$odir/$c-cover.png"
+  compose_wide  "$t" "$a" "$odir/$c-wide.png"
+  compose_hero            "$odir/$c-hero.png"
+  compose_logo  "$t" "$a" "$odir/$c-logo.png"
+done

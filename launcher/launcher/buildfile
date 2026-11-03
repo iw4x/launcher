@@ -1,289 +1,220 @@
-libs =
+# Copyright (c) the IW4x authors (see the AUTHORS file).
+# SPDX-License-Identifier: GPL-3.0-or-later
 
-import libs += libboost-asio%lib{boost_asio}
-import libs += libboost-beast%lib{boost_beast}
-import libs += libboost-filesystem%lib{boost_filesystem}
-import libs += libboost-json%lib{boost_json}
-import libs += libboost-process%lib{boost_process}
-import libs += libboost-system%lib{boost_system}
+intf_libs = # Interface dependencies.
+impl_libs = # Implementation dependencies.
 
-import libs += libssl%lib{ssl}
-import libs += libcrypto%lib{crypto}
+import intf_libs += libboost-asio%lib{boost_asio}
+import intf_libs += libboost-beast%lib{boost_beast}
+import intf_libs += libboost-json%lib{boost_json}
+import intf_libs += libboost-system%lib{boost_system}
+import intf_libs += libssl%lib{ssl}
+import intf_libs += libcrypto%lib{crypto}
+import intf_libs += libftxui%lib{ftxui-component}
+import intf_libs += libftxui%lib{ftxui-dom}
+import intf_libs += libftxui%lib{ftxui-screen}
+import intf_libs += libodb%lib{odb}
+import intf_libs += libodb-sqlite%lib{odb-sqlite}
+import intf_libs += libquill%lib{quill}
 
-import libs += libftxui%lib{ftxui-component}
-import libs += libftxui%lib{ftxui-dom}
-import libs += libftxui%lib{ftxui-screen}
+import impl_libs += libboost-process%lib{boost_process}
+import impl_libs += libblake3%lib{blake3}
+import impl_libs += libminiz%lib{miniz}
 
-import libs += libminiz%lib{miniz}
+tclass = $cxx.target.class
+tsys   = $cxx.target.system
 
-import libs += libodb%lib{odb}
-import libs += libodb-sqlite%lib{odb-sqlite}
+linux   = ($tclass == 'linux')
+windows = ($tclass == 'windows')
 
-import libs += libquill%lib{quill}
-
-import! [metadata] xxd = xxd%exe{xxd}
-
-options = launcher-options
-schemas = cache/cache-types
+define cli: file
+cli{*}: extension = cli
 
 define png: file
 png{*}: extension = png
 
-png{*}: install = false
+# Everything except main() goes into a static library that the launcher
+# links, as do the test drivers in the launcher-tests package. Note that it
+# has to be a real library since a utility library cannot be imported by
+# another project.
+#
+./: exe{iw4x-launcher}: cxx{launcher} liba{launcher}
 
-# HACK:
-#
-# We have a conflict between libue integration and our directory-anchored
-# executable. Specifically, libue doesn't seem to tolerate the libue{...}
-# qualification inside a directory-anchored ./: exe{...} group.
-#
-# To handle this, we define a shadow target (ending in -u) specifically for
-# libue's consumption and a separate main target for the actual launcher.
-#
-# And yes, this is a massive, horrible hack that forces us to duplicate the
-# prerequisite list (so keep them in sync). We probably should figure out
-# how to make the build system happy with a single target, but today is not
-# that day.
-#
-# (Maybe ask boris wtf is going on)
-#
-exe{iw4x-launcher-u}: libue{iw4x-launcher-u}:      \
-  {hxx ixx txx cxx}{** -steam/steam-proton         \
-                       -launcher-steam-proton      \
-                       -shortcut/shortcut-writer-* \
-                       -version                    \
-                       -*-options                  \
-                       -*-odb                      \
-                       -**.test...                 \
-                       -pregenerated/**}
+liba{launcher}: {hxx ixx txx cxx}{** -launcher                   \
+                                     -launcher-steam-proton      \
+                                     -steam/steam-proton         \
+                                     -shortcut/shortcut-writer-* \
+                                     -launcher-options           \
+                                     -cache/cache-types-odb      \
+                                     -version                    \
+                                     -pregenerated/**}           \
+                hxx{version}                                     \
+                $impl_libs $intf_libs
 
-exe{iw4x-launcher-u}: libue{iw4x-launcher-u}: {h c}{**}
-exe{iw4x-launcher-u}: libue{iw4x-launcher-u}: {hxx}{version}
-exe{iw4x-launcher-u}: libue{iw4x-launcher-u}: {hxx cxx}{steam/steam-proton}: include = ($tclass == 'linux')
-exe{iw4x-launcher-u}: libue{iw4x-launcher-u}: {hxx cxx}{launcher-steam-proton}: include = ($tclass == 'linux')
-exe{iw4x-launcher-u}: libue{iw4x-launcher-u}: cxx{shortcut/shortcut-writer-linux}: include = ($tclass == 'linux')
-exe{iw4x-launcher-u}: libue{iw4x-launcher-u}: cxx{shortcut/shortcut-writer-windows}: include = ($tclass == 'windows')
-exe{iw4x-launcher-u}: libue{iw4x-launcher-u}: $libs testscript
-
-./: exe{iw4x-launcher}:                                 \
-      {hxx ixx txx cxx}{** -steam/steam-proton          \
-                            -launcher-steam-proton      \
-                            -shortcut/shortcut-writer-* \
-                            -version                    \
-                            -*-options                  \
-                            -*-odb                      \
-                            -**.test...                 \
-                            -pregenerated/**}
-
-exe{iw4x-launcher}: {h c}{**}
-exe{iw4x-launcher}: {hxx}{version}
-exe{iw4x-launcher}: {hxx cxx}{steam/steam-proton}: include = ($tclass == 'linux')
-exe{iw4x-launcher}: {hxx cxx}{launcher-steam-proton}: include = ($tclass == 'linux')
-exe{iw4x-launcher}: cxx{shortcut/shortcut-writer-linux}: include = ($tclass == 'linux')
-exe{iw4x-launcher}: cxx{shortcut/shortcut-writer-windows}: include = ($tclass == 'windows')
-exe{iw4x-launcher}: $libs
-
-# Unit tests.
+# Proton only exists on Linux and each platform has its own way of writing
+# shortcuts.
 #
-exe{*.test -iw4x-launcher}:
+liba{launcher}: {hxx cxx}{launcher-steam-proton steam/steam-proton}: \
+  include = $linux
+
+liba{launcher}: shortcut/cxx{shortcut-writer-linux}:   include = $linux
+liba{launcher}: shortcut/cxx{shortcut-writer-windows}: include = $windows
+
+# Link the library to the same variants of our dependencies as the launcher.
+# Otherwise the launcher could end up with both the static and the shared
+# variant of the same library.
+#
+bin.liba.lib = $bin.exe.lib
+
+# Target metadata, see also --build2-metadata in launcher.cxx.
+#
+exe{iw4x-launcher}:
 {
-  test = true
-  install = false
+  export.metadata = 1 launcher
+  launcher.name = [string] iw4x-launcher
+  launcher.version = [string] $version
+  launcher.checksum = [string] $version
 }
 
-for t: cxx{**.test...}
-{
-  d = $directory($t)
-  n = $name($t)...
-
-  ./: $d/exe{$n}: $t $d/{hxx ixx txx}{+$n} $d/testscript{+$n}
-  $d/exe{$n}: libue{iw4x-launcher-u}: bin.whole = false
-}
-
-# The manifest test extracts an archive that Info-ZIP created the way the
-# rawfiles release script creates its archives. We keep the archive as a
-# file, which zipinfo and unzip can inspect, and embed it into the test as
-# the xxd -i dump.
-#
-define zip: file
-zip{*}: extension = zip
-
-exe{launcher-manifest.test...}: hxx{launcher-manifest.test-zip...}
-
-hxx{launcher-manifest.test-zip...}: zip{launcher-manifest.test...} $xxd
-{{
-  diag xxd ($<[0])
-
-  # Read the archive from stdin so that xxd writes out just the array
-  # initializer, without naming a variable after the input path.
-  #
-  $xxd -i <=$path($<[0]) >=$path($>[0])
-}}
-
-# Version header generation.
-#
 hxx{version}: in{version} $src_root/manifest
 
 # Build options.
 #
-# Backport the Boost 1.88 Asio config parser while Boost is pinned to 1.87.
-# This must precede dependency includes and apply to the unit tests as well.
+cxx.poptions =+ "-I$out_root" "-I$src_root"
+
+# Target Windows 10, the oldest version that Steam supports, and keep
+# <windows.h> from defining the min() and max() macros. Note that Asio
+# expects _WIN32_WINNT to be the same in every translation unit that
+# includes it, which is why we also export these options.
 #
-cc.poptions =+ "-I($src_root/compat)" "-I$out_root" "-I$src_root"
+windows_poptions =
 
-if ($develop)
-  cxx.coptions =+ "-DLAUNCHER_DEVELOP"
+if $windows
+  windows_poptions = -DWINVER=0x0A00 -D_WIN32_WINNT=0x0A00 -DNOMINMAX
 
-# On Windows, we need the advanced API library for registry access (used
-# for Steam path detection).
+cxx.poptions += $windows_poptions
+
+# Our Asio and Beast heavy translation units can exceed the section limit of
+# the default COFF object format.
 #
 switch $tsys
 {
   case 'win32-msvc'
-    cxx.libs += Advapi32.lib Ole32.lib Uuid.lib Shell32.lib
+    cxx.coptions += /bigobj
 
   case 'mingw32'
-    cxx.libs += -ladvapi32 -lole32 -luuid -lshell32
+    cxx.coptions += -Wa,-mbig-obj
 }
 
-# CLI Options Generation (Development vs. Consumption)
+# Open every log category to the full trace range in the development build
+# (see launcher-log.cxx for details).
 #
+if $develop
+  obj{launcher-log}: cxx.poptions += -DLAUNCHER_DEVELOP
 
-# In the development build ($develop == true), we generate the C++ CLI parsers
-# from the .cli definition files using the CLI compiler. We also copy the
-# results to the 'pregenerated/' directory so they can be distributed.
+# Additional system libraries.
 #
-# In the consumption build ($develop == false), we skip the generation step
-# (to avoid requiring CLI on the user's machine) and just use the files
-# from 'pregenerated/'.
-#
+switch $tclass, $tsys
+{
+  case 'windows', 'mingw32'
+    cxx.libs += -ladvapi32 -lole32 -luuid -lshell32
 
-## Consumption build ($develop == false).
-#
+  case 'windows'
+    cxx.libs += advapi32.lib ole32.lib uuid.lib shell32.lib
+}
 
-# Use pregenerated versions.
+# Export options.
 #
-exe{iw4x-launcher}: pregenerated/{hxx ixx cxx}{**}: include = (!$develop)
+# Note that we export the implementation dependencies as well since
+# otherwise the test drivers, which import this library, don't get the
+# run-time search paths of their shared variants.
+#
+liba{launcher}:
+{
+  cxx.export.poptions = "-I$out_root" "-I$src_root" $windows_poptions
+  cxx.export.libs = $intf_libs $impl_libs
+}
 
-# If we are consuming, we need to look in the pregenerated directory first.
+# Generated code.
 #
+# We keep a copy of every generated file in pregenerated/, which is what the
+# consumption build compiles. The development build regenerates the files
+# and, if the result differs from the copy, updates the copy. It also
+# distributes the regenerated files in place of the copies, so that the
+# distribution is always up to date.
+#
+liba{launcher}: pregenerated/{hxx ixx cxx}{**}: include = (!$develop)
+
 if! $develop
+{
   cxx.poptions =+ "-I($src_base/pregenerated)" # Note: must come first.
+  liba{launcher}: cxx.export.poptions =+ "-I($src_base/pregenerated)"
+}
 
-# Distribute pregenerated versions only in the consumption build.
-#
 pregenerated/{hxx ixx cxx}{*}: dist = (!$develop)
 
-
-## Development build ($develop == true).
-#
-
-# Include the generated files in the build.
-#
-exe{iw4x-launcher}: {hxx ixx cxx}{$options}: include = $develop
-exe{iw4x-launcher}: {hxx ixx cxx}{$schemas-odb}: include = $develop
-
 if $develop
-  import! [metadata] cli = cli%exe{cli}
-
-# Rule to generate C++ parser from .cli file.
-#
-for f: $options
 {
-  [string] b = $f
-
-  # Strip the '-options' suffix to get the base name.
-  #
-  b = $replace($b, "-options", "")
-  d = $directory($f)
-  p = pregenerated/launcher
-
-  <{hxx ixx cxx}{$f}>: cli{$b}
-  {
-    # In development, we want to distribute the result of this generation,
-    # but we map it to the 'pregenerated/' directory in the distribution.
-    #
-    dist = ($develop ? $relative([dir_path] "$p/$d", $d) : false)
-  }
+  import! [metadata] cli = cli%exe{cli}
+  import! [metadata] odb = odb%exe{odb}
 }
 
-# The ad-hoc rule for running the CLI compiler.
+# Command line options parser.
 #
-<{hxx ixx cxx}{~'/(.*)-options/'}>: cli{~'/\1/'} $cli
+liba{launcher}: {hxx ixx cxx}{launcher-options}: include = $develop
+
+<{hxx ixx cxx}{launcher-options}>: cli{launcher} $cli
+{
+  dist = ($develop ? pregenerated/launcher/ : false)
+}
 %
 if $develop
 {{
   t = $path($>[0]).t
 
-  # Dynamic dependency tracking.
-  #
   depdb dyndep --byproduct --file $t
 
-  h = $path($>[0])
-  i = $path($>[1])
-  c = $path($>[2])
-
-  d = $directory($h)
-  p = $string($leaf($d, $out_root))
-
-  # Note that we generate *-options.hxx/ixx/cxx from cli<$f> instead of
-  # <$f>.hxx/ixx/cxx to avoid filename conflicts and keep the base name <$f>
-  # reserved for our own implementation headers and sources.
-  #
-  options = -I $src_root                                            \
-            --std c++11                                             \
-            --include-prefix $p                                     \
-            --guard-prefix $regex.replace($ucase($p), '[/\\]', '_') \
-            --generate-specifier                                    \
-            --generate-file-scanner                                 \
-            --suppress-undocumented                                 \
-            --cli-namespace launcher::cli                              \
-            --exclude-base                                          \
-            --include-with-brackets                                 \
+  options = -I $src_root --std c++11                                   \
+            --include-with-brackets --include-prefix launcher          \
+            --guard-prefix LAUNCHER --cli-namespace launcher::cli      \
+            --generate-specifier --generate-file-scanner               \
+            --suppress-undocumented --exclude-base                     \
             --cxx-prologue "#include <launcher/arch/arch-parsers.hxx>" \
             --output-suffix -options
 
-  $cli $options --generate-dep --dep-file $t -o $d $path($<[0])
+  diag cli ($<[0]) -> $>
 
-  # If the result differs from the pregenerated version, copy it over.
+  $cli $options --generate-dep --dep-file $t -o $out_base $path($<[0])
+
+  # If the result differs from the pregenerated copy, update the copy.
   #
-  d = [dir_path] $src_base/pregenerated/$p
+  d = [dir_path] $src_base/pregenerated/launcher
 
-  dh = $d/$leaf($h)
-  di = $d/$leaf($i)
-  dc = $d/$leaf($c)
-
-  if diff $dh $h >- && \
-     diff $di $i >- && \
-     diff $dc $c >-
-  {
+  if diff $d/launcher-options.hxx $path($>[0]) >- && \
+     diff $d/launcher-options.ixx $path($>[1]) >- && \
+     diff $d/launcher-options.cxx $path($>[2]) >-
     exit
-  }
 
-  cp $h $dh
-  cp $i $di
-  cp $c $dc
+  cp $path($>[0]) $d/launcher-options.hxx
+  cp $path($>[1]) $d/launcher-options.ixx
+  cp $path($>[2]) $d/launcher-options.cxx
 }}
 
-## ODB
+# Database support code.
 #
+# The ODB compiler needs the preprocessor options of the ODB runtime, which
+# we get from this utility library.
+#
+liba{launcher}: cache/{hxx ixx cxx}{cache-types-odb}: include = $develop
 
-if $develop
-  import! [metadata] odb = odb%exe{odb}
+[rule_hint=cxx] cache/libue{cache-types-meta}: $intf_libs
 
-for f: $schemas
+<cache/{hxx ixx cxx}{cache-types-odb}>: cache/hxx{cache-types}        \
+                                        cache/libue{cache-types-meta} \
+                                        $odb
 {
-  [rule_hint=cxx] libue{$f-meta}: $libs
-
-  exe{iw4x-launcher}: libue{$f-meta} $libs
-
-  <{hxx ixx cxx}{$f-odb}>: hxx{$f} libue{$f-meta} $odb
-  {
-    dist = ($develop ? $relative([dir_path] "pregenerated/launcher/$d", $d) : false)
-  }
+  dist = ($develop ? ../pregenerated/launcher/cache/ : false)
 }
-
-<{hxx ixx cxx}{~'/(.+)-odb/'}>: hxx{~'/\1/'} libue{~'/.+-meta/'} $odb
 %
 if $develop
 {{
@@ -291,63 +222,44 @@ if $develop
 
   depdb hash $pops
 
-  h = $path($>[0])
-  i = $path($>[1])
-  c = $path($>[2])
-
-  d = $directory($h)
-  p = $string($leaf($d, $out_root))
-
   options = --std c++17 --database sqlite -I $src_root              \
-            --include-with-brackets --include-prefix $p             \
-            --guard-prefix $regex.replace($ucase($p), '[/\\]', '_') \
-            --generate-schema --generate-query                      \
-            --output-dir $d
+            --include-with-brackets --include-prefix launcher/cache \
+            --guard-prefix LAUNCHER_CACHE                           \
+            --generate-schema --generate-query
 
-  $odb $options $pops $path($<[0])
+  diag odb ($<[0]) -> $>
 
-  # If the result differs from the pregenerated version, copy it over.
+  $odb $options $pops --output-dir $out_base/cache/ $path($<[0])
+
+  # As above.
   #
-  d = [dir_path] $src_base/pregenerated/$p
+  d = [dir_path] $src_base/pregenerated/launcher/cache
 
-  dh = $d/$leaf($h)
-  di = $d/$leaf($i)
-  dc = $d/$leaf($c)
-
-  if diff $dh $h >- && \
-     diff $di $i >- && \
-     diff $dc $c >-
-  {
+  if diff $d/cache-types-odb.hxx $path($>[0]) >- && \
+     diff $d/cache-types-odb.ixx $path($>[1]) >- && \
+     diff $d/cache-types-odb.cxx $path($>[2]) >-
     exit
-  }
 
-  cp $h $dh
-  cp $i $di
-  cp $c $dc
+  cp $path($>[0]) $d/cache-types-odb.hxx
+  cp $path($>[1]) $d/cache-types-odb.ixx
+  cp $path($>[2]) $d/cache-types-odb.cxx
 }}
 
-## Artwork
+# Shortcut artwork.
 #
-
-# Shortcut artwork is compiled into the launcher as byte arrays, one
-# header per image, each holding the xxd -i dump of that image.
+# We compile each image into the launcher as the array initializer that
+# xxd -i produces, one header per image. We embed the images this way since
+# not every compiler that we build with supports #embed.
 #
-# We used to #embed the images directly but not every compiler we build
-# with supports it. So instead we follow the same scheme as the CLI and
-# ODB output above: xxd only runs in the development build and its result
-# is copied to 'pregenerated/', which is what the consumption build uses.
-#
-shortcut/obje{shortcut-artwork}: shortcut/cxx{shortcut-artwork}
-
-for p: shortcut/artwork/png{*}
+for i: shortcut/artwork/png{*}
 {
-  n = $name($p)
+  n = $name($i)
 
-  shortcut/obje{shortcut-artwork}: shortcut/artwork/hxx{$n-png}: include = $develop
+  liba{launcher}: shortcut/artwork/hxx{$n-png}: include = $develop
 
   shortcut/artwork/hxx{$n-png}: shortcut/artwork/png{$n}
   {
-    dist = ($develop ? $relative([dir_path] "pregenerated/launcher/shortcut/artwork", [dir_path] shortcut/artwork) : false)
+    dist = ($develop ? ../../pregenerated/launcher/shortcut/artwork/ : false)
   }
 }
 
@@ -355,31 +267,21 @@ hxx{~'/(.+)-png/'}: png{~'/\1/'}
 %
 if $develop
 {{
-  diag xxd ($<[0])
+  diag xxd ($<[0]) -> $>
 
   h = $path($>[0])
 
-  # Read the image from stdin so that xxd writes out just the array
-  # initializer, without naming a variable after the input path.
+  # Read the image from stdin so that xxd only writes the array initializer,
+  # without a variable named after the input path.
   #
   xxd -i <=$path($<[0]) >=$h
 
-  # If the result differs from the pregenerated version, copy it over.
+  # As above.
   #
   d = [dir_path] $src_base/pregenerated/$leaf($directory($h), $out_root)
-  dh = $d/$leaf($h)
 
-  if test -f $dh && diff $dh $h >-
-  {
+  if diff $d/$leaf($h) $h >-
     exit
-  }
 
-  # The pregenerated directory may not exist yet, the first time around.
-  # Note that we don't want either of these cleaned up afterwards.
-  #
-  mkdir --no-cleanup -p $d
-  cp --no-cleanup $h $dh
+  cp $h $d/$leaf($h)
 }}
-
-#
-##

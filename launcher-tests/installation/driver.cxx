@@ -1,0 +1,61 @@
+// Copyright (c) the IW4x authors (see the AUTHORS file).
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+#include <print>
+#include <string>
+#include <iostream>
+#include <filesystem>
+
+#include <launcher/installation.hxx>
+
+using namespace std;
+using namespace launcher;
+
+// Usage: argv[0] <command> [<argument>]
+//
+// Run the command on the installation in the current working directory and
+// print its result, if any, to stdout.
+//
+// migrate-clients
+//    Rename the clients installed under their legacy names.
+//
+// retire <file>
+//    Move the file into the retired directory and print whether it moved.
+//
+// remove-retired
+//    Remove the retired files.
+//
+// reset-cache <version>
+//    Wipe the cache of another launcher version and print whether the
+//    version changed.
+//
+int
+main (int argc, char* argv[])
+{
+  auto usage = [] ()
+  {
+    println (cerr,
+             "error: invalid arguments\n"
+             "  info: usage: driver <command> [<argument>]");
+    return 1;
+  };
+
+  if (argc < 2 || argc > 3)
+    return usage ();
+
+  const string c (argv[1]);
+  const bool a (argc == 3);
+
+  installation ins (filesystem::current_path ());
+
+  if (c == "migrate-clients" && !a)
+    ins.migrate_clients ();
+  else if (c == "retire" && a)
+    println ("{}", ins.retire (argv[2]));
+  else if (c == "remove-retired" && !a)
+    ins.remove_retired ();
+  else if (c == "reset-cache" && a)
+    println ("{}", ins.reset_cache (argv[2]));
+  else
+    return usage ();
+}

@@ -1,3 +1,6 @@
+// Copyright (c) the IW4x authors (see the AUTHORS file).
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 #include <launcher/http/http-json.hxx>
 
 #include <stdexcept>
@@ -108,8 +111,7 @@ namespace launcher
     http_response r (co_await client_.request (q));
     ensure_success (r);
 
-    // A DELETE request might return an empty body even on success. Only attempt
-    // to parse if there is actually something there.
+    // Note that the response to DELETE often has no body.
     //
     if (r.body && !r.body->empty ())
       co_return parse_json (r);

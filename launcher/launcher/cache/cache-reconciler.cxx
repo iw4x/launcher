@@ -1,3 +1,6 @@
+// Copyright (c) the IW4x authors (see the AUTHORS file).
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 #include <launcher/cache/cache-reconciler.hxx>
 
 #include <algorithm>
@@ -23,8 +26,9 @@ namespace launcher
 
   namespace
   {
-    // Quietly check if a path exists. We don't want to throw here since
-    // missing files are a normal occurrence during reconciliation.
+    // Return true if the path exists and false if it doesn't or cannot be
+    // examined. Note that missing files are normal during reconciliation, so
+    // we don't want to throw.
     //
     bool
     exists_quiet (const fs::path& p)
@@ -33,8 +37,8 @@ namespace launcher
       return fs::exists (p, ec);
     }
 
-    // Quietly get the file size. Return 0 on error, which is safe enough
-    // for our cache heuristic checks.
+    // Return the size of the file or 0 if it cannot be examined, which is
+    // good enough for the size checks below.
     //
     uint64_t
     size_quiet (const fs::path& p)
@@ -48,8 +52,6 @@ namespace launcher
   cache_database& reconciler::
   database () noexcept
   {
-    // Expose the underlying database for mutable operations.
-    //
     launcher::log::trace_l3 (categories::cache {},
                              "accessing mutable database reference");
     return db_;
@@ -109,9 +111,6 @@ namespace launcher
   {
     auto v (db_.version (c));
 
-    // A component is outdated if it has no recorded version or if the
-    // recorded tag doesn't match the target tag.
-    //
     bool o (!v || v->tag () != t);
 
     launcher::log::debug (categories::cache {},
@@ -135,8 +134,7 @@ namespace launcher
     string k (key (p));
     auto f (db_.find (k));
 
-    // If we don't have a record of this file in the database, its state
-    // is completely unknown to us. We can't verify it without a full hash.
+    // Without a record we know nothing about the file.
     //
     if (!f)
     {
@@ -153,8 +151,8 @@ namespace launcher
   file_state reconciler::
   stat (const fs::path& p, const cached_file& f) const
   {
-    // The file might have been deleted from the disk by the user or some
-    // other process.
+    // Note that the file can be gone even though we have a record of it if
+    // it was removed behind our back.
     //
     if (!exists_quiet (p))
     {
@@ -164,8 +162,8 @@ namespace launcher
       return file_state::missing;
     }
 
-    // Check if the file's metadata (like mtime or size) still matches what
-    // we have in the database. If not, it's stale.
+    // A file whose metadata differs from the record was written behind our
+    // back and so is stale.
     //
     if (!match (p, f))
     {
@@ -192,9 +190,6 @@ namespace launcher
     vector<pair<cached_file, file_state>> r;
     r.reserve (fs.size ());
 
-    // Walk through all known files for this component and re-evaluate their
-    // state against the filesystem.
-    //
     for (const auto& f : fs)
     {
       fs::path p (f.path ());
@@ -222,6 +217,10 @@ namespace launcher
 
   namespace
   {
+    // Hash the files of the tasks in parallel, setting the match flag of each
+    // task and, if the file matches, its current metadata. Call the callback,
+    // if any, as each task completes.
+    //
     void
     run_hashes (vector<hash_task>& ts,
                 function<void (const string&, size_t, size_t)> cb)
@@ -229,9 +228,8 @@ namespace launcher
       if (ts.empty ())
         return;
 
-      // Determine a reasonable number of workers. Hardware concurrency is a
-      // good default, but it can return 0 on some platforms, so we provide
-      // a fallback.
+      // Use a worker per hardware thread. Note that hardware_concurrency()
+      // can return 0, in which case we use 4.
       //
       unsigned int n (thread::hardware_concurrency ());
       if (n == 0)
@@ -254,9 +252,7 @@ namespace launcher
         {
           try
           {
-            // We only bother hashing if the file actually exists and we have
-            // an expected hash to compare against. Otherwise it's a guaranteed
-            // mismatch.
+            // Without the file or an expected hash there is nothing to match.
             //
             if (exists_quiet (t.p) && !t.e.empty ())
             {
@@ -304,8 +300,6 @@ namespace launcher
             t.err = "unknown exception during hashing";
           }
 
-          // Update progress if a callback was provided.
-          //
           size_t c (++d);
           if (cb)
             cb ("Verifying", c, tot);
@@ -324,19 +318,14 @@ namespace launcher
   vector<reconcile_item> reconciler::
   plan (const manifest& m, component_type c, const string& v)
   {
-    // The reconcile plan consists of tasks for archives and standalone files.
-    // We generate both plans and stitch them together into a single action
-    // list for the manifest coordinator.
-    //
     launcher::log::trace_l1 (
       categories::cache {},
       "generating reconcile plan for component {} (target version {})",
       static_cast<int> (c),
       v);
 
-    // Pre-load the entire database state for this component into memory so
-    // that the planners can do O(1) lookups instead of per-file SQLite
-    // round-trips.
+    // Load the records of the component up front, which saves the planners
+    // a database query per file.
     //
     cache_map cm;
     {
@@ -384,10 +373,8 @@ namespace launcher
     struct state { bool skip; bool hl; bool ok; bool dl; };
     vector<state> ss (as.size ());
 
-    // First pass: evaluate the current disk and cache state of each archive
-    // and its associated files. We try to determine if we can skip it, if
-    // it needs downloading, or if we need to schedule it for hash
-    // verification.
+    // First see which archives are intact and which need downloading. For
+    // the rest we will only know after hashing some of their files.
     //
     for (size_t i (0); i < as.size (); ++i)
     {
@@ -401,8 +388,7 @@ namespace launcher
 
       if (s.hl)
       {
-        // For exploded archives, we check each inner file. If any file is
-        // stale or missing, the whole archive's integrity is compromised.
+        // An extracted archive is intact if all its files are.
         //
         for (const auto& f : a.files)
         {
@@ -418,8 +404,7 @@ namespace launcher
           }
           else if (exists_quiet (p) && !f.hash.value.empty ())
           {
-            // Quick size pre-check: if the file size doesn't match the
-            // manifest, skip the expensive hash entirely.
+            // If the size doesn't match, there is no point in hashing.
             //
             uint64_t ds (size_quiet (p));
             if (f.size != 0 && ds != f.size)
@@ -448,8 +433,8 @@ namespace launcher
       }
       else
       {
-        // For standalone blob archives, the logic is simpler. We just
-        // verify the blob itself against the database.
+        // An archive that stays as it is (an .iwd, for example) is checked
+        // as a file.
         //
         fs::path p (path (a));
         string k (key (p));
@@ -471,7 +456,7 @@ namespace launcher
               a.name);
           }
 
-          // Quick size pre-check.
+          // As above.
           //
           uint64_t ds (size_quiet (p));
           if (a.size != 0 && ds != a.size)
@@ -497,9 +482,8 @@ namespace launcher
       }
     }
 
-    // If we identified files that exist but aren't tracked yet, we run a
-    // parallel hash check. This helps us adopt existing files into the
-    // cache without redownloading them.
+    // Hash the files that exist without an up-to-date record. Those that
+    // match are adopted, which saves us downloading them again.
     //
     if (!ls.empty () || !fs.empty ())
     {
@@ -514,8 +498,7 @@ namespace launcher
 
       run_hashes (ts, cb_);
 
-      // Collect all adoptions so we can batch them in a single DB
-      // transaction instead of one per file.
+      // Store the records of the adopted files in a single transaction.
       //
       vector<cached_file> adoptions;
       auto i (ts.begin ());
@@ -564,8 +547,7 @@ namespace launcher
         db_.store (adoptions);
     }
 
-    // Finally, construct the reconciliation plan items based on the state we
-    // determined in the first pass and updated in the hashing phase.
+    // Plan the download of every archive that is not intact.
     //
     for (size_t i (0); i < as.size (); ++i)
     {
@@ -645,7 +627,7 @@ namespace launcher
           it->second.version () == v &&
           stat (p, it->second) == file_state::valid)
       {
-        // Valid, do nothing.
+        // Valid.
       }
       else if (exists_quiet (p) && !f.hash.value.empty ())
       {
@@ -657,8 +639,7 @@ namespace launcher
             f.path);
         }
 
-        // Quick size pre-check: if the file size doesn't match, skip the
-        // expensive hash computation entirely.
+        // As in plan_archives().
         //
         uint64_t ds (size_quiet (p));
         if (f.size != 0 && ds != f.size)
@@ -692,7 +673,8 @@ namespace launcher
       }
     }
 
-    // Run all pending hashes in parallel via the thread pool.
+    // Hash the files that exist without an up-to-date record (as in
+    // plan_archives()).
     //
     if (!to_hash.empty ())
     {
@@ -704,7 +686,7 @@ namespace launcher
 
       run_hashes (ts, cb_);
 
-      // Process results and collect adoptions for batch DB write.
+      // Adopt the matching files and download the rest.
       //
       vector<cached_file> adoptions;
 
@@ -735,7 +717,7 @@ namespace launcher
         db_.store (adoptions);
     }
 
-    // Emit download items for all files that need it.
+    // Plan the downloads.
     //
     for (size_t mi : to_download)
     {
@@ -765,8 +747,6 @@ namespace launcher
                              is.size ());
     reconcile_summary s;
 
-    // Accumulate metrics for the UI or logging layer.
-    //
     for (const auto& i : is)
     {
       switch (i.action)
@@ -854,7 +834,7 @@ namespace launcher
       }
     }
 
-    // Doing this in a batch minimizes database transaction overhead.
+    // Store the records in a single transaction.
     //
     if (!cfs.empty ())
     {
@@ -906,7 +886,7 @@ namespace launcher
         return tolower (ch);
       });
 
-      // If it's a zip file, we expect the inner files to be in the cache.
+      // A ZIP archive is extracted, so we have records of its files.
       //
       if (ext == ".zip")
       {
@@ -915,8 +895,7 @@ namespace launcher
       }
       else
       {
-        // For standalone blobs (like .iwd files), the archive itself stays on
-        // disk.
+        // Other archives stay as they are and have records of their own.
         //
         es.push_back (key (p));
       }
@@ -940,9 +919,6 @@ namespace launcher
                           "found {} orphaned database entries",
                           os.size ());
 
-    // If auto-pruning is enabled, we immediately strip the orphans from
-    // our tracking database.
-    //
     if (auto_prune && !os.empty ())
     {
       launcher::log::trace_l2 (categories::cache {},
@@ -968,8 +944,8 @@ namespace launcher
   string reconciler::
   key (const fs::path& p) const
   {
-    // Since root_ is already canonical (resolved once in the constructor), we
-    // only need to normalize the path lexically.
+    // Note that the paths we get are based on the canonical root (see
+    // path()), so lexical normalization is enough.
     //
     string r (p.lexically_normal ().string ());
 
@@ -999,8 +975,8 @@ namespace launcher
         f.mtime (),
         f.size ());
 
-      // The mtime is our primary heuristic. If it differs, the file was
-      // likely touched or replaced.
+      // A different modification time means the file was written since we
+      // recorded it.
       //
       if (get_file_mtime (p) != f.mtime ())
       {
@@ -1010,8 +986,8 @@ namespace launcher
         return false;
       }
 
-      // Depending on the configured strategy, we might also verify the file
-      // size. In pure timestamp mode, we skip this to save I/O overhead.
+      // Unless we only trust the modification time, compare the size as
+      // well.
       //
       if (strat_ == strategy::mixed || strat_ == strategy::hash)
       {

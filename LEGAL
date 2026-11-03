@@ -1,0 +1,10 @@
+This file contains additional (to the LICENSE.md file) notes and details on
+the copyright and/or license for the code.
+
+The launcher links the ODB runtime libraries, libodb and libodb-sqlite, which
+are copyright Code Synthesis and are licensed under the GNU General Public
+License, version 2. The launcher/launcher/pregenerated/launcher/cache/
+directory contains the database support code that the ODB compiler generates
+for the launcher. See the ODB License page for details:
+
+https://www.codesynthesis.com/products/odb/license.xhtml

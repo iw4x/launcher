@@ -1,3 +1,6 @@
+// Copyright (c) the IW4x authors (see the AUTHORS file).
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 #include <launcher/shortcut/shortcut-writer.hxx>
 
 #include <cstdlib>
@@ -14,6 +17,8 @@ namespace launcher
 {
   namespace
   {
+    // Escape the string value as the Desktop Entry Specification requires.
+    //
     string
     escape_value (const string& s)
     {
@@ -35,6 +40,9 @@ namespace launcher
       return r;
     }
 
+    // Quote the argument for the Exec key, escaping the characters that the
+    // specification reserves inside quotes.
+    //
     string
     escape_argument (const string& s)
     {
@@ -74,6 +82,9 @@ namespace launcher
       return nullopt;
     }
 
+    // Replace the file through a temporary one unless it already has this
+    // content. Return true if we wrote it.
+    //
     bool
     write_if_changed (const fs::path& p, const string& s)
     {
@@ -195,6 +206,8 @@ namespace launcher
     if (!c.icon.empty () && fs::exists (c.icon, ec))
       o << "Icon=" << escape_value (c.icon.string ()) << '\n';
 
+    // The launcher is a console program, so open it in a terminal.
+    //
     o << "Terminal=true\n"
       << "Categories=Game;ActionGame;\n";
 

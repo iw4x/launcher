@@ -1,3 +1,6 @@
+// Copyright (c) the IW4x authors (see the AUTHORS file).
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 #include <launcher/download/download-manager.hxx>
 
 #include <algorithm>
@@ -14,13 +17,15 @@ using namespace std;
 
 namespace launcher
 {
-  // How frequently we poll for completed tasks and top up the active set.
+  // Interval at which download_all() checks for finished tasks and starts the
+  // next ones.
   //
   constexpr chrono::milliseconds reap_interval {50};
 
-  // How frequently we poll while a download is paused.
+  // Interval at which a paused download checks if it should resume.
   //
   constexpr chrono::milliseconds pause_poll_interval {100};
+
   download_manager::
   download_manager (boost::asio::io_context& c,
                     size_t m)
@@ -189,7 +194,7 @@ namespace launcher
   {
     vector<shared_ptr<launcher::download_task>> r (tasks_);
 
-    // Keep the insertion order stable for tasks that share the same priority.
+    // Keep the tasks of the same priority in the order that they were added.
     //
     stable_sort (r.begin (), r.end (), [] (const auto& a, const auto& b)
     {
@@ -210,8 +215,7 @@ namespace launcher
     vector<shared_ptr<launcher::download_task>> a;
     size_t i (0);
 
-    // Seed the initial batch of active tasks. We strictly adhere to our
-    // concurrency limit to avoid swamping the io_context right out of the gate.
+    // Start the first max_parallel tasks, skipping the finished ones.
     //
     while (i < s.size () && a.size () < max_parallel_)
     {
@@ -228,11 +232,13 @@ namespace launcher
           boost::asio::detached);
     }
 
-    // Keep the queue hot until we run out of things to process.
+    // Keep starting tasks as the active ones finish until nothing is left.
+    //
+    // @@ We poll since the tasks don't notify us when they finish.
     //
     while (!a.empty () || i < s.size ())
     {
-      // Reap completed or failed tasks from our tracking vector.
+      // Drop the finished tasks from the active set.
       //
       a.erase (remove_if (a.begin (), a.end (), [this] (const auto& t)
       {
@@ -244,7 +250,7 @@ namespace launcher
         return d;
       }), a.end ());
 
-      // Top up the active list up to our allowed parallelism.
+      // As above.
       //
       while (i < s.size () && a.size () < max_parallel_)
       {
@@ -261,8 +267,6 @@ namespace launcher
             boost::asio::detached);
       }
 
-      // Yield back to the event loop so we aren't pointlessly spinning the CPU.
-      //
       boost::asio::steady_timer tm (ioc_, reap_interval);
       co_await tm.async_wait (boost::asio::use_awaitable);
     }
@@ -282,8 +286,7 @@ namespace launcher
 
     t->response.start_time = chrono::steady_clock::now ();
 
-    // The client traits expect our timeouts in milliseconds, so convert from
-    // the per-request seconds.
+    // Override the client timeouts with the request ones.
     //
     http_client_traits tr (traits_);
     tr.connect_timeout = chrono::duration_cast<chrono::milliseconds> (t->request.connect_timeout);
@@ -294,8 +297,7 @@ namespace launcher
 
     optional<uint64_t> r;
 
-    // Check if we have a partial payload lying around on disk that we can
-    // resume from.
+    // See if there is a partial target that we can resume.
     //
     if (t->request.resume && fs::exists (t->request.target))
     {
@@ -318,8 +320,7 @@ namespace launcher
         break;
       }
 
-      // Busy-wait if paused. The 100ms interval is arbitrary but responsive
-      // enough without being a drag on the reactor.
+      // Wait while paused. Note that we only pause between attempts.
       //
       while (t->should_pause ())
       {
@@ -362,10 +363,9 @@ namespace launcher
       }
       catch (const http_status_error& e)
       {
-        // The server returned 416 (Range Not Satisfiable). This usually means
-        // our local partial file is completely mangled or we actually already
-        // downloaded the whole thing and got confused trying to resume. Nuke
-        // the file and retry the exact same URL from scratch.
+        // If the server can't satisfy the range that we resume from, then
+        // the partial target is either corrupt or already complete. Either
+        // way, remove it and download from this URL again from scratch.
         //
         if (e.status () == http_status::range_not_satisfiable && r)
         {
@@ -373,12 +373,10 @@ namespace launcher
           fs::remove (t->request.target, ec);
           r = nullopt;
 
-          --i; // keep the index exactly where it is for the retry.
+          --i; // Retry the same URL.
           continue;
         }
 
-        // Fall through to generic error handling.
-        //
         string m (e.what ());
 
         if (i == t->request.urls.size () - 1)
@@ -404,7 +402,7 @@ namespace launcher
       {
         string m (e.what ());
 
-        // We've exhausted our list of fallback mirrors. Bail out.
+        // Fail if this was the last URL.
         //
         if (i == t->request.urls.size () - 1)
         {
@@ -415,9 +413,8 @@ namespace launcher
         }
         else
         {
-          // We have more URLs to try. Check the partial file size again in case
-          // this last failed attempt managed to write some bytes before blowing
-          // up.
+          // Otherwise, resume from whatever the failed attempt managed to
+          // write.
           //
           if (t->request.resume && fs::exists (t->request.target))
           {

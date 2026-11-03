@@ -1,3 +1,6 @@
+// Copyright (c) the IW4x authors (see the AUTHORS file).
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 #include <launcher/shortcut/shortcut-steam.hxx>
 
 #include <algorithm>
@@ -9,7 +12,7 @@
 #include <system_error>
 #include <thread>
 
-#include <boost/process.hpp>
+#include <boost/process/v1.hpp>
 #include <boost/process/v1/extend.hpp>
 
 #ifdef _WIN32
@@ -33,6 +36,8 @@ namespace launcher
   {
     constexpr const char* shortcuts_key = "shortcuts";
 
+    // Entry fields that we look up or correct.
+    //
     constexpr const char* field_app_id  = "appid";
     constexpr const char* field_name    = "AppName";
     constexpr const char* field_exe     = "Exe";
@@ -109,6 +114,9 @@ namespace launcher
       return d;
     }
 
+    // Replace the file through a temporary one, so that Steam never reads
+    // a partially written list.
+    //
     void
     write_file (const fs::path& p, const vector<char>& d)
     {
@@ -147,6 +155,8 @@ namespace launcher
       }
     }
 
+    // Return the key for a new entry, one past the largest numeric key.
+    //
     std::string
     next_key (const vdf_object& l)
     {
@@ -208,10 +218,13 @@ namespace launcher
     optional<steam_program>
     program (const fs::path& root);
 
+    // Start the program in its own process group (session on POSIX), so
+    // that it outlives us.
+    //
     bool
     run (const steam_program& p, const vector<string>& extra = {})
     {
-      namespace process = boost::process;
+      namespace process = boost::process::v1;
       namespace extend = boost::process::v1::extend;
 
       vector<string> as (p.args);
@@ -265,12 +278,18 @@ namespace launcher
       return !steam_shortcuts::running ();
     }
 
+    // Shortcut and the app id of its entry, which names its library images.
+    //
     struct entry_id
     {
       const shortcut_spec* spec;
       uint32_t app_id;
     };
 
+    // Copy the image unless the destination already has the same content.
+    // Return true if there is something to copy. If apply is false, then
+    // only check if there is.
+    //
     bool
     install_image (const fs::path& from, const fs::path& to, bool apply)
     {
@@ -327,6 +346,9 @@ namespace launcher
       return true;
     }
 
+    // Install the library images under the names that Steam derives from
+    // the app id. The return value and apply are as for install_image().
+    //
     bool
     install_artwork (const fs::path& grid, const entry_id& e, bool apply)
     {
@@ -347,6 +369,9 @@ namespace launcher
       return r;
     }
 
+    // Remove the library images of a removed entry. As above for the return
+    // value and apply.
+    //
     bool
     remove_artwork (const fs::path& grid, uint32_t app_id, bool apply)
     {
@@ -375,8 +400,8 @@ namespace launcher
       return r;
     }
 
-    // Steam numbers the entries consecutively from 0. Restore that after
-    // some were removed.
+    // Renumber the entries consecutively from 0, the way Steam keys them,
+    // after we have removed some.
     //
     void
     renumber (vdf_object& l)
@@ -396,10 +421,10 @@ namespace launcher
         l.set_object (std::to_string (i)) = std::move (es[i]);
     }
 
-    // Remove the entries earlier launchers added under names the shortcuts
-    // no longer carry, returning their app ids in stale. We recognize ours
-    // by the launch options rather than the executable, in case the
-    // installation has moved since.
+    // Remove the entries that earlier launchers added under the legacy
+    // names, returning their app ids in stale. Return true if we removed
+    // any. We recognize our entries by their launch options, which stay the
+    // same when the installation moves.
     //
     bool
     retire (vdf_object& l,
@@ -410,8 +435,8 @@ namespace launcher
 
       for (const shortcut_spec& c : cs)
       {
-        // Earlier launchers did not pass --no-shortcuts, so recognize
-        // either.
+        // Earlier launchers didn't pass --no-shortcuts, so we recognize
+        // both forms.
         //
         string opt (launch_options (c));
         string old (command_line (c.arguments));
@@ -443,6 +468,11 @@ namespace launcher
       return changed;
     }
 
+    // Add the missing entries and correct the fields that we control in
+    // the existing ones, leaving the rest to the user. Return the app id of
+    // each shortcut's entry in ids and of each removed entry in stale.
+    // Return true if the list changed.
+    //
     bool
     reconcile (vdf_object& l,
                const vector<shortcut_spec>& cs,
@@ -599,8 +629,8 @@ namespace launcher
   {
     optional<steam_program> p (program (r));
 
-    // Companion preloads its module into the native client, which a Flatpak
-    // one is not.
+    // The companion launcher starts Steam with its module preloaded, which
+    // only works for the native client. So we start Flatpak Steam directly.
     //
     error_code ec;
 
@@ -623,6 +653,14 @@ namespace launcher
     if (ps.empty ())
       return steam_status::no_users;
 
+    // Bring one list and its library images up to date. Return true if
+    // there is something to change. If apply is false, then only check if
+    // there is.
+    //
+    // Note that we leave a list alone if it doesn't serialize back to the
+    // same bytes since it must contain something that we don't understand
+    // and writing it back would lose that.
+    //
     auto pass ([&cs] (const fs::path& p, bool apply, bool& unreadable)
     {
       optional<vector<char>> d (read_file (p));
@@ -678,6 +716,8 @@ namespace launcher
       return changed;
     });
 
+    // See if there is anything to do before we close Steam.
+    //
     bool unreadable (false);
     bool work (false);
 
@@ -697,6 +737,8 @@ namespace launcher
       restart = true;
     }
 
+    // Restart Steam on scope exit, including due to an exception.
+    //
     struct relaunch
     {
       const fs::path& root;
@@ -785,6 +827,9 @@ namespace launcher
     }
   }
 
+  // Steam stores the pid of its client process in the registry while it
+  // runs and resets it to 0 on exit.
+  //
   bool steam_shortcuts::
   running ()
   {
@@ -807,6 +852,9 @@ namespace launcher
 
   namespace
   {
+    // Return the native and Flatpak installation locations, in the order of
+    // preference.
+    //
     vector<fs::path>
     candidate_roots ()
     {
@@ -855,7 +903,7 @@ namespace launcher
       if (r.string ().find ("/com.valvesoftware.Steam/") != string::npos)
         return steam_program {"flatpak", {"run", "com.valvesoftware.Steam"}};
 
-      string w (boost::process::search_path ("steam").string ());
+      string w (boost::process::v1::search_path ("steam").string ());
 
       if (!w.empty ())
         return steam_program {std::move (w), {}};
@@ -892,6 +940,9 @@ namespace launcher
       if (!(i >> v) || v <= 0)
         continue;
 
+      // See if the process exists. EPERM means it does but we may not
+      // signal it.
+      //
       if (kill (static_cast<pid_t> (v), 0) == 0 || errno == EPERM)
         return true;
     }

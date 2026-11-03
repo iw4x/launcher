@@ -482,8 +482,11 @@ namespace launcher
     const bool&
     version () const;
 
-    const bool&
+    const std::uint64_t&
     build2_metadata () const;
+
+    bool
+    build2_metadata_specified () const;
 
     const bool&
     prerelease () const;
@@ -566,7 +569,8 @@ namespace launcher
     public:
     bool help_;
     bool version_;
-    bool build2_metadata_;
+    std::uint64_t build2_metadata_;
+    bool build2_metadata_specified_;
     bool prerelease_;
     std::size_t jobs_;
     bool jobs_specified_;

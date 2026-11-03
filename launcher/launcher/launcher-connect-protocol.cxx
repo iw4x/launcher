@@ -1,3 +1,6 @@
+// Copyright (c) the IW4x authors (see the AUTHORS file).
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 #include <launcher/launcher-connect-protocol.hxx>
 
 #ifdef _WIN32
@@ -6,6 +9,7 @@
 #  include <windows.h>
 
 #  include <launcher/launcher-log.hxx>
+#  include <launcher/utility.hxx>
 #endif
 
 using namespace std;
@@ -15,13 +19,6 @@ namespace launcher
 #ifdef _WIN32
   namespace
   {
-    string
-    to_utf8 (const filesystem::path& p)
-    {
-      auto s (p.u8string ());
-      return string (s.begin (), s.end ());
-    }
-
     bool
     set_registry_string (const wchar_t* key_path,
                          const wchar_t* value_name,

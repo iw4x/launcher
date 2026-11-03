@@ -1,0 +1,32 @@
+# Copyright (c) the IW4x authors (see the AUTHORS file).
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+# Commonly-used variables setup and launcher command line.
+#
+
+# On startup the launcher changes into the directory of its executable and
+# uses it as the installation root. So a test that gets the launcher past
+# its options first clones it into the root/ subdirectory of its working
+# directory, which then becomes the installation root. Note that the clone
+# registers the copy for cleanup.
+#
+# We make the copy the test program so that $* runs it the same way as the
+# original, including through the test runner, if any.
+#
+launcher = [path] $0
+test = [path] "root/$leaf($launcher)"
+
+clone_launcher = [cmdline] mkdir root && cp $launcher root/
+
+# On Windows the copy also needs the DLLs of the in-tree dependencies. They
+# are in the assembly directory next to the original executable, which its
+# manifest names. Note that we symlink the directory since its entries are
+# relative symlinks that a copy would break.
+#
+if ($cxx.target.class == 'windows')
+  clone_launcher = [cmdline] $clone_launcher && ln -s "$(launcher).dlls" root/
+
+# Options that keep the launcher from reaching outside the installation
+# root (see launcher.cli for each).
+#
+offline = --skip-remote --no-shortcuts --no-connect-protocol

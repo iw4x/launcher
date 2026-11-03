@@ -1,50 +1,38 @@
-using in
+# Copyright (c) the IW4x authors (see the AUTHORS file).
+# SPDX-License-Identifier: GPL-3.0-or-later
 
-define cli: file
+# Development build. In this mode we regenerate the files kept in
+# launcher/pregenerated/ and update the copies if they have changed. In the
+# consumption build we compile the copies as they are, so that only
+# development requires the code generators.
+#
+config [bool] config.launcher.develop ?= false
 
-cli{*}: extension = cli
+develop = $config.launcher.develop
+
+# Suppress warnings coming from external libraries.
+#
+cxx.internal.scope = current
 
 cxx.std = latest
 
-using cc
+using cxx
 
 hxx{*}: extension = hxx
 ixx{*}: extension = ixx
 txx{*}: extension = txx
 cxx{*}: extension = cxx
 
-if ($cxx.target.system == 'win32-msvc')
-  cxx.poptions += -D_AMD64_
-
-if ($cxx.target.system == 'win32-msvc')
-  cxx.poptions += -DNOMINMAX
-
-if ($cxx.target.system == 'win32-msvc')
-  cxx.poptions += -D_CRT_SECURE_NO_WARNINGS -D_SCL_SECURE_NO_WARNINGS
-
-if ($cxx.target.system == 'win32-msvc')
-  cxx.poptions += -DWINVER=0x0A00 -D_WIN32_WINNT=0x0A00
-
-if ($cxx.target.system == 'win32-msvc')
-  cxx.coptions += /wd4251 /wd4275 /wd4800
-
-if ($cxx.target.system == 'win32-msvc')
-  cxx.coptions += /bigobj
-
-if ($cxx.target.system == 'mingw32')
-  cxx.coptions += -Wa,-mbig-obj
+# The maintainer scripts in etc/ are bash scripts.
+#
+using bash
 
 # The test target for cross-testing (running tests under Wine, etc).
 #
 test.target = $cxx.target
 
-# Pre-defined semantics to distinguish between development and consumption
-# builds.
-#
-config [bool] config.launcher.develop ?= false
-develop = $config.launcher.develop # shorthand
+if ($cxx.target.system == 'win32-msvc')
+  cxx.poptions += -D_CRT_SECURE_NO_WARNINGS -D_SCL_SECURE_NO_WARNINGS
 
-# Platform aliases for convenience.
-#
-tclass = $cxx.target.class
-tsys = $cxx.target.system
+if ($cxx.class == 'msvc')
+  cxx.coptions += /wd4251 /wd4275 /wd4800

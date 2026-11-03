@@ -1,3 +1,6 @@
+// Copyright (c) the IW4x authors (see the AUTHORS file).
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 #include <launcher/update/update-types.hxx>
 
 #include <cctype>
@@ -9,8 +12,10 @@ using namespace std;
 
 namespace launcher
 {
-  // Parse a distinct unsigned integer. Return nullopt if we are at the end or
-  // looking at garbage.
+  // Parse the decimal number at position p, advancing past it. Return
+  // nullopt if there is no digit at p.
+  //
+  // @@ We don't check for overflow.
   //
   static optional<uint64_t>
   parse_u64 (const string& s, size_t& p)
@@ -27,7 +32,7 @@ namespace launcher
     return r;
   }
 
-  // Check if the current char matches c and advance if it does.
+  // Skip the c character at position p. Return false if it is not there.
   //
   static bool
   parse_c (const string& s, size_t& p, char c)
@@ -43,14 +48,14 @@ namespace launcher
   int launcher_version::
   compare (const launcher_version& v) const noexcept
   {
-    // Standard semver precedence for the main components.
+    // Compare the major, minor, and patch numbers first.
     //
     if (major != v.major) return major < v.major ? -1 : 1;
     if (minor != v.minor) return minor < v.minor ? -1 : 1;
     if (patch != v.patch) return patch < v.patch ? -1 : 1;
 
-    // Now it gets tricky. We store pre-release as a unit16_t where 0 means
-    // "final release", but in semver, 1.0.0 is greater than 1.0.0-alpha.
+    // Now it gets a bit tricky: 0 in pre_release means a final release,
+    // which comes after every pre-release of the same version.
     //
     bool tr (pre_release == 0 && snapshot_sn == 0);
     bool vr (v.pre_release == 0 && v.snapshot_sn == 0);
@@ -60,9 +65,8 @@ namespace launcher
     if (tr != vr)
       return tr ? 1 : -1;
 
-    // Both are pre-releases (or both are releases). Since we map alpha to low
-    // numbers (1+) and beta to high numbers (500+), simple integer comparison
-    // works here.
+    // Both are pre-releases (or both are releases). Since betas are offset
+    // by 500, comparing the numbers puts alphas before betas.
     //
     if (pre_release != v.pre_release)
       return pre_release < v.pre_release ? -1 : 1;
@@ -81,8 +85,7 @@ namespace launcher
     ostringstream o;
     o << major << '.' << minor << '.' << patch;
 
-    // Map our internal representation back to string. Recall that we offset
-    // betas by 500 to keep the sort order sane in the integer member.
+    // Undo the beta offset (see pre_release).
     //
     if (pre_release > 0)
     {
@@ -160,7 +163,7 @@ namespace launcher
     if (!parse_c (s, p, '-'))
     {
       launcher::log::trace_l3 (categories::update{}, "unexpected character after patch version");
-      return v; // Return what we have so far
+      return v; // Return what we have so far.
     }
 
     // Parse pre-release type. We only support alpha (a) and beta (b).
@@ -181,7 +184,7 @@ namespace launcher
       return nullopt;
     }
 
-    // Map the pre-release number into our linearized space.
+    // Offset betas by 500 (see pre_release).
     //
     auto pn (parse_u64 (s, p));
     if (!pn || *pn > 499)
@@ -200,14 +203,14 @@ namespace launcher
       return v;
     }
 
-    // Build2 uses ".z" as a development snapshot placeholder (e.g.,
-    // "1.2.0-a.1.z"). Treat it as a minimal snapshot indicator so the version
-    // sorts correctly.
+    // The .z placeholder stands for the snapshot of a development version
+    // (e.g., 1.2.0-a.1.z). Give it the smallest sequence number, so that it
+    // sorts as a snapshot.
     //
     if (p < s.size () && (s[p] == 'z' || s[p] == 'Z'))
     {
       ++p;
-      v.snapshot_sn = 1; // any non-zero value to mark it as a snapshot
+      v.snapshot_sn = 1; // Smallest snapshot.
       launcher::log::trace_l3 (categories::update{}, "parsed build2 placeholder '.z' snapshot version: {}", v.string ());
       return v;
     }
@@ -223,8 +226,8 @@ namespace launcher
 
     v.snapshot_sn = *sn;
 
-    // If there is anything left after the dot, treat it as the snapshot ID.
-    // We stop at typical delimiters just in case.
+    // Whatever follows the next dot is the snapshot id. We stop at the
+    // delimiters that could follow it, for good measure.
     //
     if (p < s.size () && parse_c (s, p, '.'))
     {

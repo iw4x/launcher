@@ -1,0 +1,187 @@
+# Copyright (c) the IW4x authors (see the AUTHORS file).
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+# Each test that touches the Steam installation makes its working directory
+# the home directory, which holds the installation with the signed-in
+# account 12345.
+
+: app-id
+: Test the app ids Steam assigns to non-Steam game shortcuts
+:
+{{
+  $* app-id '"/opt/iw4x/iw4x.exe"' 'IW4x'       >'-1365444880' : iw4x
+  $* app-id '"/opt/other/game"'    'Other Game' >'-773787321'  : other
+}}
+
+: home
+: Test refusing to look for Steam outside the working directory
+:
+$* lists 2>'error: HOME is not the current working directory' != 0
+
+: lists
+: Test that only the accounts with numeric ids other than 0 are listed
+:
+{
+  mkdir --no-cleanup -p .steam/steam/userdata/0 .steam/steam/userdata/abc \
+                        .steam/steam/userdata/12345 .steam/steam/userdata/678
+  touch --no-cleanup .steam/steam/userdata/999
+
+  env "HOME=$~" -- $* lists >>EOO &.steam/***
+    .steam/steam/userdata/12345/config/shortcuts.vdf
+    .steam/steam/userdata/678/config/shortcuts.vdf
+    EOO
+}
+
+: write
+:
+{{
+  +cat <<EOI >=iw4x
+    name IW4x
+    target /opt/iw4x/iw4x.exe
+    directory /opt/iw4x
+    argument --arch
+    argument x86
+    legacy IW4x (x86)
+    EOI
+
+  : new
+  :
+  {
+    mkdir --no-cleanup -p .steam/steam/userdata/12345
+
+    env "HOME=$~" -- $* write <=../iw4x >>EOO &.steam/***
+      updated
+      .steam/steam/userdata/12345/config/shortcuts.vdf
+        0
+          appid -1365444880
+          AppName IW4x
+          Exe "/opt/iw4x/iw4x.exe"
+          StartDir /opt/iw4x/
+          LaunchOptions --arch x86 --no-shortcuts
+      EOO
+  }
+
+  : up-to-date
+  : Test leaving the matching entry alone
+  :
+  {
+    mkdir --no-cleanup -p .steam/steam/userdata/12345
+
+    env "HOME=$~" -- $* write <=../iw4x >- &.steam/***
+    env "HOME=$~" -- $* write <=../iw4x >>~/EOO/
+      up to date
+      /.*/*
+      EOO
+  }
+
+  : correct
+  : Test correcting the entry of a moved installation, keeping its app id
+  :
+  {
+    mkdir --no-cleanup -p .steam/steam/userdata/12345
+
+    env "HOME=$~" -- $* write <=../iw4x >- &.steam/***
+
+    sed -e 's%/opt/iw4x%/srv/iw4x%' ../iw4x | \
+    env "HOME=$~" -- $* write >>EOO
+      updated
+      .steam/steam/userdata/12345/config/shortcuts.vdf
+        0
+          appid -1365444880
+          AppName IW4x
+          Exe "/srv/iw4x/iw4x.exe"
+          StartDir /srv/iw4x/
+          LaunchOptions --arch x86 --no-shortcuts
+      EOO
+  }
+
+  : retire
+  : Test replacing the entry under a legacy name, keeping other entries
+  :
+  {
+    mkdir --no-cleanup -p .steam/steam/userdata/12345
+
+    env "HOME=$~" -- $* write <<EOI >- &.steam/***
+      name IW4x (x86)
+      target /opt/iw4x/iw4x.exe
+      directory /opt/iw4x
+      argument --arch
+      argument x86
+
+      name Other Game
+      target /opt/other/game
+      directory /opt/other
+      EOI
+
+    env "HOME=$~" -- $* write <=../iw4x >>EOO
+      updated
+      .steam/steam/userdata/12345/config/shortcuts.vdf
+        0
+          appid -773787321
+          AppName Other Game
+          Exe "/opt/other/game"
+          StartDir /opt/other/
+          LaunchOptions --no-shortcuts
+        1
+          appid -1365444880
+          AppName IW4x
+          Exe "/opt/iw4x/iw4x.exe"
+          StartDir /opt/iw4x/
+          LaunchOptions --arch x86 --no-shortcuts
+      EOO
+  }
+
+  : quote
+  : Test quoting the launch option arguments with spaces
+  :
+  {
+    mkdir --no-cleanup -p .steam/steam/userdata/12345
+
+    env "HOME=$~" -- $* write <<EOI >>EOO &.steam/***
+      name IW4x
+      target /opt/iw4x/iw4x.exe
+      directory /opt/iw4x
+      argument --game-exe
+      argument iw4x (mm).exe
+      EOI
+      updated
+      .steam/steam/userdata/12345/config/shortcuts.vdf
+        0
+          appid -1365444880
+          AppName IW4x
+          Exe "/opt/iw4x/iw4x.exe"
+          StartDir /opt/iw4x/
+          LaunchOptions --game-exe "iw4x (mm).exe" --no-shortcuts
+      EOO
+  }
+
+  : artwork
+  : Test installing the library artwork named after the app id
+  :
+  {
+    mkdir --no-cleanup -p .steam/steam/userdata/12345
+    echo 'png' >=cover.png
+
+    cat ../iw4x - <<EOI | env "HOME=$~" -- $* write >- &.steam/***
+      cover cover.png
+      EOI
+
+    cat .steam/steam/userdata/12345/config/grid/2929522416p.png >'png'
+  }
+
+  : no-users
+  :
+  {
+    mkdir -p .steam/steam/userdata/0
+
+    env "HOME=$~" -- $* write <=../iw4x >>EOO
+      no signed-in accounts
+      EOO
+  }
+
+  : not-installed
+  :
+  env "HOME=$~" -- $* write <=../iw4x >>EOO
+    not installed
+    EOO
+}}

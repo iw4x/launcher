@@ -1,0 +1,107 @@
+# Copyright (c) the IW4x authors (see the AUTHORS file).
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+# Each test uses its working directory as the installation root.
+
+: migrate-clients
+:
+{{
+  : x86
+  :
+  {
+    touch --no-cleanup 'iw4x (x86).exe'
+
+    $* migrate-clients &iw4x.exe
+
+    test -f 'iw4x (x86).exe' == 1
+  }
+
+  : x64
+  :
+  {
+    touch --no-cleanup 'iw4x (x64).exe'
+
+    $* migrate-clients &'iw4x (mm).exe'
+
+    test -f 'iw4x (x64).exe' == 1
+  }
+
+  : existing
+  : Test keeping the legacy client if the current one already exists
+  :
+  {
+    touch 'iw4x (x86).exe' iw4x.exe
+
+    $* migrate-clients
+
+    test -f 'iw4x (x86).exe'
+  }
+}}
+
+: retire
+:
+{{
+  : file
+  :
+  {
+    touch --no-cleanup iw4x.dll
+
+    $* retire iw4x.dll >'true' &cache/***
+
+    test -f iw4x.dll == 1
+    find cache/retired -type f >~'%cache[/\\]retired[/\\]\d+_\d+_iw4x\.dll%'
+  }
+
+  : missing
+  : Test handling of a file that does not exist
+  :
+  $* retire iw4x.dll >'false' &cache/***
+}}
+
+: remove-retired
+:
+{
+  mkdir --no-cleanup -p cache/retired
+  touch --no-cleanup cache/retired/iw4x.dll
+
+  $* remove-retired &cache/***
+
+  test -f cache/retired/iw4x.dll == 1
+}
+
+: reset-cache
+:
+{{
+  : new
+  : Test creating the cache in an empty installation
+  :
+  {
+    $* reset-cache '1.0.0' >'true' &cache/***
+
+    test -f cache/iw4x.db
+  }
+
+  : same
+  : Test keeping the cache of the same version
+  :
+  {
+    $* reset-cache '1.0.0' >'true' &cache/***
+    touch --no-cleanup cache/kept
+
+    $* reset-cache '1.0.0' >'false'
+
+    test -f cache/kept
+  }
+
+  : other
+  : Test wiping the cache of another version
+  :
+  {
+    $* reset-cache '1.0.0' >'true' &cache/***
+    touch --no-cleanup cache/stale
+
+    $* reset-cache '2.0.0' >'true'
+
+    test -f cache/stale == 1
+  }
+}}

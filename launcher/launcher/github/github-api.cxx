@@ -1,3 +1,6 @@
+// Copyright (c) the IW4x authors (see the AUTHORS file).
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 #include <launcher/github/github-api.hxx>
 
 #include <stdexcept>
@@ -32,9 +35,7 @@ namespace launcher
   uint64_t github_rate_limit::
   seconds_until_reset () const
   {
-    // Figure out how many seconds are left until the reset epoch. We use the
-    // system clock since the GitHub API returns absolute UNIX timestamps for
-    // rate limit resets.
+    // Note that the reset time is a UNIX time, so we need the system clock.
     //
     auto now (chrono::system_clock::now ());
     auto sec (
@@ -48,8 +49,6 @@ namespace launcher
   bool github_response::
   success () const
   {
-    // Anything in the 2xx range is considered a successful HTTP response.
-    //
     return status_code >= 200 && status_code < 300;
   }
 
@@ -62,9 +61,6 @@ namespace launcher
   bool github_response::
   is_rate_limited () const
   {
-    // 403 Forbidden is often used by GitHub for standard rate limits, while 429
-    // Too Many Requests is used for secondary limits.
-    //
     return status_code == 403 || status_code == 429;
   }
 
@@ -85,10 +81,6 @@ namespace launcher
   {
     user_type u;
 
-    // Map user fields if we got a valid object. We verify presence first
-    // because GitHub API responses can sometimes omit fields depending on
-    // context (e.g., partial user objects in commit authors).
-    //
     if (v.is_object ())
     {
       const auto& o (v.as_object ());
@@ -120,9 +112,8 @@ namespace launcher
   {
     repository_type r;
 
-    // Map the JSON repository structure. Note that some fields like description
-    // can be explicitly null in the GitHub API response, so we must check for
-    // that before casting to a string.
+    // Note that GitHub sends null for some fields, the description for
+    // example, so check for that as well.
     //
     if (v.is_object ())
     {
@@ -210,8 +201,7 @@ namespace launcher
   {
     release_type r;
 
-    // Parse main release details. Similar to repository descriptions, the name
-    // and body fields might be null for untagged or empty releases.
+    // As above.
     //
     if (v.is_object ())
     {
@@ -253,9 +243,6 @@ namespace launcher
       if (o.contains ("zipball_url") && !o.at ("zipball_url").is_null ())
         r.zipball_url = json::value_to<string> (o.at ("zipball_url"));
 
-      // Also grab embedded assets if present. A release doesn't strictly need
-      // to have assets (e.g., tag-only releases).
-      //
       if (o.contains ("assets") && o.at ("assets").is_array ())
       {
         for (const auto& a : o.at ("assets").as_array ())
@@ -284,9 +271,9 @@ namespace launcher
       if (o.contains ("html_url"))
         c.html_url = json::value_to<string> (o.at ("html_url"));
 
-      // Dig into the nested commit object. The top-level author is the GitHub
-      // account, but the nested commit.author is the raw git author data. We
-      // try to stitch them together logically here.
+      // The top-level author is the GitHub account and commit.author is the
+      // git author. Use the git author name as the login, which the account
+      // below overrides if the author has one.
       //
       if (o.contains ("commit") && o.at ("commit").is_object ())
       {
@@ -349,9 +336,7 @@ namespace launcher
       if (o.contains ("html_url"))
         i.html_url = json::value_to<string> (o.at ("html_url"));
 
-      // Pull out label names. We just flatten this into an array of strings
-      // rather than maintaining the full label object since we usually just
-      // care about the tag text.
+      // We only keep the label names.
       //
       if (o.contains ("labels") && o.at ("labels").is_array ())
       {
@@ -573,7 +558,7 @@ namespace launcher
   {
     traits_.proxy_url = move (u);
 
-    // Force client reconstruction with new proxy settings.
+    // The client takes the proxy on construction, so recreate it.
     //
     client_.reset ();
   }
@@ -596,10 +581,6 @@ namespace launcher
   void github_api::
   add_default_headers (http_request& req) const
   {
-    // Inject required GitHub API headers if they are missing. The API requires
-    // a User-Agent, and the version header is recommended to prevent breakages
-    // on API updates.
-    //
     if (!req.has_header ("User-Agent"))
       req.set_header ("User-Agent", traits_type::user_agent ());
 
@@ -609,14 +590,10 @@ namespace launcher
     if (!req.has_header ("X-GitHub-Api-Version"))
       req.set_header ("X-GitHub-Api-Version", traits_type::api_version ());
 
-    // Automatically append the bearer token if we have one globally set.
-    //
     if (token_ && !req.has_header ("Authorization"))
       req.set_bearer_token (*token_);
   }
 
-  // Map github_request::method_type to http_method.
-  //
   static http_method
   to_http_method (github_request::method_type m)
   {
@@ -640,9 +617,7 @@ namespace launcher
     res.status_code = r.status_code ();
     res.body = r.body.value_or (string ());
 
-    // Normalize header names to lowercase. This makes it easier to reliably
-    // look up things like rate limit boundaries later without worrying about
-    // case variations.
+    // Lower-case the header names so that we can look them up.
     //
     for (auto it (r.headers.begin ()); it != r.headers.end (); ++it)
     {
@@ -655,13 +630,10 @@ namespace launcher
       res.headers[move (n)] = it->value;
     }
 
-    // Keep track of our global limits for subsequent queries.
-    //
     res.rate_limit = extract_rate_limit (res.headers);
 
-    // If the request failed, try to parse a meaningful error message from the
-    // returned JSON payload. If we fail to parse it, fallback to simply
-    // reporting the HTTP status code.
+    // On failure get the message from the JSON body or, if it is not JSON,
+    // use the status code.
     //
     if (!res.success ())
     {
@@ -684,15 +656,14 @@ namespace launcher
   asio::awaitable<github_api::response_type> github_api::
   execute (request_type req)
   {
-    // Bail or wait upfront if we already know our rate limit is completely
-    // exhausted from a prior request. No sense in hammering the server just to
-    // get a 403.
+    // If the previous response exhausted the rate limit, then wait it out
+    // instead of making a request that is bound to fail.
     //
     if (last_rate_limit_ && last_rate_limit_->is_exceeded ())
       co_await handle_rate_limit (*last_rate_limit_);
 
-    // Build the full URL. The github_request stores just the endpoint path
-    // (e.g. "/repos/iw4x/launcher/releases"), so we prepend the API base.
+    // The endpoint is normally a full URL (see github_endpoint) but can also
+    // be a path relative to the API base.
     //
     string u (req.url ());
     const string pre (endpoint_type::api_base);
@@ -703,19 +674,13 @@ namespace launcher
     else
       full_url = pre + u;
 
-    // Build the http_request from the github_request.
-    //
     http_request hr (to_http_method (req.method), full_url);
 
-    // Copy caller-provided headers.
-    //
     for (const auto& [k, v] : req.headers)
       hr.set_header (k, v);
 
     add_default_headers (hr);
 
-    // Allow request-specific tokens to override the global one.
-    //
     if (req.token)
       hr.set_bearer_token (*req.token);
 
@@ -724,9 +689,6 @@ namespace launcher
 
     hr.normalize ();
 
-    // Perform the request via http_client. We don't follow redirects for API
-    // calls (GitHub API doesn't redirect JSON endpoints).
-    //
     http_client& c (ensure_client ());
 
     response_type res;
@@ -745,8 +707,9 @@ namespace launcher
       res.error_message = e.what ();
     }
 
-    // See if we got slapped with a rate limit mid-flight. If we did, we parse
-    // the waiting period and retry automatically.
+    // If we are rate limited, wait it out and retry once.
+    //
+    // @@ A 403 for any other reason also ends up waiting.
     //
     if (res.is_rate_limited ())
     {
@@ -756,9 +719,9 @@ namespace launcher
       }
       else
       {
-        // If we hit a secondary limit (429) or the standard headers are weirdly
-        // absent, we fall back to checking 'retry-after' or default to a safe
-        // 60-second backoff.
+        // For a secondary limit the headers don't show an exhausted limit,
+        // so wait for the retry-after header seconds or a minute if there is
+        // none.
         //
         github_rate_limit rl;
         rl.remaining = 0;
@@ -787,8 +750,6 @@ namespace launcher
         co_await handle_rate_limit (rl);
       }
 
-      // We waited. Try the exact same request one more time.
-      //
       try
       {
         http_response raw (co_await c.request (hr));
@@ -1074,10 +1035,6 @@ namespace launcher
       return false;
     };
 
-    // Try to pull all standard rate limit headers out of the response. GitHub
-    // almost always provides these unless we hit a catastrophic edge case or a
-    // secondary limit (429) that doesn't respect the typical payload format.
-    //
     if (extract ("x-ratelimit-limit", l.limit))         f = true;
     if (extract ("x-ratelimit-remaining", l.remaining)) f = true;
     if (extract ("x-ratelimit-reset", l.reset))         f = true;
@@ -1089,9 +1046,7 @@ namespace launcher
   asio::awaitable<void> github_api::
   handle_rate_limit (const github_rate_limit& l)
   {
-    // Wait it out if we crossed the line. We pad the sleep with 1 extra
-    // second to make sure we don't accidentally fire the request slightly
-    // before the server clock ticks over the threshold.
+    // Wait an extra second in case our clock is ahead of the server's.
     //
     if (l.is_exceeded ())
     {

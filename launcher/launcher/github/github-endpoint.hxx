@@ -1,3 +1,6 @@
+// Copyright (c) the IW4x authors (see the AUTHORS file).
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 #pragma once
 
 #include <string>
@@ -5,20 +8,19 @@
 
 namespace launcher
 {
-  // GitHub API endpoint builder.
+  // GitHub REST API endpoint URLs, for example:
   //
-  // Constructs GitHub REST API endpoint URLs following the pattern:
-  // https://api.github.com/<path>
+  // https://api.github.com/repos/<owner>/<repo>/releases
+  //
+  // Note that the arguments are used as is, without encoding.
   //
   class github_endpoint
   {
   public:
-    // API base URL.
-    //
     static constexpr const char* api_host = "api.github.com";
     static constexpr const char* api_base = "https://api.github.com";
 
-    // Repository endpoints.
+    // Repository.
     //
     static std::string
     repo (const std::string& owner, const std::string& repo);
@@ -26,6 +28,8 @@ namespace launcher
     static std::string
     repo_releases (const std::string& owner, const std::string& repo);
 
+    // Note that the latest release is never a draft or a pre-release.
+    //
     static std::string
     repo_release_latest (const std::string& owner, const std::string& repo);
 
@@ -66,7 +70,7 @@ namespace launcher
                 const std::string& repo,
                 std::uint64_t number);
 
-    // User endpoints.
+    // User and organization.
     //
     static std::string
     user (const std::string& username);
@@ -74,21 +78,17 @@ namespace launcher
     static std::string
     user_repos (const std::string& username);
 
-    // Organization endpoints.
-    //
     static std::string
     org (const std::string& org);
 
     static std::string
     org_repos (const std::string& org);
 
-    // Authenticated user endpoints.
+    // User that the request token belongs to.
     //
     static std::string
     user_authenticated ();
 
-    // Rate limit endpoint.
-    //
     static std::string
     rate_limit ();
   };

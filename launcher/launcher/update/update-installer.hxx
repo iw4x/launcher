@@ -1,3 +1,6 @@
+// Copyright (c) the IW4x authors (see the AUTHORS file).
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 #pragma once
 
 #include <boost/asio.hpp>
@@ -17,23 +20,27 @@ namespace launcher
   namespace asio = boost::asio;
   namespace fs = std::filesystem;
 
+  // Outcome of update_installer::install(). The paths are those of the
+  // replaced executable and its backup, as far as we got.
+  //
   struct update_result
   {
     bool success = false;
-    std::string error_message;
+    std::string error_message; // If not successful.
     fs::path installed_path;
     fs::path backup_path;
 
     explicit operator bool () const noexcept { return success; }
   };
 
-  // We need to handle the update process carefully to avoid leaving the user
-  // with a broken (partial) installation. The general strategy is
-  // side-by-side installation: we download and extract to a temp spot, and
-  // only touch the real installation once we have verified the bits.
+  // Launcher self-update from a release asset.
+  //
+  // We need to be careful not to leave the user with a broken launcher. So
+  // we download and extract in a temporary location and only touch the
+  // installed executable once we have the new one in hand.
   //
   // Windows makes this tricky because we can't overwrite a running
-  // executable. So the dance is: rename current -> backup, move new ->
+  // executable. So the dance is: rename current -> backup, rename new ->
   // current.
   //
   class update_installer
@@ -44,10 +51,6 @@ namespace launcher
                           double progress,
                           const std::string& message)>;
 
-    // We keep the context to schedule our async work and the http client
-    // because we need to reuse connections and settings across the download
-    // phase.
-    //
     explicit
     update_installer (asio::io_context& ioc);
 
@@ -57,19 +60,16 @@ namespace launcher
     // Configuration.
     //
 
-    // Set progress callback for status updates.
-    //
     void
     set_progress_callback (progress_callback_type callback);
 
-    // By default we use system temp. If the user wants us to keep the dirty
-    // laundry somewhere else, they can override it here.
+    // Download and extract in dir. By default it is the system temporary
+    // directory or, if we cannot determine it, the current directory.
     //
     void
     set_download_directory (fs::path dir);
 
-    // If true, we double-check the content length. Usually a good idea
-    // unless the server is misbehaving or we are testing locally.
+    // @@ Nothing reads this setting.
     //
     void
     set_verify_size (bool verify);
@@ -77,39 +77,35 @@ namespace launcher
     // Mechanics.
     //
 
-    // The main driver. We assume 'i' contains a valid URL. We don't catch
-    // exceptions here. That is, we let them propagate up so the caller can
-    // decide if they want to retry or abort.
-    //
-    // Note that we return a result struct rather than throwing on logic
-    // errors (like hash mismatch) because those are expected runtime outcomes
-    // we want to display.
+    // Replace the running launcher executable with the one in the release
+    // asset, keeping a backup. Report failures in the result, which is what
+    // the caller displays.
     //
     asio::awaitable<update_result>
     install (const update_info& info);
 
-    // Try to undo the damage. This is a best-effort attempt to move the
-    // backup file back to the original location.
+    // Move the backup back over the installed executable. Return false if
+    // there is no backup or we could not restore it.
     //
     bool
     rollback (const update_result& result);
 
-    // We try to clean up the staging area. We are doing this manually to
-    // inspect the debris if the install fails.
+    // Remove the downloaded archive and the extracted files, ignoring
+    // errors.
     //
     void
     cleanup ();
 
-    // Restart logic
+    // Restart.
     //
 
-    // Scheduling a restart is OS-specific hell. On POSIX we could just
-    // exec(), but on Windows we need to spawn a batch script to handle the
-    // delay while this process dies.
+    // Start the new launcher with the arguments, normally the ones that we
+    // were started with, so that options such as --arch survive the update.
+    // Return false on failure.
     //
-    // The new launcher is started with the given arguments, normally the
-    // ones this process was started with, so that options such as --arch
-    // survive the update.
+    // On POSIX we replace this process (exec), so we only return on failure.
+    // On Windows we start a batch script that gives us 2 seconds to exit
+    // before starting the new launcher, so the caller should exit.
     //
     bool
     schedule_restart (const fs::path& new_launcher_path,
@@ -118,48 +114,45 @@ namespace launcher
     // Path.
     //
 
-    // Get the path to the currently running launcher executable.
+    // Return the path of the running launcher executable.
     //
     static fs::path
     current_executable_path ();
 
-    // Get the backup path for the current executable.
+    // Return the backup path for the executable (<original>.backup).
     //
     static fs::path
     backup_path (const fs::path& original);
 
-    // Get the temporary path for the new executable during installation.
+    // Return the path that the new executable is copied to before it
+    // replaces the original (<original>.new).
     //
     static fs::path
     staging_path (const fs::path& original);
 
   private:
-    // Just fetch the bytes. We stream this to disk to keep memory usage low,
-    // as the update bundle might be hefty.
+    // Download the asset into the download directory and return its path.
+    // We stream it to disk since the archive can be hefty.
     //
     asio::awaitable<fs::path>
     download_archive (const update_info& info);
 
-    // Extract the launcher binary from the archive.
+    // Extract the archive and return the path of the launcher executable in
+    // it. We use the tar program for .tar.xz.
     //
     asio::awaitable<fs::path>
     extract_launcher (const fs::path& archive_path,
                       const update_info& info);
 
-    // Perform safe replacement of the launcher binary.
-    //
-    // Uses a two-step process:
-    // 1. Rename current to backup
-    // 2. Rename new to current
-    //
-    // If step 2 fails, restores from backup.
+    // Replace the target with the new executable, keeping the old one as the
+    // backup. We first copy the new one next to the target (see
+    // staging_path()), so that the replacement is a rename within one
+    // directory. If installing fails, then restore the backup.
     //
     update_result
     replace_launcher (const fs::path& new_binary,
                       const fs::path& target);
 
-    // Report progress.
-    //
     void
     report_progress (update_state state,
                      double progress,

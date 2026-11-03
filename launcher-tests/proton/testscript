@@ -1,0 +1,53 @@
+# Copyright (c) the IW4x authors (see the AUTHORS file).
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+# Each test lays out a Steam installation with a Proton directory, holding
+# the proton script, for every release that it lists.
+
+: numeric
+: Test preferring the newest numbered release
+:
+{
+  for n: 'Proton 9.0' 'Proton 10.0'
+  {
+    mkdir -p "steamapps/common/$n"
+    touch "steamapps/common/$n/proton"
+  }
+
+  $* $~ >>EOO
+    Proton 10.0
+    Proton 9.0
+    EOO
+}
+
+: hotfix
+: Test preferring numbered releases to Proton Hotfix
+:
+{
+  for n: 'Proton Hotfix' 'Proton 9.0'
+  {
+    mkdir -p "steamapps/common/$n"
+    touch "steamapps/common/$n/proton"
+  }
+
+  $* $~ >>EOO
+    Proton 9.0
+    Proton Hotfix
+    EOO
+}
+
+: experimental
+: Test preferring Proton Experimental to numbered releases
+:
+{
+  for n: 'Proton 10.0' 'Proton - Experimental'
+  {
+    mkdir -p "steamapps/common/$n"
+    touch "steamapps/common/$n/proton"
+  }
+
+  $* $~ >>EOO
+    Proton - Experimental
+    Proton 10.0
+    EOO
+}

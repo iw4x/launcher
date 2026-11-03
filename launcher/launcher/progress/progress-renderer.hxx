@@ -1,3 +1,6 @@
+// Copyright (c) the IW4x authors (see the AUTHORS file).
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 #pragma once
 
 #include <launcher/progress/progress-types.hxx>
@@ -28,6 +31,8 @@ namespace launcher
     }
   };
 
+  // Everything that the renderer draws in a frame.
+  //
   struct progress_render_context
   {
     std::vector<progress_item> items;
@@ -44,6 +49,11 @@ namespace launcher
     progress_render_context () = default;
   };
 
+  // Full-screen terminal UI that draws the latest context on its own thread.
+  //
+  // The update() function swaps in the new context and asks the UI to
+  // redraw.
+  //
   class progress_renderer
   {
   public:

@@ -1,3 +1,6 @@
+// Copyright (c) the IW4x authors (see the AUTHORS file).
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 #include <launcher/download/download-types.hxx>
 
 using namespace std;
@@ -7,9 +10,7 @@ namespace launcher
   ostream&
   operator<< (ostream& os, download_state s)
   {
-    // Omit the default case to let the compiler warn us about unhandled
-    // enumerators. Saves us from forgetting to update this when a new state is
-    // added.
+    // Note: no default so that the compiler warns about a new state.
     //
     switch (s)
     {
@@ -46,17 +47,13 @@ namespace launcher
       speed_bps (s),
       progress_percent (t > 0 ? (d * 100.0) / t : 0.0)
   {
-    // Compute the percentage upfront so we don't have to do it on the fly
-    // everywhere. Make sure to guard against a zero total, which is common for
-    // chunked transfers and missing content length headers.
-    //
   }
 
   bool
   download_progress::completed () const
   {
-    // We use >= rather than == since the actual downloaded amount might
-    // overshoot the advertised total if the server sent a bad header.
+    // Note that a server can send less than it actually transfers in the
+    // content length, so we can overshoot the total.
     //
     return total_bytes > 0 && downloaded_bytes >= total_bytes;
   }
@@ -78,9 +75,6 @@ namespace launcher
   bool
   download_error::empty () const
   {
-    // Consider the error empty if there is no message. The url and code
-    // are merely auxiliary context.
-    //
     return message.empty ();
   }
 
@@ -89,8 +83,7 @@ namespace launcher
   {
     os << e.message;
 
-    // Only print the URL and code if we actually have them to avoid cluttering
-    // the output with empty brackets or zeros.
+    // Print the URL and the code only if we have them.
     //
     if (!e.url.empty ())
       os << " [url: " << e.url << "]";

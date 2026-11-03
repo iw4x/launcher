@@ -1,3 +1,6 @@
+// Copyright (c) the IW4x authors (see the AUTHORS file).
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 #include <launcher/launcher-log.hxx>
 
 #include <string>
@@ -30,7 +33,7 @@ namespace launcher
     Backend::start ({
       .enable_yield_when_idle               = true,
       .sleep_duration                       = 0ns,
-      .wait_for_queues_to_empty_before_exit = false,
+      .wait_for_queues_to_empty_before_exit = true,
       .check_printable_char                 = {},
       .log_level_short_codes                =
       {
@@ -52,6 +55,9 @@ namespace launcher
       "%H:%M:%S.%Qms",
       Timezone::LocalTime);
 
+    // Note that this is the launcher category logger, which its registration
+    // below gets as is, with the console sink.
+    //
     Logger* l (Frontend::create_or_get_logger ("launcher",
                                                {cs, fs},
                                                pf,
@@ -121,9 +127,8 @@ namespace launcher
                          pf,
                          log::policy<update>::threshold);
 
-    // In development builds, drop the runtime threshold on every category so
-    // trace statements compiled in by the minimum-level guard actually reach
-    // the sinks.
+    // In the development build lower the threshold of every category to the
+    // lowest severity so that we get the whole trace (see log-severity.hxx).
     //
 #if LAUNCHER_DEVELOP
     log::detail::logger<launcher> ()->set_log_level (LogLevel::TraceL3);

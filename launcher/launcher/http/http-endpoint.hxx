@@ -1,3 +1,6 @@
+// Copyright (c) the IW4x authors (see the AUTHORS file).
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 #pragma once
 
 #include <map>
@@ -10,6 +13,9 @@
 
 namespace launcher
 {
+  // Endpoint URL made of a base URL and a path pattern with {<name>}
+  // placeholders, for example, /repos/{owner}/{repo}.
+  //
   class http_endpoint
   {
   public:
@@ -24,9 +30,15 @@ namespace launcher
                    std::string pattern,
                    http_method method = http_method::get);
 
+    // Return the base URL and the path, joined with a single /, with the
+    // placeholders replaced with the parameter values. Throw
+    // std::invalid_argument if a placeholder has no value.
+    //
     std::string
     build_url (const std::map<std::string, std::string>& params) const;
 
+    // As above but for a pattern without placeholders.
+    //
     std::string
     build_url () const;
 

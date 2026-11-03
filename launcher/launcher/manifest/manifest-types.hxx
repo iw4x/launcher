@@ -1,3 +1,6 @@
+// Copyright (c) the IW4x authors (see the AUTHORS file).
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 #pragma once
 
 #include <string>
@@ -9,23 +12,19 @@ namespace launcher
 {
   namespace fs = std::filesystem;
 
-  // Manifest format kinds.
+  // Kind of manifest, which determines the fields that we parse.
   //
   enum class manifest_format
   {
-    update,     // Update manifest (update.json)
-    dlc         // DLC manifest
+    update,     // Archives and files.
+    dlc         // Files only.
   };
 
-  // Hash algorithm types.
-  //
   enum class hash_algorithm
   {
     blake3
   };
 
-  // File compression types.
-  //
   enum class compression_type
   {
     none,
@@ -34,15 +33,14 @@ namespace launcher
     tar_bz2
   };
 
-  // Compute hash of file.
-  //
-  // Reads the entire file and computes its hash.
+  // Return the hash of the file contents in lower-case hex. Throw
+  // std::runtime_error if the file cannot be read.
   //
   std::string
   compute_file_hash (const fs::path& file,
                      hash_algorithm algorithm);
 
-  // Compare two hashes (case-insensitive).
+  // Return true if the hashes are equal, ignoring the case.
   //
   bool
   compare_hashes (const std::string& hash1,

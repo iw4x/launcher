@@ -1,3 +1,6 @@
+// Copyright (c) the IW4x authors (see the AUTHORS file).
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 #include <launcher/cache/cache-types.hxx>
 
 #include <algorithm>
@@ -9,7 +12,7 @@
 #include <stdexcept>
 #include <vector>
 
-#include <launcher/blake3.h>
+#include <blake3.h>
 
 using namespace std;
 
@@ -63,10 +66,6 @@ namespace launcher
   std::int64_t
   get_file_mtime (const fs::path& p)
   {
-    // Extract the last write time and convert it to a raw count since epoch.
-    // Note that we assume the underlying clock's epoch and resolution map
-    // directly to our timestamp requirements.
-    //
     auto t (fs::last_write_time (p));
     return t.time_since_epoch ().count ();
   }
@@ -74,8 +73,6 @@ namespace launcher
   std::int64_t
   current_timestamp ()
   {
-    // We use the system clock to obtain the current epoch in seconds.
-    //
     auto t (chrono::system_clock::now ());
     auto e (t.time_since_epoch ());
 
@@ -85,9 +82,6 @@ namespace launcher
   string
   compute_blake3 (const fs::path& p)
   {
-    // Bail out if we cannot open the file. Returning an empty string cleanly
-    // signals a failure to the caller.
-    //
     ifstream i (p, ios::binary);
     if (!i)
       return string ();
@@ -95,7 +89,7 @@ namespace launcher
     blake3_hasher h;
     blake3_hasher_init (&h);
 
-    // Read and hash the file in 1M chunks.
+    // Hash the file in 1MB chunks.
     //
     constexpr size_t n (1048576);
     vector<char> b (n);
@@ -104,9 +98,8 @@ namespace launcher
     {
       i.read (b.data (), n);
 
-      // We must update the hasher with exactly the number of bytes actually
-      // read. Note that gcount() can be smaller than n on the final read or if
-      // we happen to encounter an error.
+      // Note that the last read (as well as a failed one) can come up short,
+      // so we hash as many bytes as gcount() reports.
       //
       size_t c (static_cast<size_t> (i.gcount ()));
       if (c != 0)
@@ -116,7 +109,7 @@ namespace launcher
     uint8_t d[BLAKE3_OUT_LEN];
     blake3_hasher_finalize (&h, d, BLAKE3_OUT_LEN);
 
-    // Format the hash as a lowercase hex string.
+    // Format the digest as lower-case hex digits.
     //
     ostringstream o;
     o << hex << setfill ('0');
@@ -130,19 +123,15 @@ namespace launcher
   bool
   verify_blake3 (const fs::path& p, const string& h)
   {
-    // Sanity check. An empty expected hash cannot match anything valid.
-    //
     if (h.empty ())
       return false;
 
-    // Compute the actual hash and compare. Note that compute_blake3() returning
-    // empty means we failed to read the file, which naturally fails the
-    // verification. Fall through and test it.
-    //
     string a (compute_blake3 (p));
     if (a.empty ())
       return false;
 
+    // Compare ignoring whitespaces and case.
+    //
     string e (h);
     e.erase (remove_if (e.begin (),
                         e.end (),
@@ -174,14 +163,14 @@ namespace launcher
                hex.end ());
 
     if (hex.empty ())
-      return; // Empty hash is explicitly allowed (means "no hash").
+      return; // No digest.
 
     if (hex.size () != 64)
       throw invalid_argument (
         "invalid blake3 hash length (" + to_string (hex.size ()) +
         " chars, expected 64): " + hex);
 
-    // Normalize to lowercase and validate hex characters in one pass.
+    // Validate the digits and normalize them to lower case.
     //
     for (char& c : hex)
     {
@@ -211,10 +200,6 @@ namespace launcher
   blake3_hash blake3_hash::
   of_file (const fs::path& p)
   {
-    // compute_blake3() already returns a lowercase hex string, so we can
-    // construct without re-validation by going through the string constructor
-    // which will normalize it.
-    //
     std::string h (compute_blake3 (p));
 
     if (h.empty ())

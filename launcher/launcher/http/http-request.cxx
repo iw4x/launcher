@@ -1,3 +1,6 @@
+// Copyright (c) the IW4x authors (see the AUTHORS file).
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 #include <launcher/http/http-request.hxx>
 
 using namespace std;
@@ -38,16 +41,11 @@ namespace launcher
   string
   http_request::target () const
   {
-    // Extract the target part (path and query) from the URL. Note that if
-    // the URL is absolute, we first need to skip the scheme in order to
-    // properly bypass the authority (host and port) below.
+    // Skip the scheme so that we find the / after the authority.
     //
     size_t e (url.find ("://"));
     size_t p (e != string::npos ? e + 3 : 0);
 
-    // Find where the path actually starts. If there is no path, we just
-    // assume root.
-    //
     size_t s (url.find ('/', p));
 
     return s != string::npos ? url.substr (s) : "/";
@@ -56,25 +54,19 @@ namespace launcher
   void
   http_request::normalize ()
   {
-    // Supply any missing headers that are required for a well-formed request.
-    // First, handle the body length. We need to set it if a body is present
-    // but the size headers are missing.
-    //
     if (body && !has_header ("Content-Length") &&
         !has_header ("Transfer-Encoding"))
       set_header ("Content-Length", std::to_string (body->size ()));
 
-    // Next, deduce the Host header from the URL if it wasn't explicitly
-    // specified.
+    // Note that the Host header omits the port.
+    //
+    // @@ The server expects the port if it is not the default one.
     //
     if (!has_header ("Host"))
     {
       size_t e (url.find ("://"));
       size_t p (e != string::npos ? e + 3 : 0);
 
-      // Find the end of the host part, which is delimited by either a port
-      // separator or the beginning of the path.
-      //
       size_t n (url.find_first_of ("/:", p));
       size_t l (n == string::npos ? url.size () - p : n - p);
 

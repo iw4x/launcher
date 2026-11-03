@@ -1,3 +1,6 @@
+// Copyright (c) the IW4x authors (see the AUTHORS file).
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 #pragma once
 
 #include <quill/Backend.h>
@@ -18,6 +21,13 @@
 
 namespace launcher
 {
+  // Logging setup. The constructor starts the backend and creates the
+  // logger of every category, writing to the console and to a file in
+  // cache/. The destructor stops the backend.
+  //
+  // Note that there should be a single instance, which active_logger points
+  // to.
+  //
   class logger
   {
   public:
@@ -35,6 +45,13 @@ namespace launcher
 
   namespace log
   {
+    // Log statements, one per severity, for example:
+    //
+    // log::info {categories::update{}, "updating {}", name};
+    //
+    // We use a class template with a deduction guide since the source
+    // location default argument has to come after the format arguments.
+    //
     #define LAUNCHER_LOG_SEVERITY(N, L)                                            \
     template <Category C, typename... A>                                       \
     struct N                                                                   \
