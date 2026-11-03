@@ -86,7 +86,8 @@ namespace launcher
     // Open the cache database of the installation directory, creating it if
     // it doesn't exist.
     //
-    cache_coordinator (asio::io_context& ctx, const fs::path& dir);
+    explicit
+    cache_coordinator (const fs::path& dir);
 
     cache_coordinator (const cache_coordinator&) = delete;
     cache_coordinator& operator= (const cache_coordinator&) = delete;
@@ -273,7 +274,6 @@ namespace launcher
              component_type c,
              const std::string& v);
 
-    asio::io_context& ctx_;
     fs::path dir_;
 
     database_type db_;

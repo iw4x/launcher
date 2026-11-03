@@ -35,8 +35,7 @@ namespace launcher
 {
   update_installer::
   update_installer (asio::io_context& c)
-    : ioc_ (c),
-      http_ (c)
+    : http_ (c)
   {
     // We default to the system temp directory for downloads. Note that if we
     // can't determine that (or don't have permissions), then we fall back to
@@ -109,7 +108,7 @@ namespace launcher
       // 2. Extract.
       //
       launcher::log::trace_l1 (categories::update{}, "extracting launcher binary");
-      fs::path b (co_await extract_launcher (a, ui));
+      fs::path b (co_await extract_launcher (a));
       temp_files_.push_back (b);
 
       // We expect the extractor to either throw or produce the file. If it
@@ -442,7 +441,7 @@ namespace launcher
   }
 
   asio::awaitable<fs::path> update_installer::
-  extract_launcher (const fs::path& ap, const update_info& ui)
+  extract_launcher (const fs::path& ap)
   {
     fs::path d (download_dir_ / "launcher_update_extract");
     launcher::log::trace_l2 (categories::update{}, "extracting archive {} to {}", ap.string (), d.string ());

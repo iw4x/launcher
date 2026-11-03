@@ -6,29 +6,12 @@
 #include <sstream>
 #include <stdexcept>
 
-#include <boost/json.hpp>
-
 #include <launcher/http/http-client.hxx>
-#include <launcher/http/http-json.hxx>
 
 using namespace std;
 
 namespace launcher
 {
-  namespace json = boost::json;
-
-  static json::value
-  parse_json (const string& s)
-  {
-    boost::system::error_code e;
-    json::value v (json::parse (s, e));
-
-    if (e)
-      throw runtime_error ("failed to parse JSON: " + e.message ());
-
-    return v;
-  }
-
   // Describe the error response for an exception message.
   //
   static string
@@ -55,13 +38,11 @@ namespace launcher
   }
 
   http_coordinator::http_coordinator (asio::io_context& i)
-    : ioc_ (i),
-      client_ (i) {}
+    : client_ (i) {}
 
   http_coordinator::http_coordinator (asio::io_context& i,
                                       const http_client_traits& t)
-    : ioc_ (i),
-      client_ (i, t) {}
+    : client_ (i, t) {}
 
   asio::awaitable<string> http_coordinator::
   get (const string& u)

@@ -15,16 +15,14 @@ namespace launcher
 {
   update_discovery::
   update_discovery (asio::io_context& c)
-    : ioc_ (c),
-      api_ (c)
+    : api_ (c)
   {
     launcher::log::trace_l2 (categories::update{}, "initialized update_discovery (no token)");
   }
 
   update_discovery::
   update_discovery (asio::io_context& c, string t)
-    : ioc_ (c),
-      api_ (c, move (t))
+    : api_ (c, move (t))
   {
     launcher::log::trace_l2 (categories::update{}, "initialized update_discovery (with token)");
   }

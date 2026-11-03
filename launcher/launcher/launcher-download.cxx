@@ -26,16 +26,14 @@ namespace launcher
 
   download_coordinator::
   download_coordinator (asio::io_context& c, size_t n)
-    : ioc_ (c),
-      manager_ (c, n),
+    : manager_ (c, n),
       http_ (c)
   {
   }
 
   download_coordinator::
   download_coordinator (asio::io_context& c, size_t n, const http_client_traits& t)
-    : ioc_ (c),
-      manager_ (c, n, t),
+    : manager_ (c, n, t),
       http_ (c, t),
       traits_ (t)
   {

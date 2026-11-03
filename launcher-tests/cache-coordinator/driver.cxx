@@ -130,7 +130,7 @@ try
     if (argc != 2)
       fail ("unexpected argument");
 
-    cache_coordinator cc (ioc, d);
+    cache_coordinator cc (d);
     cout << (cc.installed (component_type::rawfiles) ? "true" : "false")
          << '\n';
     return 0;
@@ -160,7 +160,7 @@ try
 
   download_coordinator dc (ioc);
   progress_coordinator pc (ioc);
-  cache_coordinator cc (ioc, d);
+  cache_coordinator cc (d);
 
   cc.set_download_coordinator (&dc);
   cc.set_progress_coordinator (&pc);

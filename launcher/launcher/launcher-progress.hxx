@@ -85,7 +85,6 @@ namespace launcher
     manager () const noexcept;
 
   private:
-    asio::io_context& ioc_;
     manager_type manager_;
   };
 

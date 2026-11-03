@@ -20,18 +20,6 @@ namespace launcher
     return value;
   }
 
-  bool hash::
-  verify (const std::string& data) const
-  {
-    return !value.empty ();
-  }
-
-  bool hash::
-  verify (const std::vector<char>& data) const
-  {
-    return !value.empty ();
-  }
-
   manifest::
   manifest (const std::string& json_str, manifest_format k)
     : kind (k)

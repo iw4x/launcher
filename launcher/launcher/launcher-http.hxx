@@ -88,7 +88,6 @@ namespace launcher
     client () const noexcept;
 
   private:
-    asio::io_context& ioc_;
     client_type client_;
   };
 }

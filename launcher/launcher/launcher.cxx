@@ -1387,7 +1387,7 @@ try
     http_coordinator     hc (io, ht);
     download_coordinator dc (io, opt.jobs (), ht);
     progress_coordinator pc (io);
-    cache_coordinator    cc (io, root);
+    cache_coordinator    cc (root);
 
     if (!opt.proxy ().empty ())
       gh.set_proxy (opt.proxy ());
@@ -1531,7 +1531,7 @@ try
     //
     if (!failures.empty ())
     {
-      cache_coordinator cc (io, root);
+      cache_coordinator cc (root);
 
       for (const update_failure& f : failures)
       {

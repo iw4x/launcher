@@ -141,8 +141,7 @@ namespace launcher
     // it. We use the tar program for .tar.xz.
     //
     asio::awaitable<fs::path>
-    extract_launcher (const fs::path& archive_path,
-                      const update_info& info);
+    extract_launcher (const fs::path& archive_path);
 
     // Replace the target with the new executable, keeping the old one as the
     // backup. We first copy the new one next to the target (see
@@ -158,7 +157,6 @@ namespace launcher
                      double progress,
                      const std::string& message);
 
-    asio::io_context& ioc_;
     http_client http_;
     progress_callback_type progress_callback_;
     fs::path download_dir_;

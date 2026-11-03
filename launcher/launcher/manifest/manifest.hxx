@@ -47,15 +47,6 @@ namespace launcher
 
     std::string
     string () const;
-
-    // @@ These functions only check that the value is not empty. Nothing
-    //    calls them.
-    //
-    bool
-    verify (const std::string& data) const;
-
-    bool
-    verify (const std::vector<char>& data) const;
   };
 
   // File entry in a manifest.
@@ -164,16 +155,11 @@ namespace launcher
   class manifest
   {
   public:
-    manifest_format format; // @@ Unused.
     manifest_format kind;
     std::vector<manifest_archive> archives;
     std::vector<manifest_file> files;
 
     manifest () : kind (manifest_format::update) {}
-
-    explicit
-    manifest (manifest_format f, manifest_format k = manifest_format::update)
-      : format (f), kind (k) {}
 
     // Parse the manifest. Throw std::runtime_error if it is not valid JSON
     // or not an object.

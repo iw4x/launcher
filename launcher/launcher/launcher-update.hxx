@@ -159,7 +159,6 @@ namespace launcher
     report_completion (update_status status,
                        const std::string& error = "");
 
-    asio::io_context& ioc_;
     discovery_type discovery_;
     installer_type installer_;
 

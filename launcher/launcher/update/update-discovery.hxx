@@ -115,7 +115,6 @@ namespace launcher
     std::optional<launcher_version>
     parse_asset_version (const std::string& asset_name) const;
 
-    asio::io_context& ioc_;
     api_type api_;
     bool include_prerelease_ = false;
   };

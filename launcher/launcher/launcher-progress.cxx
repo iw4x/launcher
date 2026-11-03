@@ -16,8 +16,7 @@ namespace launcher
 {
   progress_coordinator::
   progress_coordinator (asio::io_context& c)
-    : ioc_ (c),
-      manager_ (c)
+    : manager_ (c)
   {
   }
 

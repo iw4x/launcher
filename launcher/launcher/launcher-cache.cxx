@@ -65,9 +65,8 @@ namespace launcher
   }
 
   cache_coordinator::
-  cache_coordinator (asio::io_context& ioc, const fs::path& d)
-    : ctx_ (ioc),
-      dir_ (d),
+  cache_coordinator (const fs::path& d)
+    : dir_ (d),
       db_ (d),
       rec_ (db_, d),
       dl_ (nullptr),

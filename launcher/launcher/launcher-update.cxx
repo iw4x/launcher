@@ -16,8 +16,7 @@ namespace launcher
 {
   update_coordinator::
   update_coordinator (asio::io_context& c)
-    : ioc_ (c),
-      discovery_ (c),
+    : discovery_ (c),
       installer_ (c)
   {
     installer_.set_progress_callback (
