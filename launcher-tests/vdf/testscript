@@ -131,7 +131,7 @@
     - c
     EOI
 
-  : nul
+  : embedded-nul
   : Test rejecting a string with an embedded NUL
   :
   $* serialize <<'EOI' 2>'error: embedded NUL in key-values string' != 0

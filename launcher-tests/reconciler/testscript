@@ -2,10 +2,13 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 # Blake3 hashes, as b3sum prints them, named after the contents they are
-# for: the 5-byte 'data' and 'iw4x' lines and the empty input.
+# for: the 4-byte 'data' and 'iw4x' and the empty input.
 #
-d = 51f855e8f080df9cbc2a561b6ddaad85e1bbf884ea4b73f3455e8c86202d0422
-i = 5acc27733250124332d5a025e3da8cb8a7c66ba58dcab53da5873946eb350bb3
+# Note that we write the contents without a newline since on Windows it
+# would be written as CRLF and change the sizes and hashes.
+#
+d = 28a249c2e4d3a92bc0a16ed8f1b5cf83ca20415ee12e502b096624902bbc97bd
+i = bd9c61ef91c497f6b581a75bb5c7b6ff97bd3d359dec332340f7eec95db6cf33
 e = af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262
 
 # Manifest of a rawfiles release with the client in release.zip. Note that
@@ -15,11 +18,11 @@ e = af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262
   {
     "archives": [
       {"name": "release.zip", "size": 100, "url": "u1", "blake3": "$e"},
-      {"name": "iw_23.iwd", "size": 5, "url": "u2", "blake3": "$d"}
+      {"name": "iw_23.iwd", "size": 4, "url": "u2", "blake3": "$d"}
     ],
     "files": [
-      {"path": "iw4x.exe", "size": 5, "blake3": "$i", "archive": "release.zip"},
-      {"path": "data.txt", "size": 5, "blake3": "$d"},
+      {"path": "iw4x.exe", "size": 4, "blake3": "$i", "archive": "release.zip"},
+      {"path": "data.txt", "size": 4, "blake3": "$d"},
       {"path": "update.json", "size": 2, "blake3": "$d"}
     ]
   }
@@ -36,9 +39,9 @@ iwd = main/iw4x/x86/iw_23.iwd
   :
   $* plan $m rawfiles 1.0.0 >>"EOO" &cache/***
     download release.zip 100 $e
-    download $iwd 5 $d
-    download data.txt 5 $d
-    summary 3 110
+    download $iwd 4 $d
+    download data.txt 4 $d
+    summary 3 108
     EOO
 
   : adopt
@@ -46,16 +49,16 @@ iwd = main/iw4x/x86/iw_23.iwd
   :
   {
     mkdir -p main/iw4x/x86
-    echo 'data' >=data.txt
-    echo 'iw4x' >=iw4x.exe
-    echo 'data' >=$iwd
+    cat <:'data' >=data.txt
+    cat <:'iw4x' >=iw4x.exe
+    cat <:'data' >=$iwd
 
     $* plan $m rawfiles 1.0.0 >'summary 0 0' &cache/***
 
     $* files rawfiles >>"EOO"
-      data.txt 1.0.0 5 $d
-      iw4x.exe 1.0.0 5 $i
-      $iwd 1.0.0 5 $d
+      data.txt 1.0.0 4 $d
+      iw4x.exe 1.0.0 4 $i
+      $iwd 1.0.0 4 $d
       EOO
   }
 
@@ -64,15 +67,15 @@ iwd = main/iw4x/x86/iw_23.iwd
   :
   {
     mkdir -p main/iw4x/x86
-    echo 'hello' >=data.txt
-    echo 'iw4y' >=iw4x.exe
-    echo 'iw4x' >=$iwd
+    cat <:'hello' >=data.txt
+    cat <:'iw4y' >=iw4x.exe
+    cat <:'iw4x' >=$iwd
 
     $* plan $m rawfiles 1.0.0 >>"EOO" &cache/***
       download release.zip 100 $e
-      download $iwd 5 $d
-      download data.txt 5 $d
-      summary 3 110
+      download $iwd 4 $d
+      download data.txt 4 $d
+      summary 3 108
       EOO
 
     $* files rawfiles
@@ -82,13 +85,13 @@ iwd = main/iw4x/x86/iw_23.iwd
   : Test trusting the tracked files of the version without hashing them
   :
   {
-    echo 'datx' >=data.txt
+    cat <:'datx' >=data.txt
 
     $* track rawfiles 1.0.0 data.txt &cache/***
     $* plan $m rawfiles 1.0.0 >>"EOO"
       download release.zip 100 $e
-      download $iwd 5 $d
-      summary 2 105
+      download $iwd 4 $d
+      summary 2 104
       EOO
   }
 
@@ -96,19 +99,19 @@ iwd = main/iw4x/x86/iw_23.iwd
   : Test rehashing the tracked files of another version
   :
   {
-    echo 'data' >=data.txt
-    echo 'iw4y' >=iw4x.exe
+    cat <:'data' >=data.txt
+    cat <:'iw4y' >=iw4x.exe
 
     $* track rawfiles 1.0.0 data.txt iw4x.exe &cache/***
     $* plan $m rawfiles 2.0.0 >>"EOO"
       download release.zip 100 $e
-      download $iwd 5 $d
-      summary 2 105
+      download $iwd 4 $d
+      summary 2 104
       EOO
 
     $* files rawfiles >>"EOO"
-      data.txt 2.0.0 5 $d
-      iw4x.exe 1.0.0 5 -
+      data.txt 2.0.0 4 $d
+      iw4x.exe 1.0.0 4 -
       EOO
   }
 }}
@@ -119,7 +122,7 @@ iwd = main/iw4x/x86/iw_23.iwd
   : unknown
   :
   {
-    echo 'data' >=f
+    cat <:'data' >=f
 
     $* stat f >'unknown' &cache/***
   }
@@ -127,7 +130,7 @@ iwd = main/iw4x/x86/iw_23.iwd
   : valid
   :
   {
-    echo 'data' >=f
+    cat <:'data' >=f
 
     $* track rawfiles 1.0.0 f &cache/***
     $* stat f >'valid'
@@ -147,11 +150,11 @@ iwd = main/iw4x/x86/iw_23.iwd
   : Test detecting a modified file by its modification time
   :
   {
-    echo 'data' >=f
+    cat <:'data' >=f
     $* set-mtime f
 
     $* track rawfiles 1.0.0 f &cache/***
-    echo 'iw4x' >=f
+    cat <:'iw4x' >=f
     $* stat f >'stale'
   }
 
@@ -159,11 +162,11 @@ iwd = main/iw4x/x86/iw_23.iwd
   : Test detecting a modified file by its size only in the mixed strategy
   :
   {
-    echo 'data' >=f
+    cat <:'data' >=f
     $* set-mtime f
 
     $* track rawfiles 1.0.0 f &cache/***
-    echo 'hello' >=f
+    cat <:'hello' >=f
     $* set-mtime f
 
     $* stat f       >'valid'
@@ -176,18 +179,18 @@ iwd = main/iw4x/x86/iw_23.iwd
 :
 {
   mkdir -p main/iw4x/x86
-  echo 'data' >=data.txt
-  echo 'iw4x' >=iw4x.exe
-  echo 'data' >=old.txt
-  echo 'data' >=$iwd
+  cat <:'data' >=data.txt
+  cat <:'iw4x' >=iw4x.exe
+  cat <:'data' >=old.txt
+  cat <:'data' >=$iwd
 
   $* track rawfiles 1.0.0 data.txt iw4x.exe old.txt $iwd &cache/***
   $* clean $m rawfiles >'old.txt'
 
   $* files rawfiles >>"EOO"
-    data.txt 1.0.0 5 -
-    iw4x.exe 1.0.0 5 -
-    $iwd 1.0.0 5 -
+    data.txt 1.0.0 4 -
+    iw4x.exe 1.0.0 4 -
+    $iwd 1.0.0 4 -
     EOO
 }
 

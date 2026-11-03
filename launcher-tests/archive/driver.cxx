@@ -57,18 +57,22 @@ main (int argc, char* argv[])
   if (e != nullptr)
     rethrow_exception (e);
 
-  const fs::perms x (fs::perms::owner_exec |
-                     fs::perms::group_exec |
-                     fs::perms::others_exec);
-
+  // Note that Windows has no execute bits, so there we only print the
+  // files. For example, MSVC reports every file that isn't read-only as
+  // executable.
+  //
   for (const fs::path& f: r)
   {
-    bool ex ((fs::status (f).permissions () & x) != fs::perms::none);
-
     cout << fs::relative (f, d).generic_string ();
 
-    if (ex)
+#ifndef _WIN32
+    const fs::perms x (fs::perms::owner_exec |
+                       fs::perms::group_exec |
+                       fs::perms::others_exec);
+
+    if ((fs::status (f).permissions () & x) != fs::perms::none)
       cout << " executable";
+#endif
 
     cout << endl;
   }

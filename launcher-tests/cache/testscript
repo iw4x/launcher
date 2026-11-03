@@ -3,9 +3,11 @@
 
 # Each test opens the database in its working directory, as cache/iw4x.db.
 
-# Blake3 hash of the 'data' line, as b3sum prints it.
+# Blake3 hash of 'data', as b3sum prints it. Note that we write the contents
+# without a newline since on Windows it would be written as CRLF and change
+# the hash.
 #
-h = 51f855e8f080df9cbc2a561b6ddaad85e1bbf884ea4b73f3455e8c86202d0422
+h = 28a249c2e4d3a92bc0a16ed8f1b5cf83ca20415ee12e502b096624902bbc97bd
 
 : file
 :
@@ -171,7 +173,7 @@ $* <<EOI >>EOO &cache/***
   : content
   :
   {
-    echo 'data' >=f
+    cat <:'data' >=f
 
     $* <'hash f' >"$h" &cache/***
   }
@@ -183,8 +185,8 @@ $* <<EOI >>EOO &cache/***
   : verify
   :
   {
-    echo 'data' >=f
-    echo 'other' >=g
+    cat <:'data' >=f
+    cat <:'other' >=g
 
     $* <<"EOI" >>EOO &cache/***
       verify f $h
@@ -201,7 +203,7 @@ $* <<EOI >>EOO &cache/***
   : Test that the expected hash is case-insensitive
   :
   {
-    echo 'data' >=f
+    cat <:'data' >=f
 
     $* <"verify f $string.ucase($h)" >'true' &cache/***
   }
