@@ -19,6 +19,10 @@ namespace launcher
 #ifdef _WIN32
   namespace
   {
+    // Set the string value of the HKEY_CURRENT_USER key, creating the key if
+    // it doesn't exist. The null value name sets the default value. Return
+    // false on failure.
+    //
     bool
     set_registry_string (const wchar_t* key_path,
                          const wchar_t* value_name,
@@ -59,6 +63,9 @@ namespace launcher
   refresh_connect_protocol (const filesystem::path& executable) noexcept
   {
 #ifdef _WIN32
+    // The scheme takes its icon from the executable and its open command
+    // passes the URL to the executable as the argument.
+    //
     const wstring quoted (L"\"" + executable.native () + L"\"");
 
     bool r (

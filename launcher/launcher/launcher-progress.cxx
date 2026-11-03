@@ -54,19 +54,14 @@ namespace launcher
   void progress_coordinator::
   update_progress (shared_ptr<entry_type> e, uint64_t c, uint64_t t)
   {
-    // We use relaxed memory order for metric updates. Since this data is
-    // purely for UI feedback, observing a value that is a few CPU cycles
-    // stale is an acceptable trade-off for minimizing synchronization
-    // overhead.
+    // The metrics only feed the display, which can show a slightly stale
+    // value, so we use the relaxed memory order throughout.
     //
     auto& m (e->metrics ());
     m.current_bytes.store (c, memory_order_relaxed);
     m.total_bytes.store (t, memory_order_relaxed);
 
-    // Determine state.
-    //
-    // Note that we assume completion if we've hit the total bytes, provided
-    // we actually expect some data (t > 0).
+    // An entry without a total is never complete.
     //
     progress_state s ((t > 0 && c >= t)
                       ? progress_state::completed
@@ -74,8 +69,6 @@ namespace launcher
 
     m.state.store (s, memory_order_relaxed);
 
-    // Update tracker speed.
-    //
     auto& tr (e->tracker ());
     tr.update (c);
 
@@ -112,15 +105,11 @@ namespace launcher
     return manager_;
   }
 
-  // Formatting
-  //
-
   string
   format_progress (const progress_metrics& m)
   {
-    // Snapshot the atomics. While relaxed ordering doesn't guarantee a
-    // strictly consistent view across all variables, loading them upfront
-    // gives us a "good enough" point-in-time for the string generation.
+    // Load the metrics once. The values may come from different updates,
+    // which the display tolerates.
     //
     uint64_t c (m.current_bytes.load (memory_order_relaxed));
     uint64_t t (m.total_bytes.load (memory_order_relaxed));
@@ -129,16 +118,12 @@ namespace launcher
     ostringstream o;
     o << format_bytes (c) << " / " << format_bytes (t);
 
-    // Calculate percentage if we have a target.
-    //
     if (t > 0)
     {
       float r (static_cast<float> (c) / static_cast<float> (t));
       o << " (" << fixed << setprecision (1) << (r * 100.0f) << "%)";
     }
 
-    // Append speed and ETA.
-    //
     if (s > 0.0f)
     {
       o << " @ " << format_speed (s);
@@ -154,9 +139,6 @@ namespace launcher
   string
   format_bytes (uint64_t b)
   {
-    // Stick to standard IEC binary prefixes (KiB, MiB, etc.) rather than
-    // SI decimal ones since we are dealing with file sizes and buffers.
-    //
     static const char* u[] = {"B", "KiB", "MiB", "GiB", "TiB"};
     static const size_t n (sizeof (u) / sizeof (*u));
 
@@ -191,8 +173,6 @@ namespace launcher
     }
     else if (s < 3600)
     {
-      // Minutes and remainder seconds.
-      //
       int m (s / 60);
       int r (s % 60);
 
@@ -201,9 +181,6 @@ namespace launcher
     }
     else
     {
-      // Once we hit hours, second-level precision is mostly noise, so we
-      // drop it.
-      //
       int h (s / 3600);
       int m ((s % 3600) / 60);
 
@@ -222,9 +199,6 @@ namespace launcher
 
     if (ind)
     {
-      // For indeterminate states, we just throb in the center to show
-      // liveness.
-      //
       for (int i (0); i < w; ++i)
         o << (i == w / 2 ? '>' : ' ');
     }
@@ -233,8 +207,6 @@ namespace launcher
       int f (static_cast<int> (round (r * w)));
       f = min (f, w);
 
-      // Render the standard arrow: '===>   '
-      //
       for (int i (0); i < w; ++i)
       {
         if      (i <  f - 1) o << '=';

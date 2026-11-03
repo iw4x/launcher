@@ -23,30 +23,23 @@ namespace launcher
   namespace asio = boost::asio;
   namespace fs = std::filesystem;
 
-  // The outcome of a cache reconciliation attempt.
-  //
-  // We distinguish between up_to_date (we checked and everything is fine) and
-  // update_applied (we had to move bits). If we failed to verify the state,
-  // we return check_failed rather than throwing, as this is often a
-  // recoverable state in the UI.
+  // Outcome of bringing a component up to date.
   //
   enum class cache_status
   {
-    up_to_date,       // Disk state verified matches manifest/tag.
-    update_required,  // Diff calculated, download/copy pending.
-    update_applied,   // We mutated the disk, now in sync.
-    check_failed,     // IO or logic error during verify/plan.
-    update_failed     // IO or network error during execution.
+    up_to_date,       // Nothing to do.
+    update_required,  // Planned but not applied (see check()).
+    update_applied,   // Brought up to date.
+    check_failed,     // Planning failed.
+    update_failed     // Applying failed (e.g., a download failed).
   };
 
   std::ostream&
   operator<< (std::ostream&, cache_status);
 
-  // We need to bundle the status with the summary so the caller knows not
-  // just "what happened" (status) but "what changed" (summary).
-  //
-  // We also carry the error string here to avoid throwing exceptions across
-  // coroutine boundaries for "expected" runtime failures (like a 404).
+  // Status of bringing a component up to date along with the summary of
+  // its plan. A failure that we expect, such as a failed download, comes
+  // with its description in the error member.
   //
   struct cache_result
   {
@@ -63,8 +56,7 @@ namespace launcher
 
     cache_result (cache_status s, std::string e);
 
-    // Returns true if we are in a consistent state. Note that up_to_date is
-    // considered "ok", as is a successful update.
+    // Return true if the component is up to date, possibly after the update.
     //
     bool
     ok () const noexcept;
@@ -72,16 +64,10 @@ namespace launcher
     explicit operator bool () const noexcept;
   };
 
-
-  // The central coordinator for local asset management.
+  // Installation files of the components, brought up to date with their
+  // release manifests through the reconciler and the downloads.
   //
-  // We sit between the raw database (ODB), the filesystem, and the network
-  // (download_coordinator). Our primary job is reconciliation: making the
-  // disk look like the manifest.
-  //
-  // We try to keep this class stateless regarding the "process" of updating
-  // (that state lives in the coroutine stack), but we do hold references to
-  // the external coordinators which must outlive us.
+  // Note that the coordinators that we are given must outlive us.
   //
   class cache_coordinator
   {
@@ -89,47 +75,43 @@ namespace launcher
     using database_type = cache_database;
     using reconciler_type = reconciler;
 
+    // Called as the planning hashes the files, with the message and the
+    // number of the files hashed so far and in total.
+    //
     using progress_callback =
       std::function<void (const std::string& msg,
                           std::size_t cur,
                           std::size_t tot)>;
 
-    // We expect the install_dir to be roughly valid, though we will create
-    // the cache subdirectory and the sqlite database if they don't exist.
-    //
-    // Note that we take the io_context by ref as we don't own the thread
-    // pool, we just schedule work onto it.
+    // Open the cache database of the installation directory, creating it if
+    // it doesn't exist.
     //
     cache_coordinator (asio::io_context& ctx, const fs::path& dir);
 
     cache_coordinator (const cache_coordinator&) = delete;
     cache_coordinator& operator= (const cache_coordinator&) = delete;
 
-    // Wiring.
+    // Configuration.
     //
 
-    // We need the downloader to fetch blobs if the plan determines we are
-    // missing files.
+    // Set the coordinator of the downloads, which updating requires.
     //
     void
     set_download_coordinator (download_coordinator* dl);
 
-    // If set, we push TUI updates here. If null, we run silent.
+    // Set the coordinator that shows the progress of the downloads. Without
+    // one we show nothing.
     //
     void
     set_progress_coordinator (progress_coordinator* p);
 
-    // Required for the smart_sync metadata check (resolving tags to
-    // manifests) before we hit the heavy local logic.
-    //
     void
     set_github_coordinator (github_coordinator* gh);
 
     void
     set_progress_callback (progress_callback cb);
 
-    // How we decide what to keep when the manifest conflicts with the
-    // database. Default is usually 'keep_newer'.
+    // Set how we compare a file with its record (see strategy).
     //
     void
     set_strategy (strategy s);
@@ -137,20 +119,16 @@ namespace launcher
     strategy
     get_strategy () const noexcept;
 
-    // Queries.
+    // Versions.
     //
 
-    // Check if the semantic version in the DB differs from the remote tag.
-    //
-    // This is a cheap metadata-only check. We don't touch the filesystem or
-    // verify file hashes here. Use this for "UI badges", not for integrity
-    // guarantees.
+    // Return true if the recorded version of the component is not the tag
+    // (see reconciler::outdated()). Note that this doesn't look at the files.
     //
     bool
     outdated (component_type c, const std::string& tag) const;
 
-    // Return the version string we stored last time we successfully synced or
-    // stamped this component.
+    // Return the recorded version of the component, if any.
     //
     std::optional<std::string>
     version (component_type c) const;
@@ -158,15 +136,12 @@ namespace launcher
     // Inspection.
     //
 
-    // Wrapper around fs::status but aware of our internal file_state logic
-    // (e.g., handling permissions/executable bits if we care).
+    // Return the state of the file relative to its record.
     //
     file_state
     stat (const fs::path& p) const;
 
-    // Walk the database for this component and stat every single file.
-    //
-    // Warning: This involves O(N) IO operations where N is the file count.
+    // Return the state of every recorded file of the component.
     //
     std::vector<std::pair<cached_file, file_state>>
     audit (component_type c) const;
@@ -174,54 +149,48 @@ namespace launcher
     // Planning.
     //
 
-    // Diff the manifest against the database/filesystem. This produces the
-    // list of actions (keep, download, delete) but executes nothing.
+    // Return the plan that brings the component up to date with the
+    // manifest at the version (see reconciler::plan()).
     //
     std::vector<reconcile_item>
     plan (const manifest& m,
           component_type c,
           const std::string& v);
 
-    // Reduce the item list into a statistical summary (bytes to download,
-    // files to delete, etc).
-    //
     reconcile_summary
     summarize (const std::vector<reconcile_item>& items) const;
 
-    // Run the plan generation but stop short of execution.
-    //
-    // This effectively answers: "If I were to sync now, what would happen?"
-    // without side effects.
+    // Plan the update of the component and return update_required if there
+    // is anything to do, without changing the installation.
     //
     cache_result
     check (const manifest& m,
            component_type c,
            const std::string& v);
 
-    // Execution.
+    // Updating.
     //
 
-    // The brute-force synchronization.
-    //
-    // We calculate the plan and immediately execute it. This handles the full
-    // lifecycle: download missing, delete orphaned, copy cached.
+    // Plan the update of the component and apply it, downloading the files
+    // and recording them along with the version.
     //
     asio::awaitable<cache_result>
     sync (const manifest& m,
           component_type c,
           const std::string& v);
 
-    // The "Happy Path" synchronization.
+    // As above but if the component is recorded at the tag and all its
+    // files match their records, then return up_to_date without planning,
+    // which saves hashing the files.
     //
     asio::awaitable<cache_result>
     smart_sync (const manifest& m,
                 component_type c,
                 const std::string& tag);
 
-    // Batch processor.
-    //
-    // We chain the coroutines here to avoid the overhead of spinning up
-    // multiple execution contexts.
+    // As sync() for several components at once, with all their downloads in
+    // one batch. Note that the downloaded files are not recorded, only the
+    // versions.
     //
     asio::awaitable<cache_result>
     sync_all (
@@ -229,73 +198,48 @@ namespace launcher
                                    component_type,
                                    std::string>>& items);
 
-    // Database / Tracking.
+    // Recording (see the reconciler functions of the same names).
     //
 
-    // Register a file we just landed. We update the DB entry to match the
-    // current state of the file on disk (mtime, size) so the next quick-check
-    // passes.
-    //
     void
     track (const fs::path& p,
            component_type c,
            const std::string& v,
            const std::string& h = "");
 
-    // Batch tracking for archive extraction (avoids transaction thrashing).
-    //
     void
     track (const std::vector<fs::path>& ps,
            component_type c,
            const std::string& v);
 
-    // Explicitly set the version string for a component.
-    //
-    // We usually do this after a successful sync, but we might also do it if
-    // we detect an external update (e.g. user manually patched).
-    //
     void
     stamp (component_type c, const std::string& tag);
 
-    // Remove file from DB tracking. Does not delete from disk.
-    //
     void
     forget (const fs::path& p);
 
-    // Maintenance.
-    //
-
-    // Sweep files.
-    //
-    // We look for files in the component's directory that are *not* in the
-    // manifest and delete them.
-    //
-    // Note: Be careful with the strategy here as we don't want to wipe user
-    // configs.
+    // Return the records of the component's files that are no longer in the
+    // manifest (see reconciler::clean()). Note that the files themselves are
+    // left alone.
     //
     std::vector<std::string>
     clean (const manifest& m, component_type c);
 
-    // Wipe the DB tables. Used during "Repair" or "Reset".
+    // Database maintenance.
+    //
+
+    // Erase every record.
     //
     void
     clear ();
 
-    // Run SQLite VACUUM.
-    //
     void
     vacuum ();
 
-    // Run a PRAGMA integrity_check.
-    //
-    // We should probably run this on startup if we suspect a crash occurred
-    // previously.
+    // Return true if the database passes the SQLite integrity check.
     //
     bool
     check_integrity () const;
-
-    // Accessors.
-    //
 
     database_type&
     database () noexcept;
@@ -313,10 +257,8 @@ namespace launcher
     install_directory () const noexcept;
 
   private:
-    // Actually run the IO operations defined in the items list.
-    //
-    // This is where we hand off to the download_coordinator for fetches and
-    // the reconciler for copies/deletes.
+    // Download the files of the plan, recording each one that we download,
+    // and on success record the version of the component.
     //
     asio::awaitable<cache_result>
     execute (const std::vector<reconcile_item>& items,

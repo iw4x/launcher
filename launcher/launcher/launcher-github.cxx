@@ -56,15 +56,11 @@ namespace launcher
                         const string& rep,
                         bool pre)
   {
-    // GitHub's "latest" endpoint strictly returns the most recent stable
-    // release. If we are willing to accept a pre-release (e.g., for staging
-    // or nightly builds), we can't use that shortcut. We have to list them
-    // and pick the top one.
+    // GitHub's latest release is the latest stable one. To also consider the
+    // prereleases we list the releases, which GitHub returns newest first.
     //
     if (pre)
     {
-      // Fetch a small batch; the first one is the newest.
-      //
       vector<release_type> rs (
         co_await api_.get_releases (own, rep, 10));
 
@@ -85,14 +81,9 @@ namespace launcher
     co_return co_await api_.get_release_by_tag (own, rep, t);
   }
 
-  // Manifest handling.
-  //
-
   asio::awaitable<manifest> github_coordinator::
   fetch_manifest (const release_type& r, manifest_format fmt)
   {
-    // In the standard layout, the manifest is always named 'update.json'.
-    //
     const string n ("update.json");
     optional<asset_type> a (find_asset (r, n));
 
@@ -100,8 +91,6 @@ namespace launcher
       throw runtime_error ("manifest asset '" + n + "' not found in " +
                            r.tag_name);
 
-    // Download, parse, and then stitch the URLs.
-    //
     manifest m (
       co_await download_and_parse_manifest (a->browser_download_url, fmt));
 
@@ -116,9 +105,6 @@ namespace launcher
                              const string& pat,
                              manifest_format fmt)
   {
-    // If the manifest naming scheme varies (e.g., includes the version
-    // number), we have to hunt for it.
-    //
     optional<asset_type> a (find_asset_regex (r, pat));
 
     if (!a)
@@ -133,9 +119,6 @@ namespace launcher
 
     co_return m;
   }
-
-  // Asset lookup.
-  //
 
   optional<github_coordinator::asset_type> github_coordinator::
   find_asset (const release_type& r, const string& n) const
@@ -166,38 +149,26 @@ namespace launcher
   void github_coordinator::
   resolve_manifest_urls (manifest& m, const release_type& r) const
   {
-    // The manifest knows the logical file names (e.g., 'release.tar.gz'), but
-    // the GitHub release object holds the actual download URLs (which might
-    // be signed AWS links). We need to bridge this gap so the rest of the
-    // system has valid download links.
-    //
-
-    // Resolve Archive URLs.
-    //
     for (auto& ar : m.archives)
     {
-      // If the manifest already specifies an external URL (e.g. a mirror), we
-      // respect it.
+      // An archive with a URL is hosted elsewhere (e.g., on a mirror).
       //
       if (!ar.url.empty ())
         continue;
 
-      // Try exact match first, falling back to regex if the logic requires
-      // loose matching.
-      //
       optional<asset_type> a (find_asset (r, ar.name));
 
       if (!a)
         a = find_asset_regex (r, ar.name);
 
       if (!a)
-        continue; // throw runtime_error ("asset not found for archive: " + ar.name);
+        continue;
 
       ar.url = a->browser_download_url;
     }
 
-    // We don't resolve standalone file URLs here. The assumption is that if
-    // the launcher needs them, it will match the asset name at runtime.
+    // Note that a file names its release asset (asset_name), which whoever
+    // downloads the file looks up.
     //
   }
 
@@ -231,9 +202,6 @@ namespace launcher
     manifest m (s, fmt);
     co_return m;
   }
-
-  // Standalone helpers.
-  //
 
   vector<github_asset>
   find_assets_regex (const github_release& r, const string& pat)

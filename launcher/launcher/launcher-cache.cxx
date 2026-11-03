@@ -141,11 +141,6 @@ namespace launcher
         component_type c,
         const string& v)
   {
-    // We use a single call to rec_.plan() which already handles inner-file
-    // checks within plan_archives(). The old double-plan pattern (testing
-    // each archive's files separately, then planning again) caused every
-    // file to be evaluated and potentially hashed twice.
-    //
     return rec_.plan (m, c, v);
   }
 
@@ -160,9 +155,6 @@ namespace launcher
          component_type c,
          const string& v)
   {
-    // Generate the optimized plan but don't act on it. Use this to inform the
-    // user if an update is pending without actually touching the disk.
-    //
     auto is (plan (m, c, v));
     auto s (rec_.summarize (is));
 
@@ -177,19 +169,12 @@ namespace launcher
         component_type c,
         const string& v)
   {
-    // First, see what needs to be done via the optimized plan.
-    //
     auto is (plan (m, c, v));
     auto s (rec_.summarize (is));
 
-    // If the summary says we are good, then we are good.
-    //
     if (s.up_to_date ())
       co_return cache_result (cache_status::up_to_date, s);
 
-    // Otherwise, handover to execute() to handle the heavy lifting (downloads
-    // and DB updates).
-    //
     co_return co_await execute (is, c, v);
   }
 
@@ -198,14 +183,10 @@ namespace launcher
               component_type c,
               const string& t)
   {
-    // The idea here is to avoid the full cost of reconciliation (planning) if
-    // we think we are already on the right version.
-    //
     if (!outdated (c, t))
     {
-      // The DB says we have the right version, but the user might have messed
-      // with the files manually. So do a quick mtime scan to validate the
-      // physical state.
+      // The files may have changed since we recorded them, so check them
+      // against their records, which is cheaper than planning.
       //
       auto fs (audit (c));
       bool v (true);
@@ -223,9 +204,6 @@ namespace launcher
         co_return cache_result (cache_status::up_to_date);
     }
 
-    // If the tag doesn't match or the files look suspicious, fall back to the
-    // full sync.
-    //
     co_return co_await sync (m, c, t);
   }
 
@@ -235,7 +213,7 @@ namespace launcher
     reconcile_summary total;
     vector<reconcile_item> ais; // All items.
 
-    // Aggregate optimized plans for all components so we can batch the downloads.
+    // Plan every component first so that we can download in one batch.
     //
     for (const auto& [m, c, v] : is)
     {
@@ -260,8 +238,6 @@ namespace launcher
       co_return cache_result (cache_status::update_failed,
                               "download coordinator not configured");
 
-    // Queue everything up.
-    //
     for (const auto& i : ais)
     {
       if (i.action != reconcile_action::download)
@@ -279,16 +255,12 @@ namespace launcher
       dl_->queue_download (move (r));
     }
 
-    // Run the batch.
-    //
     co_await dl_->execute_all ();
 
     if (dl_->failed_count () > 0)
       co_return cache_result (cache_status::update_failed,
                               "some downloads failed");
 
-    // If we survived the downloads, stamp all the versions in the DB.
-    //
     for (const auto& [m, c, v] : is)
       rec_.stamp (c, v);
 
@@ -387,8 +359,6 @@ namespace launcher
       co_return cache_result (cache_status::update_failed,
                               "download coordinator not configured");
 
-    // Filter out items that don't need downloading.
-    //
     vector<const reconcile_item*> ds;
 
     for (const auto& i : is)
@@ -397,8 +367,8 @@ namespace launcher
         ds.push_back (&i);
     }
 
-    // Short-circuit if we only have local operations (which we assume
-    // succeeded during planning/verification).
+    // If nothing needs downloading, then the planning has already recorded
+    // the files that it adopted and only the version is left.
     //
     if (ds.empty ())
     {
@@ -406,8 +376,8 @@ namespace launcher
       co_return cache_result (cache_status::up_to_date);
     }
 
-    // We need to map the async tasks back to the reconcile items so we can
-    // update the DB with hashes upon completion.
+    // Map each task to its item, which has what we record once the download
+    // completes.
     //
     using task_ptr = shared_ptr<download_coordinator::task_type>;
     unordered_map<task_ptr, const reconcile_item*> tm;
@@ -416,8 +386,6 @@ namespace launcher
     {
       fs::path t (i->path);
 
-      // Make sure the directory tree exists before we start pouring bytes.
-      //
       if (t.has_parent_path ())
       {
         error_code ec;
@@ -433,8 +401,6 @@ namespace launcher
       auto task (dl_->queue_download (move (r)));
       tm[task] = i;
 
-      // Wire up the progress UI.
-      //
       if (prog_ != nullptr)
       {
         auto e (prog_->add_entry (r.name));
@@ -450,8 +416,6 @@ namespace launcher
 
     co_await dl_->execute_all ();
 
-    // Check for failures and update cache for successes.
-    //
     size_t failed (0);
 
     for (const auto& [t, i] : tm)
@@ -472,8 +436,6 @@ namespace launcher
       co_return cache_result (cache_status::update_failed,
                               std::to_string (failed) + " downloads failed");
 
-    // All good.
-    //
     rec_.stamp (c, v);
 
     reconcile_summary s;

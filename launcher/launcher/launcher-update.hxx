@@ -19,6 +19,8 @@ namespace launcher
   namespace asio = boost::asio;
   namespace fs = std::filesystem;
 
+  // Update of the launcher itself from its GitHub releases.
+  //
   class update_coordinator
   {
   public:
@@ -27,27 +29,22 @@ namespace launcher
     using version_type = launcher_version;
     using info_type = update_info;
 
-    // Progress callback.
-    //
-    // Called during update with current state and progress.
+    // Called as the update progresses, with the state, the progress ratio,
+    // and the message to show.
     //
     using progress_callback_type =
       std::function<void (update_state state,
                           double progress,
                           const std::string& message)>;
 
-    // Completion callback.
-    //
-    // Called when update check or installation completes. The info parameter
-    // contains the update information (empty if up-to-date or failed).
+    // Called once the check completes, with the update that it found, which
+    // is empty if there is none, and the error if the check failed.
     //
     using completion_callback_type =
       std::function<void (update_status status,
                           const info_type& info,
                           const std::string& error)>;
 
-    // Constructor.
-    //
     explicit
     update_coordinator (asio::io_context& ioc);
 
@@ -57,109 +54,89 @@ namespace launcher
     // Configuration.
     //
 
-    // Set the GitHub repository to check for updates.
-    //
-    // Default: "iw4x" / "launcher"
+    // Set the GitHub repository of the releases, iw4x/launcher by default.
     //
     void
     set_repository (std::string owner, std::string repo);
 
-    // Set the current launcher version for comparison.
+    // Set the version of the running launcher, which a release has to be
+    // newer than to be an update.
     //
     void
     set_current_version (const version_type& version);
 
-    // Set the current launcher version from version string. Throws if parsing
-    // fails.
+    // As above but parse the version. Throw std::invalid_argument if it is
+    // invalid.
     //
     void
     set_current_version (const std::string& version_str);
 
-    // Set GitHub authentication token (optional, for higher rate limits).
+    // Authenticate the GitHub requests with the token, which raises the rate
+    // limit.
     //
     void
     set_token (std::string token);
 
-    // Set whether to include pre-releases in update checks.
-    //
     void
     set_include_prerelease (bool include);
 
-    // Set progress callback.
-    //
     void
     set_progress_callback (progress_callback_type callback);
 
-    // Set completion callback.
-    //
     void
     set_completion_callback (completion_callback_type callback);
 
-    // Set whether to automatically restart after update.
+    // @@ Nothing reads this setting.
     //
     void
     set_auto_restart (bool restart);
 
-    // Set whether to run in headless mode (no prompts).
+    // In the headless mode the check also prints its result to stdout.
     //
     void
     set_headless (bool headless);
 
-    // Set progress coordinator for TUI progress display.
-    //
-    // When set, download progress is displayed via the progress_coordinator
-    // instead of simple console output.
+    // Set the coordinator that shows the progress of the download.
     //
     void
     set_progress_coordinator (progress_coordinator* progress);
 
-    // Operations.
+    // Updating.
     //
 
-    // Check for updates without installing.
-    //
-    // Returns update_info if an update is available, empty info if up-to-date.
-    // Throws on network errors.
+    // Check for a release that is newer than the running launcher and
+    // return the outcome, which also goes to the completion callback. The
+    // update that the check finds is available as last_update_info().
     //
     asio::awaitable<update_status>
     check_for_updates ();
 
-    // Install a specific update (from update_info).
+    // Download the update and put it in place of the running launcher.
     //
     asio::awaitable<update_result>
     install_update (const info_type& info);
 
-    // Restart the launcher to run the new version, passing it the given
-    // arguments.
+    // Restart into the installed update, or into the running executable if
+    // there is none, passing it the arguments (see
+    // update_installer::schedule_restart()).
     //
     bool
     restart (const std::vector<std::string>& args);
 
-    // Accessors.
-    //
-
-    // Get the current update state.
-    //
     update_state
     state () const noexcept;
 
-    // Get the last update info (from most recent check).
-    //
     const info_type&
     last_update_info () const noexcept;
 
-    // Get the current launcher version.
-    //
     const version_type&
     current_version () const noexcept;
 
-    // Check if an update is available.
+    // Return true if the last check found a newer release.
     //
     bool
     update_available () const noexcept;
 
-    // Access underlying components.
-    //
     discovery_type&
     discovery () noexcept;
 
@@ -173,15 +150,11 @@ namespace launcher
     installer () const noexcept;
 
   private:
-    // Report progress.
-    //
     void
     report_progress (update_state state,
                      double progress,
                      const std::string& message);
 
-    // Report completion.
-    //
     void
     report_completion (update_status status,
                        const std::string& error = "");
@@ -204,14 +177,12 @@ namespace launcher
     bool headless_ = false;
   };
 
-  // Create an update coordinator from the current launcher version.
-  //
-  // Uses the compiled-in version constants to set the current version.
+  // Create the update coordinator with the version of this launcher.
   //
   std::unique_ptr<update_coordinator>
   make_update_coordinator (asio::io_context& ioc);
 
-  // Format update status for display.
+  // Return the status of the check as a message.
   //
   std::string
   format_update_status (update_status status, const update_info& info);

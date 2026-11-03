@@ -56,9 +56,8 @@ namespace launcher
     void
     remove_retired () const;
 
-    // Wipe the cache if it was created by a launcher version other than the
-    // specified one and record this version in the cache. Return true if the
-    // version changed.
+    // Wipe the cache unless the specified launcher version created it and
+    // record this version in the cache. Return true if the version changed.
     //
     bool
     reset_cache (const std::string& version) const;

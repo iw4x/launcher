@@ -17,6 +17,9 @@ namespace launcher
   namespace fs = std::filesystem;
   namespace asio = boost::asio;
 
+  // Batch of downloads that run in parallel up to a limit, with the
+  // progress of the whole batch.
+  //
   class download_coordinator
   {
   public:
@@ -25,20 +28,17 @@ namespace launcher
     using request_type = download_request;
     using response_type = download_response;
 
-    // Task completion callback.
-    //
-    // Called when a task completes (success or failure).
+    // Called for each task once it finishes, successfully or not.
     //
     using completion_callback = std::function<void (std::shared_ptr<task_type>)>;
 
-    // Batch completion callback.
-    //
-    // Called when all queued tasks have finished.
+    // Called once all the queued tasks have finished, with the number of
+    // the ones that completed and failed.
     //
     using batch_completion_callback =
       std::function<void (std::size_t completed, std::size_t failed)>;
 
-    // Constructors.
+    // By default the downloads run one at a time.
     //
     explicit
     download_coordinator (asio::io_context& ioc);
@@ -53,8 +53,6 @@ namespace launcher
     download_coordinator (const download_coordinator&) = delete;
     download_coordinator& operator= (const download_coordinator&) = delete;
 
-    // Configuration.
-    //
     void
     set_max_parallel (std::size_t n);
 
@@ -67,22 +65,18 @@ namespace launcher
     void
     set_batch_completion_callback (batch_completion_callback cb);
 
-    // Task queuing.
-    //
-    // Queue a download task with explicit request details. The task will be
-    // added to the manager's queue but not started until execute_all() is
-    // called.
+    // Queue the download and return its task, which only starts with
+    // execute_all().
     //
     std::shared_ptr<task_type>
     queue_download (request_type req);
 
-    // Convenience: queue a simple URL-to-file download.
+    // Queue the download of the URL into the file, naming the task after the
+    // file.
     //
     std::shared_ptr<task_type>
     queue_download (std::string url, fs::path target);
 
-    // Statistics.
-    //
     std::size_t
     total_count () const;
 
@@ -104,27 +98,18 @@ namespace launcher
     download_progress
     overall_progress () const;
 
-    // Task access.
-    //
-    // Get all queued tasks.
-    //
     std::vector<std::shared_ptr<task_type>>
     tasks () const;
 
-    // Execution.
-    //
-    // Execute all queued tasks in parallel (respecting max_parallel).
+    // Run the queued tasks, at most max_parallel() at a time, and return once
+    // they have all finished.
     //
     asio::awaitable<void>
     execute_all ();
 
-    // Clear all tasks.
-    //
     void
     clear ();
 
-    // Access underlying manager.
-    //
     manager_type&
     manager () noexcept;
 

@@ -17,8 +17,6 @@ namespace launcher
 {
   namespace json = boost::json;
 
-  // Helpers.
-  //
   static json::value
   parse_json (const string& s)
   {
@@ -31,14 +29,16 @@ namespace launcher
     return v;
   }
 
+  // Describe the error response for an exception message.
+  //
   static string
   fmt_err (const http_response& r)
   {
     ostringstream o;
     o << "HTTP " << r.status_code () << " " << r.reason;
 
-    // If we have a body, append it, but cap the length to avoid flooding the
-    // log/exception message with things like full 404 HTML pages.
+    // Include the start of the body, which explains the error, and leave
+    // out the rest, which can be a whole HTML page.
     //
     if (r.body && !r.body->empty ())
     {
@@ -71,9 +71,6 @@ namespace launcher
     if (r.is_error ())
       throw runtime_error (fmt_err (r));
 
-    // While 204 No Content is valid HTTP, for our usage here we treat a
-    // missing body as an empty string for the call site.
-    //
     if (!r.body)
       co_return string ();
 
@@ -83,9 +80,6 @@ namespace launcher
   asio::awaitable<http_coordinator::response_type> http_coordinator::
   get_response (const string& u)
   {
-    // Return the raw response object for non-standard status codes that
-    // shouldn't throw immediately.
-    //
     response_type r (co_await client_.get (u));
 
     if (r.is_error ())
@@ -124,8 +118,6 @@ namespace launcher
                              e.message ());
     }
 
-    // Bridge the coordinator callback to the client's signature.
-    //
     http_client::progress_callback acb;
 
     if (cb)
@@ -143,8 +135,6 @@ namespace launcher
   asio::awaitable<optional<uint64_t>> http_coordinator::
   get_content_length (const string& u)
   {
-    // Use HEAD. We only want the metadata, not the payload.
-    //
     response_type r (co_await client_.head (u));
 
     if (r.is_error ())
@@ -156,9 +146,6 @@ namespace launcher
   asio::awaitable<bool> http_coordinator::
   check_url (const string& u)
   {
-    // Quick reachability test. We swallow exceptions here because in this
-    // context, any network failure effectively means "not available".
-    //
     try
     {
       response_type r (co_await client_.head (u));

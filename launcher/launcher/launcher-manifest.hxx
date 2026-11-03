@@ -17,6 +17,8 @@ namespace launcher
   namespace fs = std::filesystem;
   namespace asio = boost::asio;
 
+  // Manifest loading and the mapping of its paths to the installation.
+  //
   class manifest_coordinator
   {
   public:
@@ -24,74 +26,61 @@ namespace launcher
     using file_type = manifest_file;
     using archive_type = manifest_archive;
 
-    // Parse manifest from JSON string.
-    //
-    // Throws if JSON is malformed or manifest structure is invalid.
+    // Parse the manifest JSON and link its files to their archives. Throw
+    // std::runtime_error if the string is empty and the manifest parsing
+    // exceptions if it is invalid.
     //
     static manifest_type
     parse (const std::string& json_str,
            manifest_format kind = manifest_format::update);
 
-    // Load manifest from file.
-    //
-    // Reads the file, parses JSON, and returns the manifest.
+    // As above but read the manifest from the file.
     //
     static manifest_type
     load (const fs::path& file,
           manifest_format kind = manifest_format::update);
 
-    // Save manifest to file.
-    //
-    // Serializes the manifest to JSON and writes to the specified path.
+    // Write the manifest JSON to the file, creating its directory if
+    // necessary. Throw std::runtime_error on failures.
     //
     static void
     save (const manifest_type& m,
           const fs::path& file);
 
-    // Validate manifest structure.
-    //
-    // Checks that all required fields are present and constraints are met.
-    // Returns true if valid, false otherwise.
+    // Validate the manifest (see manifest::validate()).
     //
     static bool
     validate (const manifest_type& m);
 
-    // Resolve file path.
-    //
-    // Combines installation directory with the file's relative path.
+    // Return the path in the installation that the manifest file goes to.
+    // We map the paths of earlier manifests and the bare file names to the
+    // directories that the clients read them from.
     //
     static fs::path
     resolve_path (const file_type& file,
                   const fs::path& install_dir);
 
-    // Resolve archive path.
+    // As above but for the archive.
     //
     static fs::path
     resolve_path (const archive_type& archive,
                   const fs::path& install_dir);
 
-    // Extract files from an archive.
-    //
-    // Given an archive file, extracts its contents to the installation
-    // directory according to the file entries in the manifest.
-    //
-    // Throws if extraction fails or if archive format is unsupported.
+    // Extract the zip archive into the installation, placing each file the
+    // same way as resolve_path(), and return the extracted paths. Throw
+    // std::runtime_error on failures.
     //
     static asio::awaitable<std::vector<fs::path>>
     extract_archive (const archive_type& archive,
                      const fs::path& archive_path,
                      const fs::path& install_dir);
 
-    // Get file count.
-    //
-    // Returns the total number of files in the manifest (including files
-    // within archives).
+    // Return the number of files in the manifest, including those in the
+    // archives.
     //
     static std::size_t
     get_file_count (const manifest_type& m);
 
-    // Check if manifest is empty.
-    //
     static bool
     is_empty (const manifest_type& m);
   };

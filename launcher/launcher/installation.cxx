@@ -185,7 +185,7 @@ namespace launcher
       create_directories (d, ec);
     }
 
-    // Record the version in the (potentially new) database.
+    // Record the version in the database, which may be new.
     //
     cache_database db (root_);
     db.setting (key, version);

@@ -107,15 +107,9 @@ namespace launcher
     return logging_;
   }
 
-  // Version detection & selection.
-  //
-
   asio::awaitable<vector<proton_coordinator::version_type>> proton_coordinator::
   detect_versions (const fs::path& sp)
   {
-    // Delegate the filesystem scanning to the manager logic. We just want
-    // the list.
-    //
     co_return co_await manager_.detect_proton_versions (sp);
   }
 
@@ -130,30 +124,18 @@ namespace launcher
                        const version_type& p,
                        uint32_t id)
   {
-    // Assemble the environment variables (LD_LIBRARY_PATH, etc.) required for
-    // the container. We inject the logging flag here if requested.
-    //
     return manager_.build_environment (sp, p, id, logging_);
   }
-
-  // Launch orchestration.
-  //
 
   asio::awaitable<bool> proton_coordinator::
   setup_for_launch (const environment_type& e,
                     const fs::path& gd,
                     const fs::path& ld)
   {
-    // We need to set the stage for the Steam API to work correctly inside the
-    // Proton container. If the environment isn't primed, the game might crash
-    // or, worse, loop back to the official Steam launcher.
-    //
-
     if (verbose_)
       launcher::log::info (categories::steam{}, "setting up for launch");
 
-    // First, plant steam_appid.txt in the game's CWD. The Steam API DLLs look
-    // for this to identify the application context. Without it,
+    // The game runs in its directory and without steam_appid.txt there its
     // SteamAPI_Init() fails.
     //
     try
@@ -169,9 +151,8 @@ namespace launcher
       co_return false;
     }
 
-    // Our helper tool (steam.exe) runs inside Proton to probe the status.
-    // Since it also links against the Steam API, it needs the ID file in its
-    // own CWD (the launcher directory).
+    // Our Steam helper uses the Steam API as well and runs in the launcher
+    // directory.
     //
     try
     {
@@ -182,16 +163,15 @@ namespace launcher
     }
     catch (const exception& ex)
     {
-      // Not fatal. The game might still run even if our probe fails.
+      // Without it only the probe below fails, so we carry on.
       //
       launcher::log::warning (categories::steam{},
                               "failed to create steam_appid.txt in launcher directory: {}",
                               ex.what ());
     }
 
-    // Verify the "ghost" process. We run a dummy executable inside the
-    // container. This proves that 1) Proton works, and 2) The container can
-    // talk to the Steam IPC pipes.
+    // The helper initializes the Steam API through Proton, which only
+    // succeeds if Proton works and Steam is running.
     //
     fs::path h (gd / "steam.exe");
 
@@ -257,11 +237,6 @@ namespace launcher
                    uint32_t id,
                    const vector<string>& as)
   {
-    // Orchestrate the full startup sequence. We have to be careful about the
-    // order: find the runtime, prep the sandbox, ensure Steam is alive, and
-    // finally exec.
-    //
-
     if (verbose_)
       launcher::log::info (categories::steam{}, "detecting proton versions");
 
@@ -301,7 +276,7 @@ namespace launcher
 
     if (!r)
     {
-      // The IPC check failed or Steam isn't there. Try to wake it up.
+      // Start Steam, which the game requires, and check again.
       //
       if (verbose_)
         launcher::log::info (categories::steam{},
@@ -314,8 +289,7 @@ namespace launcher
       }
       else
       {
-        // Steam started, but the pipes take a moment to initialize.
-        // Sleep briefly before retrying the setup.
+        // Give Steam some time to initialize before we check again.
         //
         if (verbose_)
           launcher::log::info (categories::steam{}, "waiting for steam to initialize");
@@ -348,8 +322,8 @@ namespace launcher
 
     try
     {
-      // We don't track the Steam process. Just kick it off detatched. Rely on
-      // the system PATH to find the binary. Companion finds it the same way.
+      // Start Steam detached and find it in PATH, the same way as Companion
+      // does.
       //
       bp::child p (
         c
@@ -369,8 +343,8 @@ namespace launcher
 
       if (!c)
       {
-        // Yield briefly to give the process time to register the PID, though
-        // pipe creation usually takes longer (handled by caller).
+        // Give the client a moment to start. Note that it takes longer to
+        // initialize, which the caller waits for.
         //
         asio::steady_timer t (ioc_, 3s);
         co_await t.async_wait (asio::use_awaitable);

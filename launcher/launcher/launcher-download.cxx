@@ -18,8 +18,6 @@ using namespace std;
 
 namespace launcher
 {
-  // Note: we default to serial execution (1) unless told otherwise.
-  //
   download_coordinator::
   download_coordinator (asio::io_context& c)
     : download_coordinator (c, 1)
@@ -67,9 +65,6 @@ namespace launcher
     manager_.set_batch_completion_callback (move (cb));
   }
 
-  // Queue management.
-  //
-
   shared_ptr<download_coordinator::task_type> download_coordinator::
   queue_download (request_type r)
   {
@@ -79,11 +74,6 @@ namespace launcher
   shared_ptr<download_coordinator::task_type> download_coordinator::
   queue_download (string u, fs::path f)
   {
-    // Synthesize the request.
-    //
-    // Note that we infer the display name from the filename so the UI has
-    // something reasonable to show without the caller having to be explicit.
-    //
     request_type r;
     r.urls.push_back (move (u));
     r.name = f.filename ().string ();
@@ -91,9 +81,6 @@ namespace launcher
 
     return queue_download (move (r));
   }
-
-  // Statistics & State.
-  //
 
   size_t download_coordinator::
   total_count () const
@@ -143,14 +130,9 @@ namespace launcher
     return manager_.tasks ();
   }
 
-  // Execution.
-  //
-
   asio::awaitable<void> download_coordinator::
   execute_all ()
   {
-    // Block here until the manager drains the queue.
-    //
     co_await manager_.download_all ();
     co_return;
   }
@@ -160,9 +142,6 @@ namespace launcher
   {
     manager_.clear ();
   }
-
-  // Accessors.
-  //
 
   download_coordinator::manager_type& download_coordinator::
   manager () noexcept

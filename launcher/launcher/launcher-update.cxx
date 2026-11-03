@@ -20,10 +20,6 @@ namespace launcher
       discovery_ (c),
       installer_ (c)
   {
-    // Wire up the installer's progress reporting immediately. If the
-    // installer starts doing work during setup (e.g., resuming a
-    // transaction), we need to catch those signals.
-    //
     installer_.set_progress_callback (
       [this] (update_state s, double p, const string& m)
     {
@@ -104,8 +100,6 @@ namespace launcher
 
     try
     {
-      // Ask the backend. This might hit the network so we await.
-      //
       last_update_info_ = co_await discovery_.check_for_update (
         owner_, repo_, current_version_);
 
@@ -113,9 +107,6 @@ namespace launcher
       {
         state_ = update_state::idle;
 
-        // Even in headless mode, log to stdout so we have a record that the
-        // check ran and found nothing.
-        //
         if (headless_)
           cout << "launcher is up to date (" << current_version_ << ")." << endl;
 
@@ -123,17 +114,12 @@ namespace launcher
         co_return update_status::up_to_date;
       }
 
-      // We have a candidate.
-      //
       state_ = update_state::idle;
       report_completion (update_status::update_available);
       co_return update_status::update_available;
     }
     catch (const exception& e)
     {
-      // Network errors or parsing failures aren't fatal to the application,
-      // but the update process stops here.
-      //
       state_ = update_state::failed;
       report_completion (update_status::check_failed, e.what ());
       co_return update_status::check_failed;
@@ -150,12 +136,8 @@ namespace launcher
       co_return r;
     }
 
-    // If we have a progress coordinator, we need to create an entry for the
-    // download.
-    //
-    // Note that we capture the entry `e` in the lambda by value (shared_ptr)
-    // to keep it alive during the async download process which might outlive
-    // this scope.
+    // Show the download as a progress entry. Note that the installer reports
+    // the ratio, which we turn into bytes with the asset size.
     //
     shared_ptr<progress_entry> e;
 
@@ -167,9 +149,6 @@ namespace launcher
       installer_.set_progress_callback (
         [this, e] (update_state s, double p, const string& m)
       {
-        // Map the generic percentage coming from the installer to specific
-        // byte counts required by the progress coordinator.
-        //
         if (s == update_state::downloading && e)
         {
           uint64_t c (static_cast<uint64_t> (
@@ -181,8 +160,6 @@ namespace launcher
             e->metrics ().total_bytes.load (memory_order_relaxed));
         }
 
-        // Forward to the general UI callback.
-        //
         report_progress (s, p, m);
       });
     }
@@ -206,13 +183,8 @@ namespace launcher
   bool update_coordinator::
   restart (const vector<string>& args)
   {
-    // On some platforms (Windows), the installer might have moved the
-    // currently running executable to a temporary location (e.g., .backup) to
-    // allow writing the new one.
-    //
-    // Prefer `last_installed_path_` if it's set, as that points to the fresh
-    // binary. Fallback to `current_executable_path` only if we haven't
-    // installed anything or the path is weird.
+    // The installer moves the running executable to its .backup, so we
+    // restart through the path that it installed the update at.
     //
     fs::path t;
     if (!last_installed_path_.empty () && fs::exists (last_installed_path_))
@@ -294,15 +266,12 @@ namespace launcher
   {
     auto uc (make_unique<update_coordinator> (c));
 
-    // Bake in the compiled version constants.
-    //
     launcher_version v;
     v.major = LAUNCHER_VERSION_MAJOR;
     v.minor = LAUNCHER_VERSION_MINOR;
     v.patch = LAUNCHER_VERSION_PATCH;
 
-    // Parse the full version string to get pre-release and snapshot info. For
-    // stable releases these fields will be empty/zero.
+    // The pre-release and snapshot parts only come with the version string.
     //
     auto p (parse_launcher_version (LAUNCHER_VERSION_STR));
     if (p)

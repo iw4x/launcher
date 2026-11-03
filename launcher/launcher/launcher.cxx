@@ -61,8 +61,8 @@ namespace launcher
 {
   namespace
   {
-    // GitHub repository coordinates and CDN base URL for our distribution
-    // infrastructure.
+    // GitHub repositories of the component releases and the CDN that serves
+    // the DLC.
     //
     constexpr const char* github_org          = "iw4x";
     constexpr const char* client_repo         = "iw4x-client";
@@ -75,10 +75,12 @@ namespace launcher
     constexpr const char* client_x64_repo     = "Releases";
     constexpr const char* assets_x64_repo     = "assets";
 
-    // Steam application ID for the game (Call of Duty: Modern Warfare 2).
+    // Steam app id of Call of Duty: Modern Warfare 2.
     //
     constexpr std::uint32_t steam_app_id = 10190;
 
+    // Log in the launcher category.
+    //
     constexpr auto
     info ([] (auto&&... args)
     {
@@ -114,6 +116,8 @@ namespace launcher
                   std::forward<decltype (args)> (args)...);
     });
 
+    // Return the path of the running executable.
+    //
     path
     self_path ()
     {
@@ -144,6 +148,9 @@ namespace launcher
       return p;
     }
 
+    // Change the working directory to the directory of the running
+    // executable, which is the installation root.
+    //
     void
     reanchor_cwd ()
     {
@@ -160,6 +167,11 @@ namespace launcher
       trace_l2 ("changed working directory to: {}", to_utf8 (d));
     }
 
+    // Show the wait for the GitHub rate limit to reset in a dialog, starting
+    // the progress display for it if it isn't running and stopping it once
+    // the wait is over. Note that the update coordinator makes its requests
+    // through its discovery.
+    //
     template <typename Coordinator>
     void
     bind_rate_limit_ui (asio::io_context& io_ctx,
@@ -203,6 +215,10 @@ namespace launcher
         coord.set_progress_callback (callback);
     }
 
+    // Return the client that the command line selects. Without one, prompt
+    // the user, assuming the x86 client if there is no terminal to prompt
+    // on. Return nullopt if the user cancels the prompt.
+    //
     optional<architecture>
     resolve_architecture (const options& opt)
     {
@@ -233,8 +249,10 @@ namespace launcher
     }
   }
 
-  // Return true if the new version was started and this process should
-  // exit.
+  // Check for a newer launcher release, considering the prereleases if p is
+  // true, and install it, restarting into it with the arguments. Return true
+  // if the new launcher was started and this process should exit. If o
+  // (--self-update-only) is true, then a failed check is an error.
   //
   asio::awaitable<bool>
   check_self_update (asio::io_context& io,
@@ -278,9 +296,8 @@ namespace launcher
 
     info ("restarting into new launcher version");
 
-    // Pass our arguments on. Otherwise, for example, a shortcut's --arch
-    // would be lost and the new launcher would fall back to the default
-    // client.
+    // Pass our arguments on so that the new launcher starts the same client
+    // (e.g., with the --arch of a shortcut).
     //
     if (!uc->restart (args))
     {
@@ -292,6 +309,12 @@ namespace launcher
     co_return true;
   }
 
+  // Download the files of the plan and put them in place, recording them in
+  // the cache. Each download goes to the staging directory first. Once all
+  // of them are complete, we extract the downloaded archives of the manifest
+  // into the installation root and move the other files to their
+  // destinations. Throw std::runtime_error if a download fails three times.
+  //
   asio::awaitable<void>
   execute_plan (asio::io_context& io,
                 download_coordinator& dc,
@@ -331,12 +354,9 @@ namespace launcher
                           "failed to create staging directory: " +
                             to_utf8 (sd));
 
-    // Extract only items that require downloading and build tracking
-    // structures.
-    //
-    // Note that we use hashes of the destination paths in the staging area to
-    // avoid name collisions if two files have the same basename but belong to
-    // different subdirectories.
+    // A staged file is named after the digest of its destination as well,
+    // which keeps apart the files of the same name from different
+    // directories.
     //
     auto is_dl ([] (const auto& i)
     {
@@ -386,11 +406,9 @@ namespace launcher
       }
     };
 
-    // Loop as long as there are incomplete downloads that have not exhausted
-    // their retry budget.
-    //
-    // Notice that network drops are common during bulk asset fetching. We are
-    // slightly forgiving here and allow a few retries before failing.
+    // Download in batches, each with the files that are not yet downloaded
+    // and have attempts left. Connections drop often enough during large
+    // downloads that we give each file three attempts.
     //
     auto is_pd ([] (const auto& d)
     {
@@ -434,11 +452,8 @@ namespace launcher
 
       auto ml ([&io, &ts, &pc] () -> asio::awaitable<void>
       {
-        // Periodically scan the active tasks to see if any have finished.
-        //
-        // If they have, we clean up their UI entries and mark them done. If a
-        // task fails, we increment its retry counter so it will be picked up
-        // again in the next outer loop iteration.
+        // Wait for the tasks to finish, removing their progress entries and
+        // marking each file downloaded or counting its failed attempt.
         //
         asio::steady_timer tm (io);
         while (!ts.empty ())
@@ -470,11 +485,8 @@ namespace launcher
         }
       });
 
-      // Run the downloads and the monitoring loop concurrently, yielding back
-      // until everything completes.
-      //
-      // Notice that we use wait_for_all() to avoid orphaned operations running
-      // in the background if an exception is thrown.
+      // Run the downloads and the wait together. Note that with
+      // wait_for_all() neither keeps running if the other throws.
       //
       auto [order, err_dl, err_ui](
         co_await asio::experimental::make_parallel_group (
@@ -522,11 +534,8 @@ namespace launcher
 
     for (const auto& d : ds)
     {
-      // Validate that the file actually ended up on disk and matches our
-      // expected dimensions.
-      //
-      // A missing file or a size mismatch at this stage strongly implies a
-      // truncated download or a local filesystem failure.
+      // A missing staged file or one of an unexpected size means that the
+      // download was truncated or that writing it failed.
       //
       if (!exists (d.tmp, e))
         throw runtime_error ("downloaded file missing from staging area: " +
@@ -568,9 +577,8 @@ namespace launcher
 
       rename (d.tmp, d.dst, e);
 
-      // If a simple rename fails, it is usually because the staging directory
-      // and the destination directory reside on different filesystem mounts. In
-      // this case, the best we can do is attempt a full copy.
+      // The rename fails if the destination is on another filesystem, in
+      // which case we copy the file.
       //
       if (e)
       {
@@ -585,8 +593,8 @@ namespace launcher
 
     for (const auto& d : ds)
     {
-      // If the item is a zip file and matches a known archive in our manifest,
-      // extract it directly into the root and track its contents.
+      // We record the files that an archive installs and remove the archive
+      // itself.
       //
       if (const manifest_archive* a = archive (d))
       {
@@ -605,7 +613,10 @@ namespace launcher
     }
   }
 
-  // Synchronize the core client.
+  // Bring the IW4x client up to date with its latest release. If the cache
+  // records the release and the files match their records, then we skip the
+  // planning. We look up the release asset of a file without a URL by its
+  // file name.
   //
   asio::awaitable<void>
   sync_client (asio::io_context& io,
@@ -663,8 +674,8 @@ namespace launcher
     cc.stamp (component_type::client, rel.tag_name);
   }
 
-  // Remove the files of a component that were installed by a release
-  // other than the given one.
+  // Remove the files that a release with another tag installed for the
+  // component, along with their records.
   //
   void
   prune_component (cache_coordinator& cc,
@@ -694,8 +705,9 @@ namespace launcher
     }
   }
 
-  // Synchronize a component that is released as a single archive which
-  // extracts into the installation root.
+  // Bring up to date the component that is released as a single zip
+  // archive, which we extract into the installation root with the files
+  // excluded and renamed as specified.
   //
   asio::awaitable<void>
   sync_archive_release (asio::io_context& io,
@@ -764,6 +776,9 @@ namespace launcher
     cc.stamp (comp, rel.tag_name);
   }
 
+  // Bring the IW4x (mm) client up to date. We install its iw4mp.exe under
+  // the client's name and leave out its Unlinker.exe.
+  //
   asio::awaitable<void>
   sync_client_x64 (asio::io_context& io,
                    github_coordinator& gh,
@@ -773,8 +788,8 @@ namespace launcher
                    const path& root,
                    bool pre)
   {
-    // As it turn out, older GCC versions cannot lower braced
-    // initializer arguments in a co_await expression.
+    // Note that older GCC versions fail to compile braced initializer
+    // arguments in a co_await expression.
     //
     vector<string> exclude {"Unlinker.exe"};
 
@@ -790,8 +805,8 @@ namespace launcher
                                    std::move (rename));
   }
 
-  // Synchronize the fastfiles built for the x64 client. The release
-  // archive holds nothing but "zone/iw4x/x64", laid out as installed.
+  // Bring the fastfiles of the IW4x (mm) client up to date. The release
+  // archive holds zone/iw4x/x64/ as installed.
   //
   asio::awaitable<void>
   sync_assets_x64 (asio::io_context& io,
@@ -809,7 +824,9 @@ namespace launcher
                                    assets_x64_repo);
   }
 
-  // Synchronize the rawfiles repository.
+  // Bring the rawfiles up to date with their latest release. As for the
+  // client, we skip the planning if the recorded release and files are
+  // current.
   //
   asio::awaitable<void>
   sync_rawfiles (asio::io_context& io,
@@ -843,6 +860,9 @@ namespace launcher
     auto ms (co_await gh.fetch_manifest (rel));
     manifest m (ms);
 
+    // The archive keeps its asset URL (see fetch_manifest()) and we download
+    // it as release.zip, the name that the release also publishes it under.
+    //
     for (auto& a : m.archives)
     {
       if (a.name == "__launcher_archive.zip")
@@ -856,6 +876,11 @@ namespace launcher
     for (const auto& f : m.files)
       fm.emplace (to_utf8 (manifest_coordinator::resolve_path (f, root)), &f);
 
+    // Look up the release asset of a file without a URL by the file's asset
+    // name and then by its file name. The release publishes the other files
+    // as __launcher_<name>.bin, with the dots of the name replaced (e.g.,
+    // __launcher_iw4x_00_iwd.bin).
+    //
     for (auto& i : p | views::filter ([] (const auto& x) {
       return x.action == reconcile_action::download && x.url.empty (); }))
     {
@@ -906,7 +931,9 @@ namespace launcher
     cc.stamp (component_type::rawfiles, rel.tag_name);
   }
 
-  // Synchronize dynamic downloadable content (DLC).
+  // Bring the DLC files up to date with the manifest on the CDN, which also
+  // serves the files. Note that the DLC has no releases, so we record it
+  // under the dlc version.
   //
   asio::awaitable<void>
   sync_dlc (asio::io_context& io,
@@ -961,6 +988,10 @@ namespace launcher
   }
 
 #ifdef __linux__
+  // Bring our Steam helper, which the Proton launch runs (see
+  // proton_coordinator::setup_for_launch()), up to date with its latest
+  // release.
+  //
   asio::awaitable<void>
   sync_helper (asio::io_context& io,
                 github_coordinator& gh,
@@ -1028,6 +1059,9 @@ namespace launcher
   }
 #endif
 
+  // Start the client executable in the installation root, passing it the
+  // arguments. On Linux we launch it through Proton and fall back to Wine.
+  //
 #ifdef __linux__
   asio::awaitable<void>
   execute (asio::io_context& io,
@@ -1121,10 +1155,10 @@ namespace launcher
 
     info ("launching native game process: {}", to_utf8 (bin));
 
-    // On Windows, boost::process heavily relies on standard strings mapping to
-    // the ANSI codepage which corrupts Unicode strings (Russian, Chinese). We
-    // construct wide strings (UTF-16) to force boost::process into
-    // using CreateProcessW wide-character API.
+    // Boost.Process passes narrow strings in the ANSI code page, which can't
+    // represent every path and argument (e.g., Cyrillic on a Western
+    // installation). So we pass wide strings, which it passes to
+    // CreateProcessW() as is.
     //
     vector<wstring> wa;
     wa.reserve (args.size ());
@@ -1194,6 +1228,9 @@ try
     return 0;
   }
 
+  // Give the process that keeps our files locked some time to exit (see
+  // --wait-pid).
+  //
 #ifdef _WIN32
   if (opt.wait_pid_specified () && !opt.wait_pid ().empty ())
   {
@@ -1218,8 +1255,7 @@ try
 
   active_logger = new logger;
 
-  // The installation root is the current working directory (which
-  // reanchor_cwd() has already set to the launcher binary's directory).
+  // The installation root is the working directory (see reanchor_cwd()).
   //
   path cwd (current_path ());
 
@@ -1300,8 +1336,6 @@ try
 
   if (!opt.skip_remote ())
   {
-    // Build proxy-aware HTTP traits if --proxy was specified.
-    //
     http_client_traits ht;
     if (!opt.proxy ().empty ())
       ht.proxy_url = opt.proxy ();
@@ -1319,8 +1353,7 @@ try
     cc.set_download_coordinator (&dc);
     cc.set_progress_coordinator (&pc);
 
-    // Visually alert the user if we hit GitHub's unauthenticated API rate
-    // limits.
+    // Show the wait if the GitHub requests hit the rate limit.
     //
     bind_rate_limit_ui (io, gh, pc);
 

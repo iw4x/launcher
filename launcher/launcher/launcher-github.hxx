@@ -18,6 +18,8 @@ namespace launcher
 {
   namespace asio = boost::asio;
 
+  // GitHub releases of a repository and the manifests that they publish.
+  //
   class github_coordinator
   {
   public:
@@ -26,29 +28,29 @@ namespace launcher
     using asset_type = github_asset;
     using repository_type = github_repository;
 
-    // Constructors.
-    //
     explicit
     github_coordinator (asio::io_context& ioc);
 
+    // Authenticate the requests with the token (see set_token()).
+    //
     github_coordinator (asio::io_context& ioc, std::string token);
 
     github_coordinator (const github_coordinator&) = delete;
     github_coordinator& operator= (const github_coordinator&) = delete;
 
-    // Set authentication token.
-    //
-    // Required for higher rate limits and private repositories.
+    // Authenticate the requests with the token, which GitHub requires for
+    // private repositories and which raises the rate limit.
     //
     void
     set_token (std::string token);
 
-    // Set proxy URL for all API requests.
+    // Send the requests through the proxy.
     //
     void
     set_proxy (std::string proxy_url);
 
-    // Set progress callback for rate limit notifications.
+    // Called while we wait for the rate limit to reset, with the message to
+    // show and the number of seconds left.
     //
     using progress_callback_type =
       std::function<void (const std::string& message, std::uint64_t seconds_remaining)>;
@@ -56,78 +58,62 @@ namespace launcher
     void
     set_progress_callback (progress_callback_type callback);
 
-    // Fetch latest release.
-    //
-    // If include_prerelease is true, returns the most recent release
-    // (including prereleases). Otherwise, returns the latest stable release.
+    // Return the latest release of the repository. If include_prerelease is
+    // true, then this can also be a prerelease.
     //
     asio::awaitable<release_type>
     fetch_latest_release (const std::string& owner,
                           const std::string& repo,
                           bool include_prerelease = false);
 
-    // Fetch release by tag.
-    //
     asio::awaitable<release_type>
     fetch_release_by_tag (const std::string& owner,
                           const std::string& repo,
                           const std::string& tag);
 
-    // Fetch manifest from release.
-    //
-    // Looks for an asset named "update.json" or matching the manifest
-    // pattern, downloads it, parses the JSON, and returns the manifest.
-    //
-    // Throws if the manifest asset is not found or parsing fails.
+    // Download and parse the release's update.json asset, resolving the
+    // URLs of its archives (see resolve_manifest_urls()). Throw
+    // std::runtime_error if the release has no such asset and the manifest
+    // parsing exceptions if it is invalid.
     //
     asio::awaitable<manifest>
     fetch_manifest (const release_type& release,
                     manifest_format kind = manifest_format::update);
 
-    // Fetch manifest by pattern.
-    //
-    // Searches for an asset matching the given regex pattern.
+    // As above but for the first asset whose name contains a match of the
+    // regular expression.
     //
     asio::awaitable<manifest>
     fetch_manifest_by_pattern (const release_type& release,
                                const std::string& pattern,
                                manifest_format kind = manifest_format::update);
 
-    // Find asset by name.
-    //
-    // Returns the first asset whose name matches the given string exactly.
+    // Return the asset with the specified name, if any.
     //
     std::optional<asset_type>
     find_asset (const release_type& release,
                 const std::string& name) const;
 
-    // Find asset by regex pattern.
-    //
-    // Returns the first asset whose name matches the given regex.
+    // Return the first asset whose name contains a match of the regular
+    // expression, if any.
     //
     std::optional<asset_type>
     find_asset_regex (const release_type& release,
                       const std::string& pattern) const;
 
-    // Resolve asset URLs for manifest.
-    //
-    // Links manifest archives and files to their corresponding GitHub release
-    // assets, populating the URL fields.
-    //
-    // Throws if required assets are missing.
+    // Set the URL of each manifest archive without one to the download URL
+    // of its release asset, which we look up by the archive name and then by
+    // the name as a regular expression. Archives without an asset keep the
+    // empty URL.
     //
     void
     resolve_manifest_urls (manifest& m,
                            const release_type& release) const;
 
-    // Fetch repository information.
-    //
     asio::awaitable<repository_type>
     fetch_repository (const std::string& owner,
                       const std::string& repo);
 
-    // Access underlying API client.
-    //
     api_type&
     api () noexcept;
 
@@ -135,8 +121,6 @@ namespace launcher
     api () const noexcept;
 
   private:
-    // Download and parse manifest JSON from URL.
-    //
     asio::awaitable<manifest>
     download_and_parse_manifest (const std::string& url,
                                  manifest_format kind);
@@ -145,17 +129,13 @@ namespace launcher
     api_type api_;
   };
 
-  // Find all assets matching a pattern.
-  //
-  // Returns a vector of all assets whose names match the regex.
+  // Return the assets whose names contain a match of the regular expression.
   //
   std::vector<github_asset>
   find_assets_regex (const github_release& release,
                      const std::string& pattern);
 
-  // Get download URL for an asset.
-  //
-  // Returns the browser_download_url, which is the direct download link.
+  // Return the asset's download URL.
   //
   std::string
   get_asset_download_url (const github_asset& asset);

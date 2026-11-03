@@ -7,6 +7,11 @@
 
 namespace launcher
 {
+  // Register the executable as the handler of the iw4x URL scheme for the
+  // current user, which is how iw4x:// links start the launcher.
+  // Only Windows has such a registration and elsewhere we do nothing. We
+  // log a failure and otherwise ignore it.
+  //
   void
   refresh_connect_protocol (const std::filesystem::path&) noexcept;
 }

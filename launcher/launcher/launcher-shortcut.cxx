@@ -21,6 +21,8 @@ namespace launcher
 {
   namespace
   {
+    // Log in the shortcut category.
+    //
     constexpr auto
     info ([] (auto&&... a)
     {
@@ -47,6 +49,9 @@ namespace launcher
       shortcut_scope::menu
     };
 
+    // Directory, relative to the installation root, that the shortcuts take
+    // their artwork from.
+    //
     const char* artwork_dir = "cache/shortcut";
 
     // Labels the shortcuts were installed under before the clients were
@@ -99,6 +104,10 @@ namespace launcher
       return r;
     }
 
+    // Write the image to the file unless the file already has its content.
+    // We write a temporary file and rename it over the existing one, so a
+    // shortcut always sees a complete image.
+    //
     void
     write_image (const fs::path& p, artwork::image i)
     {
@@ -195,6 +204,8 @@ namespace launcher
   void shortcut_coordinator::
   refresh () noexcept
   {
+    // Write the artwork first since the shortcuts refer to it.
+    //
     vector<shortcut_spec> ss;
     ss.reserve (size (architectures));
 
@@ -259,6 +270,10 @@ namespace launcher
       }
     }
 
+    // Steam keeps the entries of all the clients in one list per account,
+    // so we write them together. On Linux Steam is restarted through the
+    // companion launcher (see steam_shortcuts::write()).
+    //
     try
     {
 #ifdef _WIN32

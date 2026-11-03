@@ -15,6 +15,9 @@ namespace launcher
 
   namespace
   {
+    // Create the logger of the named category, which writes to the sinks
+    // statements of the threshold severity and above.
+    //
     Logger*
     register_category (string const&                      n,
                        initializer_list<shared_ptr<Sink>> s,

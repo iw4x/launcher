@@ -22,9 +22,9 @@ namespace launcher
   // Return the system error message (error_code::message(),
   // system_error::what()) in UTF-8.
   //
-  // Note that on Windows such messages are encoded in the ANSI code page
-  // (for example, CP1251 on Russian installs). Elsewhere they are returned
-  // as is.
+  // Note that on Windows such messages are in the ANSI code page (e.g.,
+  // CP1251 on Russian installations). Elsewhere they are already in UTF-8
+  // and we return them as is.
   //
   std::string
   to_utf8_system_message (const std::string&);
