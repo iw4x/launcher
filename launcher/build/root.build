@@ -10,6 +10,13 @@ config [bool] config.launcher.develop ?= false
 
 develop = $config.launcher.develop
 
+# Link the C++ runtime statically into the Linux launcher, which we ship on
+# its own to any host (see launcher/buildfile). Note that some distributions
+# (Fedora, for example) don't install the static runtime by default, which is
+# why it can be turned off.
+#
+config [bool] config.launcher.static_runtime ?= true
+
 # Suppress warnings coming from external libraries.
 #
 cxx.internal.scope = current

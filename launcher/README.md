@@ -28,9 +28,15 @@ import! [metadata] launcher = launcher%exe{iw4x-launcher}
 This package provides the following configuration variables:
 
 ```
-[bool] config.launcher.develop ?= false
+[bool] config.launcher.develop        ?= false
+[bool] config.launcher.static_runtime ?= true
 ```
 
 If `config.launcher.develop` is `true`, then the build regenerates the files
 kept in `launcher/pregenerated/`, which requires the `cli` and `odb`
 compilers as well as `xxd`.
+
+If `config.launcher.static_runtime` is `true`, then the Linux launcher links
+the C++ runtime statically, so that it runs on hosts with an older one.
+Disable it if your distribution doesn't install the static runtime, as is
+the case on Fedora by default.

@@ -31,3 +31,7 @@ depends: libodb-sqlite == 2.6.0
 depends: libquill == 10.1.0
 tests: launcher-tests == $
 builds: default : &( +linux +windows ) ; Only Linux and Windows are supported.
+default-build-exclude: linux_fedora_*-** ; Built in the fedora configuration.
+fedora-build-config: config.launcher.static_runtime=false ; Fedora doesn't install the static C++ runtime by default.
+fedora-build-include: linux_fedora_*-**
+fedora-build-exclude: ** ; Only needed on Fedora.

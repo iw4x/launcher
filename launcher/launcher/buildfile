@@ -71,14 +71,16 @@ liba{launcher}: shortcut/cxx{shortcut-writer-windows}: include = $windows
 exe{iw4x-launcher}: {hxx cxx}{launcher-glibc} hxx{launcher-glibc-x86_64}: \
   include = $glibc
 
-# We ship the Linux launcher on its own to any host, so it carries the C++
-# runtime and links our dependencies statically.
+# We ship the Linux launcher on its own to any host, so it links our
+# dependencies statically and, unless configured otherwise, carries the C++
+# runtime.
 #
 if $glibc
 {
   bin.exe.lib = static shared
 
-  exe{iw4x-launcher}: cxx.loptions += -static-libstdc++ -static-libgcc
+  if $config.launcher.static_runtime
+    exe{iw4x-launcher}: cxx.loptions += -static-libstdc++ -static-libgcc
 }
 
 # Link the library to the same variants of our dependencies as the launcher.
