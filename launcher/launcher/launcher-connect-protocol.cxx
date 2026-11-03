@@ -9,7 +9,7 @@
 #  include <windows.h>
 
 #  include <launcher/launcher-log.hxx>
-#  include <launcher/utility.hxx>
+#  include <launcher/launcher-utility.hxx>
 #endif
 
 using namespace std;

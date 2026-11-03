@@ -8,7 +8,7 @@
 #include <functional>   // hash
 #include <system_error>
 
-#include <launcher/utility.hxx>
+#include <launcher/launcher-utility.hxx>
 #include <launcher/launcher-log.hxx>
 #include <launcher/arch/arch-types.hxx>
 #include <launcher/cache/cache-database.hxx>

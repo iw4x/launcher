@@ -27,7 +27,7 @@
 #  include <sys/wait.h>
 #endif
 
-#include <launcher/utility.hxx> // from_utf8()
+#include <launcher/launcher-utility.hxx> // from_utf8()
 
 using namespace std;
 

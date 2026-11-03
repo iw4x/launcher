@@ -42,12 +42,12 @@
 #include <launcher/launcher-progress.hxx>
 #include <launcher/launcher-shortcut.hxx>
 #include <launcher/launcher-update.hxx>
+#include <launcher/launcher-utility.hxx>
 
 #ifdef __linux__
 #  include <launcher/launcher-steam-proton.hxx>
 #endif
 
-#include <launcher/utility.hxx>
 #include <launcher/version.hxx>
 
 namespace bp = boost::process::v2;
