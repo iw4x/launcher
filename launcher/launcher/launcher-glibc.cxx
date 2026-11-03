@@ -6,7 +6,7 @@
 // The Linux launcher that we ship runs on any host, so it can only depend
 // on what the oldest supported glibc provides. This floor is glibc 2.36,
 // which is the version in Debian 12, the oldest Debian release with
-// long-term support. For our own code glibc.hxx (which every other
+// long-term support. For our own code launcher-glibc.hxx (which every other
 // translation unit of the launcher includes first) binds each reference to
 // a version available at the floor.
 //
@@ -20,8 +20,9 @@
 // time and require nothing from glibc at runtime beyond the floor.
 //
 // Some of these symbols are the same functions under a newer version, which
-// glibc.hxx binds to their older version. So this translation unit doesn't
-// include it and instead binds the few references that it makes itself.
+// launcher-glibc.hxx binds to their older version. So this translation unit
+// doesn't include it and instead binds the few references that it makes
+// itself.
 //
 // If the launcher requires anything else, then its floor test fails (see
 // glibc/testscript in launcher-tests) and the missing definition should be

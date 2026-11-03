@@ -60,8 +60,8 @@ function run ()
   "$@"
 }
 
-# The glibc floor of the glibc launcher (see glibc.cxx in the launcher
-# package), which we verify the executable against.
+# The glibc floor of the glibc launcher (see launcher-glibc.cxx in the
+# launcher package), which we verify the executable against.
 #
 glibc_floor=2.36
 
