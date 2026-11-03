@@ -15,7 +15,7 @@ depends: * build2 >= 0.18.0
 depends: * bpkg >= 0.18.0
 depends: * cli == 1.2.0 ? ($config.launcher.develop)
 depends: * odb == 2.6.0 ? ($config.launcher.develop)
-requires: xxd ? ($config.launcher.develop) ; Embeds the shortcut artwork.
+depends: * xxd == 8.2.3075 ? ($config.launcher.develop)
 depends: libboost-asio == 1.91.0
 depends: libboost-beast == 1.91.0
 depends: libboost-json == 1.91.0

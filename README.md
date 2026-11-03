@@ -70,8 +70,8 @@ Run `iw4x-launcher --help` for the complete list.
 The development setup for `launcher` uses the standard `bdep`-based
 workflow. Note that development builds regenerate the files kept in
 `launcher/launcher/pregenerated/`. For this `bdep` builds the `cli` and
-`odb` compilers automatically and `xxd` comes from the system. If you want
-to use `launcher` in your `build2`-based project, then see the package
+`odb` compilers and the `xxd` utility automatically. If you want to use
+`launcher` in your `build2`-based project, then see the package
 [`README.md`](launcher/README.md) file.
 
 On Linux we build with GCC. For example:

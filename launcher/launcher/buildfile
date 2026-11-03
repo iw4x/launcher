@@ -189,6 +189,7 @@ if $develop
 {
   import! [metadata] cli = cli%exe{cli}
   import! [metadata] odb = odb%exe{odb}
+  import! [metadata] xxd = xxd%exe{xxd}
 }
 
 # Command line options parser.
@@ -295,7 +296,7 @@ for i: shortcut/artwork/png{*}
   }
 }
 
-hxx{~'/(.+)-png/'}: png{~'/\1/'}
+hxx{~'/(.+)-png/'}: png{~'/\1/'} $xxd
 %
 if $develop
 {{
@@ -306,7 +307,7 @@ if $develop
   # Read the image from stdin so that xxd only writes the array initializer,
   # without a variable named after the input path.
   #
-  xxd -i <=$path($<[0]) >=$h
+  $xxd -i <=$path($<[0]) >=$h
 
   # As above.
   #
