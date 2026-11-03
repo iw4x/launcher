@@ -214,14 +214,19 @@ main (int argc, char* argv[])
   {
     if (c == "get" || c == "post")
     {
-      // Note that GCC 14 crashes on co_await in a conditional expression.
+      // Note that GCC 14 crashes on co_await in a conditional expression as
+      // well as on a conditional expression in the operand of co_await,
+      // which is why we prepare the body beforehand.
       //
       http_response rs;
 
       if (c == "get")
         rs = co_await hc.get (u);
       else
-        rs = co_await hc.post (u, as.size () == 3 ? as[2] : "");
+      {
+        string b (as.size () == 3 ? as[2] : "");
+        rs = co_await hc.post (u, move (b));
+      }
 
       co_return "status " + to_string (rs.status_code ()) +
                 (rs.body ? "\nbody " + *rs.body : "");
