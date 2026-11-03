@@ -23,9 +23,12 @@ import impl_libs += libminiz%lib{miniz}
 
 tclass = $cxx.target.class
 tsys   = $cxx.target.system
+tcpu   = $cxx.target.cpu
 
 linux   = ($tclass == 'linux')
 windows = ($tclass == 'windows')
+
+glibc = ($linux && $tcpu == 'x86_64')
 
 define cli: file
 cli{*}: extension = cli
@@ -46,6 +49,7 @@ liba{launcher}: {hxx ixx txx cxx}{** -launcher                   \
                                      -shortcut/shortcut-writer-* \
                                      -launcher-options           \
                                      -cache/cache-types-odb      \
+                                     -glibc*                     \
                                      -version                    \
                                      -pregenerated/**}           \
                 hxx{version}                                     \
@@ -59,6 +63,22 @@ liba{launcher}: {hxx cxx}{launcher-steam-proton steam/steam-proton}: \
 
 liba{launcher}: shortcut/cxx{shortcut-writer-linux}:   include = $linux
 liba{launcher}: shortcut/cxx{shortcut-writer-windows}: include = $windows
+
+# The glibc floor keeps the Linux launcher within the glibc that the oldest
+# supported host provides (see glibc.cxx). Its definitions have to end up in
+# the launcher, so we only build them into the executable.
+#
+exe{iw4x-launcher}: {hxx cxx}{glibc} hxx{glibc-x86_64}: include = $glibc
+
+# We ship the Linux launcher on its own to any host, so it carries the C++
+# runtime and links our dependencies statically.
+#
+if $glibc
+{
+  bin.exe.lib = static shared
+
+  exe{iw4x-launcher}: cxx.loptions += -static-libstdc++ -static-libgcc
+}
 
 # Link the library to the same variants of our dependencies as the launcher.
 # Otherwise the launcher could end up with both the static and the shared
@@ -93,6 +113,17 @@ if $windows
   windows_poptions = -DWINVER=0x0A00 -D_WIN32_WINNT=0x0A00 -DNOMINMAX
 
 cxx.poptions += $windows_poptions
+
+# Every translation unit of the launcher binds its glibc references to the
+# floor (see glibc.hxx).
+#
+if $glibc
+  cxx.poptions += -include "$src_base/glibc.hxx"
+
+# Except for the definitions that keep the launcher within the floor, which
+# define some of the symbols that the bindings bind (see glibc.cxx).
+#
+obje{glibc}: cxx.poptions = "-I$out_root" "-I$src_root"
 
 # Our Asio and Beast heavy translation units can exceed the section limit of
 # the default COFF object format.

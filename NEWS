@@ -19,3 +19,7 @@ Version 1.1.8-b.28
 
   * The Steam library artwork of IW4x (mm) is tagged MM and the artwork of
     IW4x carries no tag, matching the client names.
+
+  * The Linux launcher runs on glibc 2.36 (Debian 12) and later. It links
+    the C++ runtime and its dependencies statically, so it only requires
+    glibc from the host.
