@@ -14,8 +14,16 @@ namespace launcher
 {
   // An argument that std::format() can format.
   //
+  // Note that we spell out the requirement instead of using
+  // std::formattable, which not every standard library that we build with
+  // provides yet.
+  //
   template <typename T>
-  concept format_argument = std::formattable<std::remove_cvref_t<T>, char>;
+  concept format_argument =
+    requires (const std::remove_cvref_t<T>& v, std::format_context& c)
+    {
+      std::formatter<std::remove_cvref_t<T>, char> ().format (v, c);
+    };
 
   // Error of starting a program, with the error code and the description of
   // what we were doing, formatted from the format string and its arguments,
