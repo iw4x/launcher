@@ -26,4 +26,6 @@ Version 1.1.8-b.28
 
   * The launcher takes over the DLC files that earlier launchers installed
     into zone/dlc/. The client moved them over the current copies at every
-    start, so each update downloaded them again.
+    start, so each update downloaded them again. If such a file cannot be
+    moved or removed (e.g., zone/dlc/ is read-only), then the update fails
+    with an error that names it, since the client would refuse to start.

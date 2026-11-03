@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 #include <iostream>
+#include <exception>
 #include <filesystem>
 
 #include <launcher/installation.hxx>
@@ -15,7 +16,8 @@ using namespace launcher;
 // Usage: argv[0] <command> [<argument>...]
 //
 // Run the command on the installation in the current working directory and
-// print its result, if any, to stdout.
+// print its result, if any, to stdout. Print the error of a command that
+// throws to stderr and exit with 1.
 //
 // migrate-clients
 //    Rename the clients installed under their legacy names.
@@ -36,6 +38,7 @@ using namespace launcher;
 //
 int
 main (int argc, char* argv[])
+try
 {
   auto usage = [] ()
   {
@@ -72,4 +75,9 @@ main (int argc, char* argv[])
     println ("{}", ins.reset_cache (argv[2]));
   else
     return usage ();
+}
+catch (const exception& e)
+{
+  println (cerr, "error: {}", e.what ());
+  return 1;
 }

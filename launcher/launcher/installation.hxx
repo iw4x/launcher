@@ -51,7 +51,12 @@ namespace launcher
     // game's own DLC over their copies in zone/iw4x/x86/dlc/, taking them
     // for the newer ones. So a legacy copy that differs from the DLC
     // manifest's replaces the installed file on every start that finds it,
-    // and we download the file again on the next update.
+    // and we download the file again on the next update. If the client
+    // cannot move the legacy copy (e.g., zone/dlc/ is read-only), then it
+    // removes the installed file all the same and refuses to start.
+    //
+    // So throw std::system_error if a legacy copy cannot be moved or
+    // removed.
     //
     void
     migrate_dlc (const std::vector<std::filesystem::path>&) const;

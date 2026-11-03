@@ -101,15 +101,16 @@ namespace launcher
         remove (f, ec);
 
         if (ec)
-          log::warning (categories::launcher (),
-                        "failed to remove {}: {}",
-                        to_utf8 (f),
-                        to_utf8_system_message (ec.message ()));
-        else
-          log::info (categories::launcher (),
-                     "removed {} which {} supersedes",
-                     to_utf8 (f),
-                     to_utf8 (t));
+          throw system_error (
+            ec,
+            "unable to remove " + to_utf8 (f) + ", which the client would "
+            "move over " + to_utf8 (t) + " at startup; remove it or make " +
+            to_utf8 (l) + " writable");
+
+        log::info (categories::launcher (),
+                   "removed {} which {} supersedes",
+                   to_utf8 (f),
+                   to_utf8 (t));
 
         continue;
       }
@@ -120,16 +121,16 @@ namespace launcher
         rename (f, t, ec);
 
       if (ec)
-        log::warning (categories::launcher (),
-                      "failed to move {} to {}: {}",
-                      to_utf8 (f),
-                      to_utf8 (t),
-                      to_utf8_system_message (ec.message ()));
-      else
-        log::info (categories::launcher (),
-                   "moved {} to {}",
-                   to_utf8 (f),
-                   to_utf8 (t));
+        throw system_error (
+          ec,
+          "unable to move " + to_utf8 (f) + " to " + to_utf8 (t) +
+          ", which the client would do at startup; move it or make " +
+          to_utf8 (l) + " writable");
+
+      log::info (categories::launcher (),
+                 "moved {} to {}",
+                 to_utf8 (f),
+                 to_utf8 (t));
     }
   }
 

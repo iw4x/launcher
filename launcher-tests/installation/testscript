@@ -70,6 +70,29 @@
     cat $d/mp_farm.ff >'current'
   }
 
+  : read-only
+  : Test failing if the legacy copy of an installed DLC file stays
+  :
+  : Note that root can remove files from a directory without the write
+  : permission, so as root this test fails.
+  :
+  if ($cxx.target.class != 'windows')
+  {
+    mkdir -p zone/dlc $d
+    echo 'legacy' >=zone/dlc/mp_farm.ff
+    echo 'current' >=$d/mp_farm.ff
+
+    chmod a-w zone/dlc
+
+    $* migrate-dlc $d/mp_farm.ff 2>>~%EOE% != 0
+      %error: unable to remove .+mp_farm\.ff, which the client would move over .+mp_farm\.ff at startup.*%
+      EOE
+
+    chmod u+w zone/dlc
+
+    cat $d/mp_farm.ff >'current'
+  }
+
   : unlisted
   : Test keeping the files of zone/dlc/ that the DLC doesn't install
   :
