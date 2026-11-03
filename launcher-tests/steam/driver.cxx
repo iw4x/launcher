@@ -1,7 +1,6 @@
 // Copyright (c) the IW4x authors (see the AUTHORS file).
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include <print>
 #include <string>
 #include <vector>
 #include <cstdlib>      // exit(), getenv()
@@ -25,7 +24,7 @@ namespace
   [[noreturn]] void
   fail (const string& m)
   {
-    println (cerr, "error: {}", m);
+    cerr << "error: " << m << endl;
     exit (1);
   }
 
@@ -87,7 +86,7 @@ namespace
 
     for (const filesystem::path& p: ps)
     {
-      println ("{}", filesystem::relative (p, home).generic_string ());
+      cout << filesystem::relative (p, home).generic_string () << endl;
 
       ifstream is (p, ios::binary);
       if (!is)
@@ -106,11 +105,11 @@ namespace
       {
         const vdf_object& e (*l->object (k));
 
-        println ("  {}", k);
-        println ("    appid {}", *e.number ("appid"));
+        cout << "  " << k << endl;
+        cout << "    appid " << *e.number ("appid") << endl;
 
         for (const char* f: {"AppName", "Exe", "StartDir", "LaunchOptions"})
-          println ("    {} {}", f, *e.string (f));
+          cout << "    " << f << ' ' << *e.string (f) << endl;
       }
     }
   }
@@ -152,7 +151,7 @@ main (int argc, char* argv[])
   {
     if (c == "app-id" && as.size () == 3)
     {
-      println ("{}", steam_shortcuts::app_id (as[1], as[2]));
+      cout << steam_shortcuts::app_id (as[1], as[2]) << endl;
       return 0;
     }
 
@@ -170,11 +169,11 @@ main (int argc, char* argv[])
       ranges::sort (ps);
 
       for (const filesystem::path& p: ps)
-        println ("{}", filesystem::relative (p).generic_string ());
+        cout << filesystem::relative (p).generic_string () << endl;
     }
     else if (c == "write" && as.size () == 1)
     {
-      println ("{}", to_string (steam_shortcuts::write (read_specs ())));
+      cout << to_string (steam_shortcuts::write (read_specs ())) << endl;
       print_lists (h);
     }
     else

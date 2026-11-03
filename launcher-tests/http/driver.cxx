@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include <map>
-#include <print>
 #include <string>
 #include <vector>
 #include <cstdint>
@@ -32,7 +31,7 @@ namespace
   [[noreturn]] void
   fail (const string& m)
   {
-    println (cerr, "error: {}", m);
+    cerr << "error: " << m << endl;
     exit (1);
   }
 
@@ -259,10 +258,10 @@ main (int argc, char* argv[])
   ioc.run ();
 
   if (r && e == nullptr)
-    println ("{}", *r);
+    cout << *r << endl;
 
   for (const string& l: sv.log ())
-    println ("> {}", l);
+    cout << "> " << l << endl;
 
   if (e != nullptr)
   {

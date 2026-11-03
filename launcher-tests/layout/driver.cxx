@@ -1,7 +1,6 @@
 // Copyright (c) the IW4x authors (see the AUTHORS file).
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include <print>
 #include <string>
 #include <vector>
 #include <cstdlib>      // exit()
@@ -21,7 +20,7 @@ namespace
   [[noreturn]] void
   fail (const string& m)
   {
-    println (cerr, "error: {}", m);
+    cerr << "error: " << m << endl;
     exit (1);
   }
 
@@ -35,13 +34,17 @@ namespace
   void
   print_file (const manifest_file& f, string_view indent)
   {
-    println ("{}file {} {} {}{}{}",
-             indent,
-             f.path,
-             f.size,
-             f.hash.empty () ? "-" : f.hash.value,
-             f.asset_name ? " asset=" + *f.asset_name : "",
-             f.archive_name ? " archive=" + *f.archive_name : "");
+    cout << indent << "file " << f.path
+         << ' ' << f.size
+         << ' ' << (f.hash.empty () ? "-" : f.hash.value);
+
+    if (f.asset_name)
+      cout << " asset=" << *f.asset_name;
+
+    if (f.archive_name)
+      cout << " archive=" << *f.archive_name;
+
+    cout << endl;
   }
 }
 
@@ -88,11 +91,10 @@ main (int argc, char* argv[])
 
       for (const manifest_archive& a: m.archives)
       {
-        println ("archive {} {} {} {}",
-                 a.name,
-                 a.size,
-                 a.url.empty () ? "-" : a.url,
-                 a.hash.empty () ? "-" : a.hash.value);
+        cout << "archive " << a.name
+             << ' ' << a.size
+             << ' ' << (a.url.empty () ? "-" : a.url)
+             << ' ' << (a.hash.empty () ? "-" : a.hash.value) << endl;
 
         for (const manifest_file& f: a.files)
           print_file (f, "  ");
@@ -103,7 +105,7 @@ main (int argc, char* argv[])
     }
     else if (c == "serialize")
     {
-      println ("{}", manifest_coordinator::parse (read_input ()).string ());
+      cout << manifest_coordinator::parse (read_input ()).string () << endl;
     }
     else if (c == "resolve")
     {
@@ -130,7 +132,7 @@ main (int argc, char* argv[])
         else
           fail ("invalid entry '" + l + "'");
 
-        println ("{}", r.lexically_relative ("root").generic_string ());
+        cout << r.lexically_relative ("root").generic_string () << endl;
       }
     }
     else

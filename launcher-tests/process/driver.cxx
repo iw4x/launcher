@@ -4,7 +4,6 @@
 #include <errno.h>
 #include <sys/wait.h>
 
-#include <print>
 #include <string>
 #include <vector>
 #include <iostream>
@@ -25,7 +24,7 @@ main (int argc, char* argv[])
 {
   if (argc < 2)
   {
-    println (cerr, "error: program expected");
+    cerr << "error: program expected" << endl;
     return 1;
   }
 
@@ -37,14 +36,14 @@ main (int argc, char* argv[])
   }
   catch (const process_error& e)
   {
-    println (cerr, "error: {}", e.what ());
+    cerr << "error: " << e.what () << endl;
     r = 1;
   }
 
   int s;
   pid_t p (waitpid (-1, &s, WNOHANG));
 
-  println ("{}", p == -1 && errno == ECHILD ? "no children" : "children");
+  cout << (p == -1 && errno == ECHILD ? "no children" : "children") << endl;
 
   return r;
 }

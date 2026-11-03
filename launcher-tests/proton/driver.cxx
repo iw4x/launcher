@@ -1,7 +1,6 @@
 // Copyright (c) the IW4x authors (see the AUTHORS file).
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include <print>
 #include <string>
 #include <vector>
 #include <utility>   // move()
@@ -25,7 +24,7 @@ main (int argc, char* argv[])
 {
   if (argc != 2)
   {
-    println (cerr, "error: steam root argument expected");
+    cerr << "error: steam root argument expected" << endl;
     return 1;
   }
 
@@ -54,5 +53,5 @@ main (int argc, char* argv[])
     rethrow_exception (e);
 
   for (const proton_version& v: r)
-    println ("{}", v.name);
+    cout << v.name << endl;
 }

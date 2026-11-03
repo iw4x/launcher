@@ -1,7 +1,6 @@
 // Copyright (c) the IW4x authors (see the AUTHORS file).
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include <print>
 #include <cerrno>
 #include <chrono>
 #include <string>
@@ -105,7 +104,7 @@ main (int argc, char* argv[])
     asio::thread_pool p (stoul (argv[2]));
 
     errno = ERANGE;
-    println ("{}", asio::config (p).get ("scheduler", "concurrency_hint", -1));
+    cout << asio::config (p).get ("scheduler", "concurrency_hint", -1) << endl;
 
     bool done (false);
     asio::post (p, [&done] () {done = true;});
@@ -119,7 +118,7 @@ main (int argc, char* argv[])
                                  stoi (argv[2])});
 
     errno = ERANGE;
-    println ("{}", asio::config (x).get ("scheduler", "concurrency_hint", 0));
+    cout << asio::config (x).get ("scheduler", "concurrency_hint", 0) << endl;
   }
   else if (c == "get" && argc >= 4 && argc % 2 == 0)
   {
@@ -146,7 +145,7 @@ main (int argc, char* argv[])
         else if (t == "uchar")  v = get<unsigned char> (cf, k, 123);
         else
         {
-          println (cerr, "error: invalid type '{}'", t);
+          cerr << "error: invalid type '" << t << "'" << endl;
           return 1;
         }
       }
@@ -155,14 +154,13 @@ main (int argc, char* argv[])
         v = "out of range";
       }
 
-      println ("{}", v);
+      cout << v << endl;
     }
   }
   else
   {
-    println (cerr,
-             "error: invalid arguments\n"
-             "  info: usage: driver <command> [<argument>...]");
+    cerr << "error: invalid arguments\n"
+         << "  info: usage: driver <command> [<argument>...]" << endl;
     return 1;
   }
 }

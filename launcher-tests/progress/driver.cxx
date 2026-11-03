@@ -1,7 +1,6 @@
 // Copyright (c) the IW4x authors (see the AUTHORS file).
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include <print>
 #include <string>
 #include <vector>
 #include <iostream>
@@ -38,29 +37,28 @@ main (int argc, char* argv[])
     using pt = progress_tracker;
 
     if (c == "bytes" && n == 2)
-      println ("{}", pt::format_bytes (stoull (as[1])));
+      cout << pt::format_bytes (stoull (as[1])) << endl;
     else if (c == "speed" && n == 2)
-      println ("{}", pt::format_speed (stof (as[1])));
+      cout << pt::format_speed (stof (as[1])) << endl;
     else if (c == "duration" && n == 2)
-      println ("{}", pt::format_duration (stoi (as[1])));
+      cout << pt::format_duration (stoi (as[1])) << endl;
     else if (c == "bar" && (n == 3 || n == 4))
-      println ("{}", pt::format_bar (stof (as[1]),
-                                     false,
-                                     stoi (as[2]),
-                                     n == 4 ? stoul (as[3]) : 0));
+      cout << pt::format_bar (stof (as[1]),
+                              false,
+                              stoi (as[2]),
+                              n == 4 ? stoul (as[3]) : 0) << endl;
     else if (c == "indeterminate" && n == 2)
-      println ("{}", pt::format_bar (0, true, stoi (as[1])));
+      cout << pt::format_bar (0, true, stoi (as[1])) << endl;
     else
     {
-      println (cerr,
-               "error: invalid arguments\n"
-               "  info: usage: driver <command> <argument>...");
+      cerr << "error: invalid arguments\n"
+           << "  info: usage: driver <command> <argument>..." << endl;
       return 1;
     }
   }
   catch (const exception& e)
   {
-    println (cerr, "error: {}", e.what ());
+    cerr << "error: " << e.what () << endl;
     return 1;
   }
 }

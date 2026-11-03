@@ -1,7 +1,6 @@
 // Copyright (c) the IW4x authors (see the AUTHORS file).
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include <print>
 #include <chrono>
 #include <string>
 #include <vector>
@@ -27,7 +26,7 @@ namespace
   [[noreturn]] void
   fail (const string& m)
   {
-    println (cerr, "error: {}", m);
+    cerr << "error: " << m << endl;
     exit (1);
   }
 
@@ -167,14 +166,14 @@ main (int argc, char* argv[])
       vector<reconcile_item> is (r.plan (m, to_component (as[2]), as[3]));
 
       for (const reconcile_item& i: is)
-        println ("{} {} {} {}",
-                 to_text (i.action),
-                 rel (i.path),
-                 i.expected_size,
-                 hash (i.expected_hash));
+        cout << to_text (i.action)
+             << ' ' << rel (i.path)
+             << ' ' << i.expected_size
+             << ' ' << hash (i.expected_hash) << endl;
 
       reconcile_summary s (r.summarize (is));
-      println ("summary {} {}", s.downloads_required, s.bytes_to_download);
+      cout << "summary " << s.downloads_required
+           << ' ' << s.bytes_to_download << endl;
     }
     else if (c == "track" && n >= 4)
     {
@@ -194,18 +193,17 @@ main (int argc, char* argv[])
       ranges::sort (fs, {}, &cached_file::path);
 
       for (const cached_file& f: fs)
-        println ("{} {} {} {}",
-                 rel (f.path ()),
-                 f.version (),
-                 f.size (),
-                 hash (f.hash ()));
+        cout << rel (f.path ())
+             << ' ' << f.version ()
+             << ' ' << f.size ()
+             << ' ' << hash (f.hash ()) << endl;
     }
     else if (c == "stat" && (n == 2 || n == 3))
     {
       if (n == 3)
         r.mode (to_strategy (as[2]));
 
-      println ("{}", to_text (r.stat (r.root () / as[1])));
+      cout << to_text (r.stat (r.root () / as[1])) << endl;
     }
     else if (c == "clean" && n == 3)
     {
@@ -214,12 +212,12 @@ main (int argc, char* argv[])
       ranges::sort (os);
 
       for (const string& o: os)
-        println ("{}", rel (o));
+        cout << rel (o) << endl;
     }
     else if (c == "stamp" && n == 3)
       r.stamp (to_component (as[1]), as[2]);
     else if (c == "outdated" && n == 3)
-      println ("{}", r.outdated (to_component (as[1]), as[2]));
+      cout << boolalpha << r.outdated (to_component (as[1]), as[2]) << endl;
     else
       fail ("invalid arguments\n"
             "  info: usage: driver <command> [<argument>...]");

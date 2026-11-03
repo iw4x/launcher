@@ -1,7 +1,6 @@
 // Copyright (c) the IW4x authors (see the AUTHORS file).
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include <print>
 #include <string>
 #include <vector>
 #include <iostream>
@@ -42,9 +41,8 @@ try
 {
   auto usage = [] ()
   {
-    println (cerr,
-             "error: invalid arguments\n"
-             "  info: usage: driver <command> [<argument>...]");
+    cerr << "error: invalid arguments\n"
+         << "  info: usage: driver <command> [<argument>...]" << endl;
     return 1;
   };
 
@@ -68,16 +66,16 @@ try
     ins.migrate_dlc (fs);
   }
   else if (c == "retire" && a)
-    println ("{}", ins.retire (argv[2]));
+    cout << boolalpha << ins.retire (argv[2]) << endl;
   else if (c == "remove-retired" && argc == 2)
     ins.remove_retired ();
   else if (c == "reset-cache" && a)
-    println ("{}", ins.reset_cache (argv[2]));
+    cout << boolalpha << ins.reset_cache (argv[2]) << endl;
   else
     return usage ();
 }
 catch (const exception& e)
 {
-  println (cerr, "error: {}", e.what ());
+  cerr << "error: " << e.what () << endl;
   return 1;
 }

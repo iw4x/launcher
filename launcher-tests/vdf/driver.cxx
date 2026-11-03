@@ -1,7 +1,6 @@
 // Copyright (c) the IW4x authors (see the AUTHORS file).
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include <print>
 #include <string>
 #include <vector>
 #include <cstdint>
@@ -24,7 +23,7 @@ namespace
   [[noreturn]] void
   fail (const string& m)
   {
-    println (cerr, "error: {}", m);
+    cerr << "error: " << m << endl;
     exit (1);
   }
 
@@ -109,13 +108,19 @@ namespace
       if (t)
         r += c;
       else
-        r += format ("{:02x}", static_cast<unsigned char> (c));
+      {
+        const char* digits ("0123456789abcdef");
+        unsigned char b (static_cast<unsigned char> (c));
+
+        r += digits[b >> 4];
+        r += digits[b & 0x0f];
+      }
     }
 
     if (text)
       r += '\'';
 
-    println ("{}", r);
+    cout << r << endl;
   }
 
   // Print the object's entries in the tree notation (see main()), indented
@@ -141,17 +146,17 @@ namespace
       assert ((v != nullptr) + (s != nullptr) + (n != nullptr) == 1);
 
       if (v != nullptr && v->empty ())
-        println ("{}{} {{}}", in, k);
+        cout << in << k << " {}" << endl;
       else if (v != nullptr)
       {
-        println ("{}{} {{", in, k);
+        cout << in << k << " {" << endl;
         print_tree (*v, indent + 2);
-        println ("{}}}", in);
+        cout << in << "}" << endl;
       }
       else if (s != nullptr)
-        println ("{}{} = '{}'", in, k, *s);
+        cout << in << k << " = '" << *s << "'" << endl;
       else
-        println ("{}{} : {}", in, k, *n);
+        cout << in << k << " : " << *n << endl;
     }
   }
 

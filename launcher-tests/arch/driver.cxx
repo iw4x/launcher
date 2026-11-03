@@ -1,7 +1,6 @@
 // Copyright (c) the IW4x authors (see the AUTHORS file).
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include <print>
 #include <string>
 #include <iostream>
 #include <optional>
@@ -37,9 +36,8 @@ main (int argc, char* argv[])
     print = &architecture_label;
   else if (argc != 1)
   {
-    println (cerr,
-             "error: invalid arguments\n"
-             "  info: usage: driver [-e|-l]");
+    cerr << "error: invalid arguments\n"
+         << "  info: usage: driver [-e|-l]" << endl;
     return 1;
   }
 
@@ -49,10 +47,10 @@ main (int argc, char* argv[])
 
     if (!a)
     {
-      println (cerr, "error: invalid architecture '{}'", l);
+      cerr << "error: invalid architecture '" << l << "'" << endl;
       return 1;
     }
 
-    println ("{}", print (*a));
+    cout << print (*a) << endl;
   }
 }

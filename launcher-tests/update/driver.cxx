@@ -1,7 +1,6 @@
 // Copyright (c) the IW4x authors (see the AUTHORS file).
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include <print>
 #include <string>
 #include <cstdlib>  // exit()
 #include <utility>  // move()
@@ -25,7 +24,7 @@ namespace
 
     if (!r)
     {
-      println (cerr, "error: invalid version '{}'", s);
+      cerr << "error: invalid version '" << s << "'" << endl;
       exit (1);
     }
 
@@ -72,9 +71,8 @@ main (int argc, char* argv[])
 
   if (m != "-p" && m != "-k" && m != "-c")
   {
-    println (cerr,
-             "error: invalid arguments\n"
-             "  info: usage: driver (-p|-k|-c)");
+    cerr << "error: invalid arguments\n"
+         << "  info: usage: driver (-p|-k|-c)" << endl;
     return 1;
   }
 
@@ -86,17 +84,17 @@ main (int argc, char* argv[])
 
       if (p == string::npos)
       {
-        println (cerr, "error: two versions expected in '{}'", l);
+        cerr << "error: two versions expected in '" << l << "'" << endl;
         return 1;
       }
 
       int r (parse (l.substr (0, p)).compare (parse (l.substr (p + 1))));
-      println ("{}", r < 0 ? -1 : r > 0 ? 1 : 0);
+      cout << (r < 0 ? -1 : r > 0 ? 1 : 0) << endl;
     }
     else
     {
       launcher_version v (parse (l));
-      println ("{}", m == "-p" ? v.string () : kind (v));
+      cout << (m == "-p" ? v.string () : kind (v)) << endl;
     }
   }
 }

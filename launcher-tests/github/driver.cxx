@@ -1,7 +1,6 @@
 // Copyright (c) the IW4x authors (see the AUTHORS file).
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include <print>
 #include <string>
 #include <vector>
 #include <cstdlib>      // exit()
@@ -23,7 +22,7 @@ namespace
   [[noreturn]] void
   fail (const string& m)
   {
-    println (cerr, "error: {}", m);
+    cerr << "error: " << m << endl;
     exit (1);
   }
 
@@ -39,19 +38,17 @@ namespace
   void
   print_release (const github_release& r)
   {
-    println ("tag '{}'\n"
-             "name '{}'\n"
-             "draft {}\n"
-             "prerelease {}\n"
-             "author '{}'",
-             r.tag_name,
-             r.name,
-             r.draft,
-             r.prerelease,
-             r.author.login);
+    cout << boolalpha
+         << "tag '" << r.tag_name << "'\n"
+         << "name '" << r.name << "'\n"
+         << "draft " << r.draft << "\n"
+         << "prerelease " << r.prerelease << "\n"
+         << "author '" << r.author.login << "'" << endl;
 
     for (const github_asset& a: r.assets)
-      println ("asset {} {} {}", a.name, a.size, a.browser_download_url);
+      cout << "asset " << a.name
+           << ' ' << a.size
+           << ' ' << a.browser_download_url << endl;
   }
 }
 
@@ -108,7 +105,7 @@ main (int argc, char* argv[])
     {
       for (const github_release& r:
              github_api_traits::parse_releases (read_json ()))
-        println ("{}", r.tag_name);
+        cout << r.tag_name << endl;
     }
     else if ((c == "find" || c == "match") && as.size () == 2)
     {
@@ -120,7 +117,7 @@ main (int argc, char* argv[])
       if (!a)
         fail ("no asset matching '" + as[1] + "'");
 
-      println ("{} {}", a->name, a->browser_download_url);
+      cout << a->name << ' ' << a->browser_download_url << endl;
     }
     else if (c == "endpoint" && as.size () >= 4)
     {
@@ -128,11 +125,11 @@ main (int argc, char* argv[])
       const string& n (as[3]);
 
       if (as[1] == "releases" && as.size () == 4)
-        println ("{}", github_endpoint::repo_releases (o, n));
+        cout << github_endpoint::repo_releases (o, n) << endl;
       else if (as[1] == "latest" && as.size () == 4)
-        println ("{}", github_endpoint::repo_release_latest (o, n));
+        cout << github_endpoint::repo_release_latest (o, n) << endl;
       else if (as[1] == "tag" && as.size () == 5)
-        println ("{}", github_endpoint::repo_release_tag (o, n, as[4]));
+        cout << github_endpoint::repo_release_tag (o, n, as[4]) << endl;
       else
         fail ("invalid endpoint arguments");
     }
@@ -150,7 +147,7 @@ main (int argc, char* argv[])
         r.with_query (as[i].substr (0, p), as[i].substr (p + 1));
       }
 
-      println ("{}", r.url ());
+      cout << r.url () << endl;
     }
     else
       fail ("invalid arguments\n"

@@ -23,12 +23,6 @@ if ($build.mode != 'skeleton')
   import libs = launcher%liba{launcher}
 }
 
-# With MinGW GCC the std::print() support for the Windows console is in a
-# separate library.
-#
-if ($cxx.target.system == 'mingw32' && $cxx.id == 'gcc')
-  cxx.libs += -lstdc++exp
-
 # Disable "unknown pragma" warnings for the ODB pragmas in the launcher's
 # database classes, which some test drivers include.
 #

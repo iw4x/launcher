@@ -1,7 +1,6 @@
 // Copyright (c) the IW4x authors (see the AUTHORS file).
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include <print>
 #include <string>
 #include <vector>
 #include <utility>    // move()
@@ -28,7 +27,7 @@ main (int argc, char* argv[])
 {
   if (argc != 2)
   {
-    println (cerr, "error: archive argument expected");
+    cerr << "error: archive argument expected" << endl;
     return 1;
   }
 
@@ -66,8 +65,11 @@ main (int argc, char* argv[])
   {
     bool ex ((fs::status (f).permissions () & x) != fs::perms::none);
 
-    println ("{}{}",
-             fs::relative (f, d).generic_string (),
-             ex ? " executable" : "");
+    cout << fs::relative (f, d).generic_string ();
+
+    if (ex)
+      cout << " executable";
+
+    cout << endl;
   }
 }

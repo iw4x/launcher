@@ -1,7 +1,6 @@
 // Copyright (c) the IW4x authors (see the AUTHORS file).
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include <print>
 #include <string>
 #include <vector>
 #include <cstdint>
@@ -25,7 +24,7 @@ namespace
   [[noreturn]] void
   fail (const string& m)
   {
-    println (cerr, "error: {}", m);
+    cerr << "error: " << m << endl;
     exit (1);
   }
 
@@ -64,14 +63,16 @@ namespace
   void
   print_file (const cached_file& f)
   {
-    println ("{} {} {} {} {}{}{}",
-             f.path (),
-             f.mtime (),
-             f.version (),
-             to_string (f.component ()),
-             f.size (),
-             f.hash ().empty () ? "" : " ",
-             f.hash ());
+    cout << f.path ()
+         << ' ' << f.mtime ()
+         << ' ' << f.version ()
+         << ' ' << to_string (f.component ())
+         << ' ' << f.size ();
+
+    if (!f.hash ().empty ())
+      cout << ' ' << f.hash ();
+
+    cout << endl;
   }
 
   void
@@ -133,7 +134,7 @@ main ()
 
       auto value = [] (const optional<string>& v)
       {
-        println ("{}", v ? *v : "none");
+        cout << (v ? *v : "none") << endl;
       };
 
       if (c == "store" && n >= 5 && n <= 7)
@@ -150,7 +151,7 @@ main ()
         if (optional<cached_file> f = db.find (as[1]))
           print_file (*f);
         else
-          println ("none");
+          cout << "none" << endl;
       }
       else if (c == "erase" && n == 2)
         db.erase (as[1]);
@@ -168,7 +169,10 @@ main ()
         print_files (comp ? db.files (to_component (as[1])) : db.files (as[1]));
       }
       else if (c == "count" && n <= 2)
-        println ("{}", n == 1 ? db.count () : db.count (to_component (as[1])));
+      {
+        size_t r (n == 1 ? db.count () : db.count (to_component (as[1])));
+        cout << r << endl;
+      }
       else if (c == "version" && n == 2)
       {
         optional<component_version> v (db.version (to_component (as[1])));
@@ -190,14 +194,14 @@ main ()
       else if (c == "clear" && n == 1)
         db.clear ();
       else if (c == "check" && n == 1)
-        println ("{}", db.check ());
+        cout << boolalpha << db.check () << endl;
       else if (c == "hash" && n == 2)
       {
         blake3_hash h (blake3_hash::of_file (as[1]));
         value (!h.empty () ? optional<string> (h.string ()) : nullopt);
       }
       else if (c == "verify" && n == 3)
-        println ("{}", blake3_hash (as[2]).verify_file (as[1]));
+        cout << boolalpha << blake3_hash (as[2]).verify_file (as[1]) << endl;
       else
         fail ("invalid command '" + l + "'");
     }
