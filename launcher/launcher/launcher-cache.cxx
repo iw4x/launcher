@@ -4,6 +4,7 @@
 #include <launcher/launcher-cache.hxx>
 
 #include <iostream>
+#include <algorithm>    // ranges::all_of()
 #include <unordered_map>
 
 using namespace std;
@@ -134,6 +135,20 @@ namespace launcher
   audit (component_type c) const
   {
     return rec_.audit (c);
+  }
+
+  bool cache_coordinator::
+  installed (component_type c) const
+  {
+    if (!version (c))
+      return false;
+
+    auto fs (audit (c));
+
+    return !fs.empty () && ranges::all_of (fs, [] (const auto& p)
+    {
+      return p.second == file_state::valid;
+    });
   }
 
   vector<reconcile_item> cache_coordinator::

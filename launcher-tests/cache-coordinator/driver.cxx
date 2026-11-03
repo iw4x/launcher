@@ -96,29 +96,57 @@ namespace
   };
 }
 
-// Usage: argv[0] <name>...
+// Usage: argv[0] <command> [<name>...]
 //
-// Bring the rawfiles component of the installation in the current directory
-// up to date with a manifest of the named files, which a loopback HTTP
-// server serves with the name as the content. Then print the outcome and the
-// label of each progress entry, sorted, in the following form:
+// Run the command on the rawfiles component of the installation in the
+// current directory.
 //
-// status <status>
-// entry <label>
+// sync <name>...
+//    Bring the component up to date with a manifest of the named files,
+//    which a loopback HTTP server serves with the name as the content. Then
+//    print the outcome and the label of each progress entry, sorted, in the
+//    following form:
+//
+//    status <status>
+//    entry <label>
+//
+// installed
+//    Print whether the component is installed.
 //
 int
 main (int argc, char* argv[])
 try
 {
   if (argc < 2)
-    fail ("file name expected");
+    fail ("command expected");
+
+  const string c (argv[1]);
 
   asio::io_context ioc;
+  filesystem::path d (filesystem::current_path ());
+
+  if (c == "installed")
+  {
+    if (argc != 2)
+      fail ("unexpected argument");
+
+    cache_coordinator cc (ioc, d);
+    cout << (cc.installed (component_type::rawfiles) ? "true" : "false")
+         << '\n';
+    return 0;
+  }
+
+  if (c != "sync")
+    fail ("unknown command '" + c + "'");
+
+  if (argc < 3)
+    fail ("file name expected");
+
   server srv (ioc);
 
   manifest m;
 
-  for (int i (1); i != argc; ++i)
+  for (int i (2); i != argc; ++i)
   {
     string n (argv[i]);
 
@@ -129,8 +157,6 @@ try
 
     m.archives.push_back (move (a));
   }
-
-  filesystem::path d (filesystem::current_path ());
 
   download_coordinator dc (ioc);
   progress_coordinator pc (ioc);

@@ -146,6 +146,14 @@ namespace launcher
     std::vector<std::pair<cached_file, file_state>>
     audit (component_type c) const;
 
+    // Return true if the component is installed, that is, it is recorded at
+    // a version and all its recorded files, of which there is at least one,
+    // match their records. This is what we can find out about the component
+    // without its release.
+    //
+    bool
+    installed (component_type c) const;
+
     // Planning.
     //
 

@@ -1,11 +1,53 @@
 # Copyright (c) the IW4x authors (see the AUTHORS file).
 # SPDX-License-Identifier: GPL-3.0-or-later
 
+# Each test uses its working directory as the installation root.
+
 : labels
 : Test labeling the progress entries of the downloads after their files
 :
-$* a.txt b.txt >>EOO &cache/*** &a.txt &b.txt
+$* sync a.txt b.txt >>EOO &cache/*** &a.txt &b.txt
   status update_applied
   entry a.txt
   entry b.txt
   EOO
+
+: installed
+:
+{{
+  : empty
+  : Test a component that was never installed
+  :
+  $* installed >'false' &cache/***
+
+  : synced
+  : Test a component that the sync installed
+  :
+  {
+    $* sync a.txt >- &cache/*** &a.txt
+
+    $* installed >'true'
+  }
+
+  : changed
+  : Test a component with a file that changed since its installation
+  :
+  {
+    $* sync a.txt >- &cache/*** &a.txt
+
+    echo 'changed' >=a.txt
+
+    $* installed >'false'
+  }
+
+  : missing
+  : Test a component with a file that was removed since its installation
+  :
+  {
+    $* sync a.txt >- &cache/*** &!a.txt
+
+    rm a.txt
+
+    $* installed >'false'
+  }
+}}

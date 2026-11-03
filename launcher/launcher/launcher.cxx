@@ -247,6 +247,39 @@ namespace launcher
 
       return a;
     }
+
+    // Return true if launching the architecture's client requires the
+    // component. Note that the DLC only adds maps.
+    //
+    bool
+    required (architecture a, component_type c)
+    {
+#ifdef __linux__
+      if (c == component_type::helper)
+        return true;
+#endif
+
+      switch (a)
+      {
+      case architecture::x86:
+        return c == component_type::client || c == component_type::rawfiles;
+
+      case architecture::x64:
+        return c == component_type::client_x64 ||
+               c == component_type::assets_x64;
+      }
+
+      return false;
+    }
+
+    // Component that we could not update, with the failure.
+    //
+    struct update_failure
+    {
+      component_type component;
+      string what;
+      exception_ptr error;
+    };
   }
 
   // Check for a newer launcher release, considering the prereleases if p is
@@ -1347,6 +1380,13 @@ try
 
   ins.migrate_clients ();
 
+  // Updating each component requires its release, which GitHub and the CDN
+  // serve. If they are unavailable, then we can still launch an installed
+  // client, so we carry on past the components that we could not update and
+  // decide once we know the client (see below).
+  //
+  vector<update_failure> failures;
+
   if (!opt.skip_remote ())
   {
     http_client_traits ht;
@@ -1374,17 +1414,59 @@ try
 
     asio::co_spawn (
       io,
-      [&io, &gh, &hc, &dc, &pc, &cc, &root, &opt] () -> asio::awaitable<void>
+      [&io, &gh, &hc, &dc, &pc, &cc, &root, &opt, &failures] ()
+        -> asio::awaitable<void>
     {
-      co_await sync_client (io, gh, dc, pc, cc, root, opt.prerelease ());
-      co_await sync_client_x64 (io, gh, dc, pc, cc, root, true);
-      co_await sync_assets_x64 (io, gh, dc, pc, cc, root, true);
+      // Update the component, recording the failure. Note that a failed
+      // download can leave the progress display running.
+      //
+      auto sync ([&pc, &failures] (component_type c,
+                                   string what,
+                                   asio::awaitable<void> a)
+                   -> asio::awaitable<void>
+      {
+        try
+        {
+          co_await std::move (a);
+          co_return;
+        }
+        catch (const exception& e)
+        {
+          warning ("unable to update {}: {}",
+                   what,
+                   to_utf8_system_message (e.what ()));
 
-      co_await sync_rawfiles (io, gh, dc, pc, cc, root, opt.prerelease ());
-      co_await sync_dlc (io, hc, dc, pc, cc, root);
+          failures.push_back ({c, std::move (what), current_exception ()});
+        }
+
+        co_await pc.stop ();
+      });
+
+      co_await sync (component_type::client,
+                     "client",
+                     sync_client (io, gh, dc, pc, cc, root, opt.prerelease ()));
+
+      co_await sync (component_type::client_x64,
+                     "IW4x (mm) client",
+                     sync_client_x64 (io, gh, dc, pc, cc, root, true));
+
+      co_await sync (component_type::assets_x64,
+                     "IW4x (mm) assets",
+                     sync_assets_x64 (io, gh, dc, pc, cc, root, true));
+
+      co_await sync (
+        component_type::rawfiles,
+        "rawfiles",
+        sync_rawfiles (io, gh, dc, pc, cc, root, opt.prerelease ()));
+
+      co_await sync (component_type::dlc,
+                     "dlc",
+                     sync_dlc (io, hc, dc, pc, cc, root));
 
 #ifdef __linux__
-      co_await sync_helper (io, gh, dc, pc, cc, root, true);
+      co_await sync (component_type::helper,
+                     "steam helper",
+                     sync_helper (io, gh, dc, pc, cc, root, true));
 #endif
     }(),
       [&io, &sync_ex] (exception_ptr ep)
@@ -1399,7 +1481,25 @@ try
     if (sync_ex)
       rethrow_exception (sync_ex);
 
-    info ("all components synchronized and up to date");
+    // Without its update the DLC that we have installed still has to be
+    // safe from its legacy copies, which we can check with what the cache
+    // records (see installation::migrate_dlc()).
+    //
+    if (ranges::any_of (failures, [] (const update_failure& f)
+    {
+      return f.component == component_type::dlc;
+    }))
+    {
+      vector<path> fs;
+
+      for (const auto& f : cc.database ().files (component_type::dlc))
+        fs.push_back (from_utf8 (f.path ()));
+
+      ins.migrate_dlc (fs);
+    }
+
+    if (failures.empty ())
+      info ("all components synchronized and up to date");
   }
   else
   {
@@ -1412,8 +1512,14 @@ try
       root / from_utf8 (architecture_executable (architecture::x86)));
   }
 
+  // Without the launch the updates are all there is, so a failed one is an
+  // error.
+  //
   if (opt.skip_launch ())
   {
+    if (!failures.empty ())
+      rethrow_exception (failures.front ().error);
+
     info ("updates completed, skipping game launch as requested and exiting");
     return 0;
   }
@@ -1428,6 +1534,31 @@ try
       return 0;
 
     exe = architecture_executable (*arch);
+
+    // Launch the installed version of each component that the client
+    // requires and that we could not update. Note that we don't know what a
+    // client specified with --game-exe requires.
+    //
+    if (!failures.empty ())
+    {
+      cache_coordinator cc (io, root);
+
+      for (const update_failure& f : failures)
+      {
+        if (!required (*arch, f.component))
+          continue;
+
+        if (!cc.installed (f.component))
+        {
+          error ("{} is not installed and could not be updated",
+                 f.what);
+          rethrow_exception (f.error);
+        }
+
+        warning ("launching the installed {} since it could not be updated",
+                 f.what);
+      }
+    }
   }
 
   exception_ptr exec_ex;

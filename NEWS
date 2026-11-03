@@ -29,3 +29,8 @@ Version 1.1.8-b.28
     start, so each update downloaded them again. If such a file cannot be
     moved or removed (e.g., zone/dlc/ is read-only), then the update fails
     with an error that names it, since the client would refuse to start.
+
+  * The launcher starts an installed client while GitHub or the IW4x CDN is
+    unavailable. It warns about each component that it could not update
+    and only fails if the selected client requires one that is not
+    installed. With --skip-launch any failed update is an error.
