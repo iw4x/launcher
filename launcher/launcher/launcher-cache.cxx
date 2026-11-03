@@ -403,7 +403,7 @@ namespace launcher
 
       if (prog_ != nullptr)
       {
-        auto e (prog_->add_entry (r.name));
+        auto e (prog_->add_entry (task->request.name));
         e->metrics ().total_bytes.store (i->expected_size,
                                          memory_order_relaxed);
 
