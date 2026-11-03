@@ -25,7 +25,7 @@
 
 #include <miniz.h>
 
-#include <launcher/process.hxx>
+#include <launcher/launcher-process.hxx>
 #include <launcher/shortcut/shortcut-vdf.hxx>
 
 using namespace std;

@@ -25,7 +25,7 @@
 #include <regex>
 #include <sstream>
 
-#include <launcher/process.hxx>
+#include <launcher/launcher-process.hxx>
 #include <launcher/launcher-log.hxx>
 
 using namespace std;

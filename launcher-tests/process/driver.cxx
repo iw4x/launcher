@@ -9,7 +9,7 @@
 #include <vector>
 #include <iostream>
 
-#include <launcher/process.hxx>
+#include <launcher/launcher-process.hxx>
 
 using namespace std;
 using namespace launcher;
