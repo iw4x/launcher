@@ -9,13 +9,13 @@ namespace launcher
   using namespace asio::experimental::awaitable_operators;
 
   asio::awaitable<manifest> manifest_parser::
-  parse (const std::string& json_str, manifest_format kind)
+  parse (std::string json_str, manifest_format kind)
   {
     co_return co_await manifest::parse_async (json_str, kind);
   }
 
   asio::awaitable<std::vector<manifest>> manifest_parser::
-  parse_parallel (const std::vector<std::string>& json_strings,
+  parse_parallel (std::vector<std::string> json_strings,
                   manifest_format kind)
   {
     std::vector<manifest> r;
@@ -31,13 +31,13 @@ namespace launcher
   }
 
   asio::awaitable<bool> manifest_parser::
-  validate (const manifest& m)
+  validate (manifest m)
   {
     co_return co_await m.validate_async ();
   }
 
   asio::awaitable<std::vector<bool>> manifest_parser::
-  validate_parallel (const std::vector<manifest>& manifests)
+  validate_parallel (std::vector<manifest> manifests)
   {
     std::vector<bool> r;
     r.reserve (manifests.size ());
@@ -52,19 +52,19 @@ namespace launcher
   }
 
   asio::awaitable<manifest>
-  parse_update_manifest (const std::string& json_str)
+  parse_update_manifest (std::string json_str)
   {
     co_return co_await manifest_parser::parse (json_str, manifest_format::update);
   }
 
   asio::awaitable<manifest>
-  parse_dlc_manifest (const std::string& json_str)
+  parse_dlc_manifest (std::string json_str)
   {
     co_return co_await manifest_parser::parse (json_str, manifest_format::dlc);
   }
 
   asio::awaitable<bool>
-  validate_manifest (const manifest& m)
+  validate_manifest (manifest m)
   {
     co_return co_await manifest_parser::validate (m);
   }

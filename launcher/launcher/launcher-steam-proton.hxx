@@ -57,12 +57,12 @@ namespace launcher
     // Return the Proton installations of the Steam installation, best first.
     //
     asio::awaitable<std::vector<version_type>>
-    detect_versions (const fs::path& steam_path);
+    detect_versions (fs::path steam_path);
 
     // Return the best Proton installation, if any.
     //
     asio::awaitable<std::optional<version_type>>
-    find_best_version (const fs::path& steam_path);
+    find_best_version (fs::path steam_path);
 
     // Return the environment for running the app through the Proton
     // installation. Note that this doesn't write anything.
@@ -78,41 +78,41 @@ namespace launcher
     // Otherwise, including on failures, return false.
     //
     asio::awaitable<bool>
-    setup_for_launch (const environment_type& env,
-                      const fs::path& game_directory,
-                      const fs::path& launcher_directory);
+    setup_for_launch (environment_type env,
+                      fs::path game_directory,
+                      fs::path launcher_directory);
 
     // Start the executable through Proton, passing it the arguments. Return
     // false if we could not start it.
     //
     asio::awaitable<bool>
-    launch (const environment_type& env,
-            const fs::path& executable,
-            const std::vector<std::string>& args = {});
+    launch (environment_type env,
+            fs::path executable,
+            std::vector<std::string> args = {});
 
     // Launch the executable through the best Proton installation, starting
     // Steam first if it isn't running. If Companion is installed, then also
     // make sure Steam runs with its module, restarting Steam if necessary.
     //
     asio::awaitable<bool>
-    complete_launch (const fs::path& steam_path,
-                     const fs::path& executable,
+    complete_launch (fs::path steam_path,
+                     fs::path executable,
                      std::uint32_t appid,
-                     const std::vector<std::string>& args = {});
+                     std::vector<std::string> args = {});
 
     // Return true if our Steam helper finds Steam running (see
     // proton_manager::run_ghost_process()).
     //
     asio::awaitable<bool>
-    is_steam_running (const environment_type& env,
-                      const fs::path& steam_helper_exe);
+    is_steam_running (environment_type env,
+                      fs::path steam_helper_exe);
 
     // Start the native Steam client, through Companion if the game directory
     // has it, in which case wait for its module to become active. Return
     // false if Steam could not be started.
     //
     asio::awaitable<bool>
-    start_steam (const fs::path& game_directory);
+    start_steam (fs::path game_directory);
 
     manager_type&
     manager ();

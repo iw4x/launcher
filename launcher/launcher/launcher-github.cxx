@@ -52,8 +52,8 @@ namespace launcher
   }
 
   asio::awaitable<github_coordinator::release_type> github_coordinator::
-  fetch_latest_release (const string& own,
-                        const string& rep,
+  fetch_latest_release (string own,
+                        string rep,
                         bool pre)
   {
     // GitHub's latest release is the latest stable one. To also consider the
@@ -74,15 +74,15 @@ namespace launcher
   }
 
   asio::awaitable<github_coordinator::release_type> github_coordinator::
-  fetch_release_by_tag (const string& own,
-                        const string& rep,
-                        const string& t)
+  fetch_release_by_tag (string own,
+                        string rep,
+                        string t)
   {
     co_return co_await api_.get_release_by_tag (own, rep, t);
   }
 
   asio::awaitable<manifest> github_coordinator::
-  fetch_manifest (const release_type& r, manifest_format fmt)
+  fetch_manifest (release_type r, manifest_format fmt)
   {
     const string n ("update.json");
     optional<asset_type> a (find_asset (r, n));
@@ -101,8 +101,8 @@ namespace launcher
   }
 
   asio::awaitable<manifest> github_coordinator::
-  fetch_manifest_by_pattern (const release_type& r,
-                             const string& pat,
+  fetch_manifest_by_pattern (release_type r,
+                             string pat,
                              manifest_format fmt)
   {
     optional<asset_type> a (find_asset_regex (r, pat));
@@ -173,7 +173,7 @@ namespace launcher
   }
 
   asio::awaitable<github_coordinator::repository_type> github_coordinator::
-  fetch_repository (const string& own, const string& rep)
+  fetch_repository (string own, string rep)
   {
     co_return co_await api_.get_repository (own, rep);
   }
@@ -191,7 +191,7 @@ namespace launcher
   }
 
   asio::awaitable<manifest> github_coordinator::
-  download_and_parse_manifest (const string& u, manifest_format fmt)
+  download_and_parse_manifest (string u, manifest_format fmt)
   {
     http_coordinator h (ioc_);
     string s (co_await h.get (u));

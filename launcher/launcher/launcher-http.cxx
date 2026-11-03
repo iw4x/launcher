@@ -45,7 +45,7 @@ namespace launcher
     : client_ (i, t) {}
 
   asio::awaitable<string> http_coordinator::
-  get (const string& u)
+  get (string u)
   {
     response_type r (co_await client_.get (u));
 
@@ -59,7 +59,7 @@ namespace launcher
   }
 
   asio::awaitable<http_coordinator::response_type> http_coordinator::
-  get_response (const string& u)
+  get_response (string u)
   {
     response_type r (co_await client_.get (u));
 
@@ -70,7 +70,7 @@ namespace launcher
   }
 
   asio::awaitable<string> http_coordinator::
-  post_json (const string& u, const string& j)
+  post_json (string u, string j)
   {
     response_type r (co_await client_.post (u, j, "application/json"));
 
@@ -84,8 +84,8 @@ namespace launcher
   }
 
   asio::awaitable<uint64_t> http_coordinator::
-  download_file (const string& u,
-                 const fs::path& t,
+  download_file (string u,
+                 fs::path t,
                  progress_callback cb,
                  optional<uint64_t> rs)
   {
@@ -114,7 +114,7 @@ namespace launcher
   }
 
   asio::awaitable<optional<uint64_t>> http_coordinator::
-  get_content_length (const string& u)
+  get_content_length (string u)
   {
     response_type r (co_await client_.head (u));
 
@@ -125,7 +125,7 @@ namespace launcher
   }
 
   asio::awaitable<bool> http_coordinator::
-  check_url (const string& u)
+  check_url (string u)
   {
     try
     {

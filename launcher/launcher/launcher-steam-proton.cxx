@@ -105,13 +105,13 @@ namespace launcher
   }
 
   asio::awaitable<vector<proton_coordinator::version_type>> proton_coordinator::
-  detect_versions (const fs::path& sp)
+  detect_versions (fs::path sp)
   {
     co_return co_await manager_.detect_proton_versions (sp);
   }
 
   asio::awaitable<optional<proton_coordinator::version_type>> proton_coordinator::
-  find_best_version (const fs::path& sp)
+  find_best_version (fs::path sp)
   {
     co_return co_await manager_.find_best_proton (sp);
   }
@@ -125,9 +125,9 @@ namespace launcher
   }
 
   asio::awaitable<bool> proton_coordinator::
-  setup_for_launch (const environment_type& e,
-                    const fs::path& gd,
-                    const fs::path& ld)
+  setup_for_launch (environment_type e,
+                    fs::path gd,
+                    fs::path ld)
   {
     if (verbose_)
       launcher::log::info (categories::steam{}, "setting up for launch");
@@ -207,9 +207,9 @@ namespace launcher
   }
 
   asio::awaitable<bool> proton_coordinator::
-  launch (const environment_type& e,
-          const fs::path& x,
-          const vector<string>& as)
+  launch (environment_type e,
+          fs::path x,
+          vector<string> as)
   {
     if (verbose_)
     {
@@ -229,10 +229,10 @@ namespace launcher
   }
 
   asio::awaitable<bool> proton_coordinator::
-  complete_launch (const fs::path& sp,
-                   const fs::path& x,
+  complete_launch (fs::path sp,
+                   fs::path x,
                    uint32_t id,
-                   const vector<string>& as)
+                   vector<string> as)
   {
     if (verbose_)
       launcher::log::info (categories::steam{}, "detecting proton versions");
@@ -305,15 +305,15 @@ namespace launcher
   }
 
   asio::awaitable<bool> proton_coordinator::
-  is_steam_running (const environment_type& e,
-                    const fs::path& h)
+  is_steam_running (environment_type e,
+                    fs::path h)
   {
     auto r (co_await manager_.run_ghost_process (e, h));
     co_return r == ghost_result::steam_running;
   }
 
   asio::awaitable<bool> proton_coordinator::
-  start_steam (const fs::path& gd)
+  start_steam (fs::path gd)
   {
     bool c (companion_installed (gd));
 

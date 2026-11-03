@@ -62,14 +62,14 @@ namespace launcher
     // true, then this can also be a prerelease.
     //
     asio::awaitable<release_type>
-    fetch_latest_release (const std::string& owner,
-                          const std::string& repo,
+    fetch_latest_release (std::string owner,
+                          std::string repo,
                           bool include_prerelease = false);
 
     asio::awaitable<release_type>
-    fetch_release_by_tag (const std::string& owner,
-                          const std::string& repo,
-                          const std::string& tag);
+    fetch_release_by_tag (std::string owner,
+                          std::string repo,
+                          std::string tag);
 
     // Download and parse the release's update.json asset, resolving the
     // URLs of its archives (see resolve_manifest_urls()). Throw
@@ -77,15 +77,15 @@ namespace launcher
     // parsing exceptions if it is invalid.
     //
     asio::awaitable<manifest>
-    fetch_manifest (const release_type& release,
+    fetch_manifest (release_type release,
                     manifest_format kind = manifest_format::update);
 
     // As above but for the first asset whose name contains a match of the
     // regular expression.
     //
     asio::awaitable<manifest>
-    fetch_manifest_by_pattern (const release_type& release,
-                               const std::string& pattern,
+    fetch_manifest_by_pattern (release_type release,
+                               std::string pattern,
                                manifest_format kind = manifest_format::update);
 
     // Return the asset with the specified name, if any.
@@ -111,8 +111,8 @@ namespace launcher
                            const release_type& release) const;
 
     asio::awaitable<repository_type>
-    fetch_repository (const std::string& owner,
-                      const std::string& repo);
+    fetch_repository (std::string owner,
+                      std::string repo);
 
     api_type&
     api () noexcept;
@@ -122,7 +122,7 @@ namespace launcher
 
   private:
     asio::awaitable<manifest>
-    download_and_parse_manifest (const std::string& url,
+    download_and_parse_manifest (std::string url,
                                  manifest_format kind);
 
     asio::io_context& ioc_;

@@ -121,26 +121,26 @@ namespace launcher
     // response, whatever its status.
     //
     asio::awaitable<http_response>
-    request (const http_request& req);
+    request (http_request req);
 
     asio::awaitable<http_response>
-    get (const std::string& url);
+    get (std::string url);
 
     asio::awaitable<http_response>
-    post (const std::string& url,
-          const std::string& body,
-          const std::string& content_type = "application/json");
+    post (std::string url,
+          std::string body,
+          std::string content_type = "application/json");
 
     asio::awaitable<http_response>
-    put (const std::string& url,
-         const std::string& body,
-         const std::string& content_type = "application/json");
+    put (std::string url,
+         std::string body,
+         std::string content_type = "application/json");
 
     asio::awaitable<http_response>
-    delete_ (const std::string& url);
+    delete_ (std::string url);
 
     asio::awaitable<http_response>
-    head (const std::string& url);
+    head (std::string url);
 
     // Download the URL into the target and return the size of the target.
     //
@@ -151,8 +151,8 @@ namespace launcher
     // Throw http_status_error if the status is neither 200 nor 206.
     //
     asio::awaitable<std::uint64_t>
-    download (const std::string& url,
-              const std::filesystem::path& target_path,
+    download (std::string url,
+              std::filesystem::path target_path,
               progress_callback progress = nullptr,
               std::optional<std::uint64_t> resume_from = std::nullopt,
               std::uint64_t rate_limit_bytes_per_second = 0);
@@ -174,18 +174,18 @@ namespace launcher
     request_impl (http_request req, std::uint8_t redirect_count = 0);
 
     asio::awaitable<std::uint64_t>
-    download_impl (const std::string& url,
-                   const std::filesystem::path& target_path,
+    download_impl (std::string url,
+                   std::filesystem::path target_path,
                    progress_callback progress,
                    std::optional<std::uint64_t> resume_from,
                    std::uint64_t rate_limit_bytes_per_second,
                    std::uint8_t redirect_count);
 
     asio::awaitable<http_response>
-    request_ssl (const http_request& req);
+    request_ssl (http_request req);
 
     asio::awaitable<http_response>
-    request_tcp (const http_request& req);
+    request_tcp (http_request req);
 
   private:
     http_session session_;

@@ -26,26 +26,26 @@ namespace launcher
   {
   public:
     static asio::awaitable<manifest>
-    parse (const std::string& json_str,
+    parse (std::string json_str,
            manifest_format kind = manifest_format::update);
 
     static asio::awaitable<std::vector<manifest>>
-    parse_parallel (const std::vector<std::string>& json_strings,
+    parse_parallel (std::vector<std::string> json_strings,
                     manifest_format kind = manifest_format::update);
 
     static asio::awaitable<bool>
-    validate (const manifest& m);
+    validate (manifest m);
 
     static asio::awaitable<std::vector<bool>>
-    validate_parallel (const std::vector<manifest>& manifests);
+    validate_parallel (std::vector<manifest> manifests);
   };
 
   asio::awaitable<manifest>
-  parse_update_manifest (const std::string& json_str);
+  parse_update_manifest (std::string json_str);
 
   asio::awaitable<manifest>
-  parse_dlc_manifest (const std::string& json_str);
+  parse_dlc_manifest (std::string json_str);
 
   asio::awaitable<bool>
-  validate_manifest (const manifest& m);
+  validate_manifest (manifest m);
 }

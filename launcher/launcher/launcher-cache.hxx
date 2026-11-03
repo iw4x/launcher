@@ -184,18 +184,18 @@ namespace launcher
     // and recording them along with the version.
     //
     asio::awaitable<cache_result>
-    sync (const manifest& m,
+    sync (manifest m,
           component_type c,
-          const std::string& v);
+          std::string v);
 
     // As above but if the component is recorded at the tag and all its
     // files match their records, then return up_to_date without planning,
     // which saves hashing the files.
     //
     asio::awaitable<cache_result>
-    smart_sync (const manifest& m,
+    smart_sync (manifest m,
                 component_type c,
-                const std::string& tag);
+                std::string tag);
 
     // As sync() for several components at once, with all their downloads in
     // one batch. Note that the downloaded files are not recorded, only the
@@ -203,9 +203,9 @@ namespace launcher
     //
     asio::awaitable<cache_result>
     sync_all (
-      const std::vector<std::tuple<manifest,
-                                   component_type,
-                                   std::string>>& items);
+      std::vector<std::tuple<manifest,
+                             component_type,
+                             std::string>> items);
 
     // Recording (see the reconciler functions of the same names).
     //
@@ -270,9 +270,9 @@ namespace launcher
     // and on success record the version of the component.
     //
     asio::awaitable<cache_result>
-    execute (const std::vector<reconcile_item>& items,
+    execute (std::vector<reconcile_item> items,
              component_type c,
-             const std::string& v);
+             std::string v);
 
     fs::path dir_;
 

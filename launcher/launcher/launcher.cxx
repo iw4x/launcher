@@ -287,7 +287,7 @@ namespace launcher
                       bool p,
                       bool o,
                       progress_coordinator& pc,
-                      const vector<string>& args)
+                      vector<string> args)
   {
     info ("checking for launcher updates (prerelease: {}, update_only: {})",
           p,
@@ -348,9 +348,9 @@ namespace launcher
                 download_coordinator& dc,
                 progress_coordinator& pc,
                 cache_coordinator& cc,
-                const vector<reconcile_item>& pl,
-                const manifest& md,
-                const path& ir)
+                vector<reconcile_item> pl,
+                manifest md,
+                path ir)
   {
     struct dl_info
     {
@@ -652,7 +652,7 @@ namespace launcher
                 download_coordinator& dc,
                 progress_coordinator& pc,
                 cache_coordinator& cc,
-                const path& root,
+                path root,
                 bool pre)
   {
     info ("synchronizing client component...");
@@ -743,12 +743,12 @@ namespace launcher
                         download_coordinator& dc,
                         progress_coordinator& pc,
                         cache_coordinator& cc,
-                        const path& root,
+                        path root,
                         bool pre,
                         component_type comp,
-                        const string& what,
-                        const string& org,
-                        const string& repo,
+                        string what,
+                        string org,
+                        string repo,
                         vector<string> exclude = {},
                         vector<pair<string, string>> rename = {})
   {
@@ -813,7 +813,7 @@ namespace launcher
                    download_coordinator& dc,
                    progress_coordinator& pc,
                    cache_coordinator& cc,
-                   const path& root,
+                   path root,
                    bool pre)
   {
     // Note that older GCC versions fail to compile braced initializer
@@ -842,7 +842,7 @@ namespace launcher
                    download_coordinator& dc,
                    progress_coordinator& pc,
                    cache_coordinator& cc,
-                   const path& root,
+                   path root,
                    bool pre)
   {
     co_await sync_archive_release (io, gh, dc, pc, cc, root, pre,
@@ -862,7 +862,7 @@ namespace launcher
                   download_coordinator& dc,
                   progress_coordinator& pc,
                   cache_coordinator& cc,
-                  const path& root,
+                  path root,
                   bool pre)
   {
     info ("synchronizing rawfiles component...");
@@ -969,7 +969,7 @@ namespace launcher
             download_coordinator& dc,
             progress_coordinator& pc,
             cache_coordinator& cc,
-            const path& root)
+            path root)
   {
     info ("synchronizing dlc component...");
 
@@ -1039,7 +1039,7 @@ namespace launcher
                 download_coordinator& dc,
                 progress_coordinator& pc,
                 cache_coordinator& cc,
-                const path& root,
+                path root,
                 bool pre)
   {
     info ("synchronizing linux steam helper component...");
@@ -1106,9 +1106,9 @@ namespace launcher
 #ifdef __linux__
   asio::awaitable<void>
   execute (asio::io_context& io,
-            const path& root,
-            const string& exe,
-            const vector<string>& args,
+            path root,
+            string exe,
+            vector<string> args,
             const bool force_steam_runtime)
   {
     if (exe.empty ())
@@ -1177,9 +1177,9 @@ namespace launcher
 #else
   asio::awaitable<void>
   execute (asio::io_context& io,
-            const path& root,
-            const string& exe,
-            const vector<string>& args,
+            path root,
+            string exe,
+            vector<string> args,
             bool /* force_steam_runtime */)
   {
     if (exe.empty ())

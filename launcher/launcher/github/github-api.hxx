@@ -215,64 +215,64 @@ namespace launcher
     //
   public:
     asio::awaitable<repository_type>
-    get_repository (const std::string& owner, const std::string& repo);
+    get_repository (std::string owner, std::string repo);
 
     asio::awaitable<std::vector<release_type>>
-    get_releases (const std::string& owner,
-                  const std::string& repo,
+    get_releases (std::string owner,
+                  std::string repo,
                   std::optional<std::uint32_t> per_page = std::nullopt);
 
     // Note that the latest release is never a draft or a pre-release.
     //
     asio::awaitable<release_type>
-    get_latest_release (const std::string& owner,
-                        const std::string& repo);
+    get_latest_release (std::string owner,
+                        std::string repo);
 
     asio::awaitable<release_type>
-    get_release_by_tag (const std::string& owner,
-                        const std::string& repo,
-                        const std::string& tag);
+    get_release_by_tag (std::string owner,
+                        std::string repo,
+                        std::string tag);
 
     asio::awaitable<release_type>
-    get_release_by_id (const std::string& owner,
-                       const std::string& repo,
+    get_release_by_id (std::string owner,
+                       std::string repo,
                        std::uint64_t id);
 
     asio::awaitable<std::vector<commit_type>>
-    get_commits (const std::string& owner,
-                 const std::string& repo,
+    get_commits (std::string owner,
+                 std::string repo,
                  std::optional<std::uint32_t> per_page = std::nullopt);
 
     asio::awaitable<commit_type>
-    get_commit (const std::string& owner,
-                const std::string& repo,
-                const std::string& sha);
+    get_commit (std::string owner,
+                std::string repo,
+                std::string sha);
 
     asio::awaitable<std::vector<branch_type>>
-    get_branches (const std::string& owner,
-                  const std::string& repo);
+    get_branches (std::string owner,
+                  std::string repo);
 
     asio::awaitable<branch_type>
-    get_branch (const std::string& owner,
-                const std::string& repo,
-                const std::string& branch);
+    get_branch (std::string owner,
+                std::string repo,
+                std::string branch);
 
     asio::awaitable<std::vector<tag_type>>
-    get_tags (const std::string& owner,
-              const std::string& repo);
+    get_tags (std::string owner,
+              std::string repo);
 
     asio::awaitable<std::vector<issue_type>>
-    get_issues (const std::string& owner,
-                const std::string& repo,
+    get_issues (std::string owner,
+                std::string repo,
                 std::optional<std::string> state = std::nullopt);
 
     asio::awaitable<issue_type>
-    get_issue (const std::string& owner,
-               const std::string& repo,
+    get_issue (std::string owner,
+               std::string repo,
                std::uint64_t number);
 
     asio::awaitable<user_type>
-    get_user (const std::string& username);
+    get_user (std::string username);
 
     asio::awaitable<user_type>
     get_authenticated_user ();
@@ -307,6 +307,6 @@ namespace launcher
     // Wait until the end of the window if the rate limit is exceeded.
     //
     asio::awaitable<void>
-    handle_rate_limit (const github_rate_limit&);
+    handle_rate_limit (github_rate_limit);
   };
 }

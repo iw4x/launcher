@@ -298,7 +298,7 @@ namespace launcher
   }
 
   asio::awaitable<vector<proton_version>> proton_manager::
-  detect_proton_versions (const fs::path& steam_path)
+  detect_proton_versions (fs::path steam_path)
   {
     // Scan steamapps/common/. It's a bit brute-force but it's the most
     // reliable way to find out what's installed.
@@ -370,7 +370,7 @@ namespace launcher
   }
 
   asio::awaitable<optional<proton_version>> proton_manager::
-  find_best_proton (const fs::path& steam_path)
+  find_best_proton (fs::path steam_path)
   {
     launcher::log::trace_l2 (categories::steam{}, "finding best proton version from {}", steam_path.string ());
     auto vs (co_await detect_proton_versions (steam_path));
@@ -416,7 +416,7 @@ namespace launcher
   }
 
   asio::awaitable<void> proton_manager::
-  create_steam_appid (const fs::path& dir, uint32_t appid)
+  create_steam_appid (fs::path dir, uint32_t appid)
   {
     auto executor (co_await asio::this_coro::executor);
 
@@ -446,7 +446,7 @@ namespace launcher
   }
 
   asio::awaitable<ghost_result> proton_manager::
-  run_ghost_process (const proton_environment& e, const fs::path& h)
+  run_ghost_process (proton_environment e, fs::path h)
   {
     launcher::log::trace_l1 (categories::steam{}, "running proton ghost process to probe steam environment");
 
@@ -598,9 +598,9 @@ namespace launcher
   }
 
   asio::awaitable<bool> proton_manager::
-  launch_through_proton (const proton_environment& e,
-                         const fs::path& x,
-                         const vector<string>& as)
+  launch_through_proton (proton_environment e,
+                         fs::path x,
+                         vector<string> as)
   {
     launcher::log::info (categories::steam{}, "launching game through proton: {}", x.string ());
 

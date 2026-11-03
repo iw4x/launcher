@@ -332,7 +332,7 @@ namespace launcher
   }
 
   asio::awaitable<manifest> manifest::
-  parse_async (const std::string& json_str, manifest_format k)
+  parse_async (std::string json_str, manifest_format k)
   {
     co_return manifest (json_str, k);
   }

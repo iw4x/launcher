@@ -770,7 +770,7 @@ namespace launcher
 
   asio::awaitable<github_api::repository_type>
   github_api::
-  get_repository (const string& own, const string& rep)
+  get_repository (string own, string rep)
   {
     request_type req (request_type::method_type::get,
                       endpoint_type::repo (own, rep));
@@ -786,8 +786,8 @@ namespace launcher
 
   asio::awaitable<vector<github_api::release_type>>
   github_api::
-  get_releases (const string& own,
-                const string& rep,
+  get_releases (string own,
+                string rep,
                 optional<uint32_t> pp)
   {
     request_type req (request_type::method_type::get,
@@ -807,7 +807,7 @@ namespace launcher
 
   asio::awaitable<github_api::release_type>
   github_api::
-  get_latest_release (const string& own, const string& rep)
+  get_latest_release (string own, string rep)
   {
     request_type req (request_type::method_type::get,
                       endpoint_type::repo_release_latest (own, rep));
@@ -823,9 +823,9 @@ namespace launcher
   }
 
   asio::awaitable<github_api::release_type>
-  github_api::get_release_by_tag (const string& own,
-                                  const string& rep,
-                                  const string& tag)
+  github_api::get_release_by_tag (string own,
+                                  string rep,
+                                  string tag)
   {
     request_type req (request_type::method_type::get,
                       endpoint_type::repo_release_tag (own, rep, tag));
@@ -841,8 +841,8 @@ namespace launcher
   }
 
   asio::awaitable<github_api::release_type>
-  github_api::get_release_by_id (const string& own,
-                                 const string& rep,
+  github_api::get_release_by_id (string own,
+                                 string rep,
                                  uint64_t id)
   {
     request_type req (request_type::method_type::get,
@@ -859,8 +859,8 @@ namespace launcher
   }
 
   asio::awaitable<vector<github_api::commit_type>>
-  github_api::get_commits (const string& own,
-                           const string& rep,
+  github_api::get_commits (string own,
+                           string rep,
                            optional<uint32_t> pp)
   {
     request_type req (request_type::method_type::get,
@@ -880,9 +880,9 @@ namespace launcher
   }
 
   asio::awaitable<github_api::commit_type>
-  github_api::get_commit (const string& own,
-                          const string& rep,
-                          const string& sha)
+  github_api::get_commit (string own,
+                          string rep,
+                          string sha)
   {
     request_type req (request_type::method_type::get,
                       endpoint_type::repo_commit (own, rep, sha));
@@ -897,7 +897,7 @@ namespace launcher
   }
 
   asio::awaitable<vector<github_api::branch_type>>
-  github_api::get_branches (const string& own, const string& rep)
+  github_api::get_branches (string own, string rep)
   {
     request_type req (request_type::method_type::get,
                       endpoint_type::repo_branches (own, rep));
@@ -913,9 +913,9 @@ namespace launcher
   }
 
   asio::awaitable<github_api::branch_type>
-  github_api::get_branch (const string& own,
-                          const string& rep,
-                          const string& br)
+  github_api::get_branch (string own,
+                          string rep,
+                          string br)
   {
     request_type req (request_type::method_type::get,
                       endpoint_type::repo_branch (own, rep, br));
@@ -930,7 +930,7 @@ namespace launcher
   }
 
   asio::awaitable<vector<github_api::tag_type>>
-  github_api::get_tags (const string& own, const string& rep)
+  github_api::get_tags (string own, string rep)
   {
     request_type req (request_type::method_type::get,
                       endpoint_type::repo_tags (own, rep));
@@ -945,8 +945,8 @@ namespace launcher
   }
 
   asio::awaitable<vector<github_api::issue_type>>
-  github_api::get_issues (const string& own,
-                          const string& rep,
+  github_api::get_issues (string own,
+                          string rep,
                           optional<string> st)
   {
     request_type req (request_type::method_type::get,
@@ -965,7 +965,7 @@ namespace launcher
   }
 
   asio::awaitable<github_api::issue_type>
-  github_api::get_issue (const string& own, const string& rep, uint64_t num)
+  github_api::get_issue (string own, string rep, uint64_t num)
   {
     request_type req (request_type::method_type::get,
                       endpoint_type::repo_issue (own, rep, num));
@@ -980,7 +980,7 @@ namespace launcher
   }
 
   asio::awaitable<github_api::user_type>
-  github_api::get_user (const string& usr)
+  github_api::get_user (string usr)
   {
     request_type req (request_type::method_type::get,
                       endpoint_type::user (usr));
@@ -1044,7 +1044,7 @@ namespace launcher
   }
 
   asio::awaitable<void> github_api::
-  handle_rate_limit (const github_rate_limit& l)
+  handle_rate_limit (github_rate_limit l)
   {
     // Wait an extra second in case our clock is ahead of the server's.
     //

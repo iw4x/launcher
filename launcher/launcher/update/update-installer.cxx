@@ -76,7 +76,7 @@ namespace launcher
   }
 
   asio::awaitable<update_result> update_installer::
-  install (const update_info& ui)
+  install (update_info ui)
   {
     launcher::log::info (categories::update{}, "starting launcher update installation (target version: {})", ui.tag_name);
     update_result r;
@@ -410,7 +410,7 @@ namespace launcher
   }
 
   asio::awaitable<fs::path> update_installer::
-  download_archive (const update_info& ui)
+  download_archive (update_info ui)
   {
     fs::path t (download_dir_ / ui.asset_name);
     launcher::log::trace_l2 (categories::update{}, "preparing to download archive {} to {}", ui.asset_name, t.string ());
@@ -441,7 +441,7 @@ namespace launcher
   }
 
   asio::awaitable<fs::path> update_installer::
-  extract_launcher (const fs::path& ap)
+  extract_launcher (fs::path ap)
   {
     fs::path d (download_dir_ / "launcher_update_extract");
     launcher::log::trace_l2 (categories::update{}, "extracting archive {} to {}", ap.string (), d.string ());

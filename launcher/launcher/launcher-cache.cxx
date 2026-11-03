@@ -179,9 +179,9 @@ namespace launcher
   }
 
   asio::awaitable<cache_result> cache_coordinator::
-  sync (const manifest& m,
+  sync (manifest m,
         component_type c,
-        const string& v)
+        string v)
   {
     auto is (plan (m, c, v));
     auto s (rec_.summarize (is));
@@ -193,9 +193,9 @@ namespace launcher
   }
 
   asio::awaitable<cache_result> cache_coordinator::
-  smart_sync (const manifest& m,
+  smart_sync (manifest m,
               component_type c,
-              const string& t)
+              string t)
   {
     if (!outdated (c, t))
     {
@@ -222,7 +222,7 @@ namespace launcher
   }
 
   asio::awaitable<cache_result> cache_coordinator::
-  sync_all (const vector<tuple<manifest, component_type, string>>& is)
+  sync_all (vector<tuple<manifest, component_type, string>> is)
   {
     reconcile_summary total;
     vector<reconcile_item> ais; // All items.
@@ -365,9 +365,9 @@ namespace launcher
   }
 
   asio::awaitable<cache_result> cache_coordinator::
-  execute (const vector<reconcile_item>& is,
+  execute (vector<reconcile_item> is,
            component_type c,
-           const string& v)
+           string v)
   {
     if (dl_ == nullptr)
       co_return cache_result (cache_status::update_failed,

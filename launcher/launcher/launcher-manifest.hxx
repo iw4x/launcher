@@ -71,9 +71,9 @@ namespace launcher
     // std::runtime_error on failures.
     //
     static asio::awaitable<std::vector<fs::path>>
-    extract_archive (const archive_type& archive,
-                     const fs::path& archive_path,
-                     const fs::path& install_dir);
+    extract_archive (archive_type archive,
+                     fs::path archive_path,
+                     fs::path install_dir);
 
     // Return the number of files in the manifest, including those in the
     // archives.

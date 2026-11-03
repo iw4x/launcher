@@ -114,7 +114,7 @@ namespace launcher
     // Download the update and put it in place of the running launcher.
     //
     asio::awaitable<update_result>
-    install_update (const info_type& info);
+    install_update (info_type info);
 
     // Restart into the installed update, or into the running executable if
     // there is none, passing it the arguments (see

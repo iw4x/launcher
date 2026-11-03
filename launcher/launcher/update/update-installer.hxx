@@ -82,7 +82,7 @@ namespace launcher
     // the caller displays.
     //
     asio::awaitable<update_result>
-    install (const update_info& info);
+    install (update_info info);
 
     // Move the backup back over the installed executable. Return false if
     // there is no backup or we could not restore it.
@@ -135,13 +135,13 @@ namespace launcher
     // We stream it to disk since the archive can be hefty.
     //
     asio::awaitable<fs::path>
-    download_archive (const update_info& info);
+    download_archive (update_info info);
 
     // Extract the archive and return the path of the launcher executable in
     // it. We use the tar program for .tar.xz.
     //
     asio::awaitable<fs::path>
-    extract_launcher (const fs::path& archive_path);
+    extract_launcher (fs::path archive_path);
 
     // Replace the target with the new executable, keeping the old one as the
     // backup. We first copy the new one next to the target (see

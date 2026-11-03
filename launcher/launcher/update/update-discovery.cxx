@@ -55,9 +55,9 @@ namespace launcher
   }
 
   asio::awaitable<update_info> update_discovery::
-  check_for_update (const string& o,
-                    const string& r,
-                    const launcher_version& v)
+  check_for_update (string o,
+                    string r,
+                    launcher_version v)
   {
     launcher::log::info (categories::update{}, "checking for updates in {}/{}", o, r);
     update_info ui (co_await fetch_latest_release (o, r));
@@ -85,7 +85,7 @@ namespace launcher
   }
 
   asio::awaitable<update_info> update_discovery::
-  fetch_latest_release (const string& o, const string& r)
+  fetch_latest_release (string o, string r)
   {
     launcher::log::trace_l2 (categories::update{}, "fetching latest release metadata from {}/{} (include_prerelease: {})", o, r, include_prerelease_);
 
@@ -143,9 +143,9 @@ namespace launcher
   }
 
   asio::awaitable<update_info> update_discovery::
-  fetch_release_by_tag (const string& o,
-                        const string& r,
-                        const string& t)
+  fetch_release_by_tag (string o,
+                        string r,
+                        string t)
   {
     launcher::log::trace_l2 (categories::update{}, "fetching specific release by tag '{}' from {}/{}", t, o, r);
 

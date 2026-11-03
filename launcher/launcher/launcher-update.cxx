@@ -126,7 +126,7 @@ namespace launcher
   }
 
   asio::awaitable<update_result> update_coordinator::
-  install_update (const info_type& i)
+  install_update (info_type i)
   {
     if (i.empty () || i.asset_url.empty ())
     {

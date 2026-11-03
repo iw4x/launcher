@@ -47,21 +47,21 @@ namespace launcher
     json_http_client& operator = (const json_http_client&) = delete;
 
     boost::asio::awaitable<boost::json::value>
-    get_json (const std::string& url);
+    get_json (std::string url);
 
     boost::asio::awaitable<boost::json::value>
-    post_json (const std::string& url, const boost::json::value& json);
+    post_json (std::string url, boost::json::value json);
 
     boost::asio::awaitable<boost::json::value>
-    put_json (const std::string& url, const boost::json::value& json);
+    put_json (std::string url, boost::json::value json);
 
     boost::asio::awaitable<boost::json::value>
-    patch_json (const std::string& url, const boost::json::value& json);
+    patch_json (std::string url, boost::json::value json);
 
     // Return a null value if the response has no body.
     //
     boost::asio::awaitable<boost::json::value>
-    delete_json (const std::string& url);
+    delete_json (std::string url);
 
     http_client&
     client () noexcept

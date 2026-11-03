@@ -67,9 +67,9 @@ namespace launcher
     // if it is newer than current_version and empty info otherwise.
     //
     asio::awaitable<update_info>
-    check_for_update (const std::string& owner,
-                      const std::string& repo,
-                      const launcher_version& current_version);
+    check_for_update (std::string owner,
+                      std::string repo,
+                      launcher_version current_version);
 
     // Return the latest release in owner/repo, skipping drafts and, unless
     // include_prerelease() is true, pre-releases. Return empty info if there
@@ -78,16 +78,16 @@ namespace launcher
     // Note that we only look at the 20 most recent releases.
     //
     asio::awaitable<update_info>
-    fetch_latest_release (const std::string& owner,
-                          const std::string& repo);
+    fetch_latest_release (std::string owner,
+                          std::string repo);
 
     // Return the release with the tag in owner/repo. Return empty info if
     // there is none or it has no asset for the current platform.
     //
     asio::awaitable<update_info>
-    fetch_release_by_tag (const std::string& owner,
-                          const std::string& repo,
-                          const std::string& tag);
+    fetch_release_by_tag (std::string owner,
+                          std::string repo,
+                          std::string tag);
 
     // Return the underlying GitHub API client.
     //

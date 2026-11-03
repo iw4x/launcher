@@ -108,13 +108,13 @@ namespace launcher
     // best first (see version_compare()).
     //
     asio::awaitable<std::vector<proton_version>>
-    detect_proton_versions (const fs::path& steam_path);
+    detect_proton_versions (fs::path steam_path);
 
     // Return the best Proton installation if there is any and nullopt
     // otherwise.
     //
     asio::awaitable<std::optional<proton_version>>
-    find_best_proton (const fs::path& steam_path);
+    find_best_proton (fs::path steam_path);
 
     // Return the environment for running the app through proton. If
     // enable_logging is true, then Proton logs into proton_logs/ in the
@@ -131,7 +131,7 @@ namespace launcher
     // on failures.
     //
     asio::awaitable<void>
-    create_steam_appid (const fs::path& directory, std::uint32_t appid);
+    create_steam_appid (fs::path directory, std::uint32_t appid);
 
     // Find out if Steam is running by having our Steam helper, run through
     // Proton, initialize the Steam API.
@@ -140,8 +140,8 @@ namespace launcher
     // Steam if there is none. Note that we exit if Steam doesn't start.
     //
     asio::awaitable<ghost_result>
-    run_ghost_process (const proton_environment& env,
-                       const fs::path& steam_helper_exe);
+    run_ghost_process (proton_environment env,
+                       fs::path steam_helper_exe);
 
     // Start the executable through Proton, detached from us and in its
     // directory, passing the arguments. On the Steam Deck, and if
@@ -149,9 +149,9 @@ namespace launcher
     // container. Return false if we could not start it.
     //
     asio::awaitable<bool>
-    launch_through_proton (const proton_environment& env,
-                           const fs::path& executable,
-                           const std::vector<std::string>& args = {});
+    launch_through_proton (proton_environment env,
+                           fs::path executable,
+                           std::vector<std::string> args = {});
 
   private:
     // Return the version in a Proton directory name, experimental for

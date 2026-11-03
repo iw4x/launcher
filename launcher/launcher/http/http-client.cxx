@@ -249,9 +249,9 @@ namespace launcher
     asio::awaitable<void>
     proxy_connect (beast::tcp_stream& stream,
                    asio::io_context& ioc,
-                   const url_parts& proxy,
-                   const string& dest_host,
-                   const string& dest_port,
+                   url_parts proxy,
+                   string dest_host,
+                   string dest_port,
                    chrono::milliseconds connect_timeout,
                    chrono::milliseconds request_timeout)
     {
@@ -293,10 +293,10 @@ namespace launcher
     asio::awaitable<void>
     socks5_connect (beast::tcp_stream& stream,
                     asio::io_context& ioc,
-                    const url_parts& proxy,
-                    const string& proxy_url,
-                    const string& dest_host,
-                    const string& dest_port,
+                    url_parts proxy,
+                    string proxy_url,
+                    string dest_host,
+                    string dest_port,
                     chrono::milliseconds connect_timeout,
                     chrono::milliseconds request_timeout)
     {
@@ -520,7 +520,7 @@ namespace launcher
   }
 
   asio::awaitable<http_response> http_client::
-  get (const string& u)
+  get (string u)
   {
     http_request rq (http_method::get, u);
     rq.normalize ();
@@ -528,7 +528,7 @@ namespace launcher
   }
 
   asio::awaitable<http_response> http_client::
-  post (const string& u, const string& b, const string& ct)
+  post (string u, string b, string ct)
   {
     http_request rq (http_method::post, u);
     rq.set_content_type (ct);
@@ -538,7 +538,7 @@ namespace launcher
   }
 
   asio::awaitable<http_response> http_client::
-  put (const string& u, const string& b, const string& ct)
+  put (string u, string b, string ct)
   {
     http_request rq (http_method::put, u);
     rq.set_content_type (ct);
@@ -548,7 +548,7 @@ namespace launcher
   }
 
   asio::awaitable<http_response> http_client::
-  delete_ (const string& u)
+  delete_ (string u)
   {
     http_request rq (http_method::delete_, u);
     rq.normalize ();
@@ -556,7 +556,7 @@ namespace launcher
   }
 
   asio::awaitable<http_response> http_client::
-  head (const string& u)
+  head (string u)
   {
     http_request rq (http_method::head, u);
     rq.normalize ();
@@ -564,7 +564,7 @@ namespace launcher
   }
 
   asio::awaitable<http_response> http_client::
-  request (const http_request& rq)
+  request (http_request rq)
   {
     validate_proxy_url (session_.traits ().proxy_url);
     co_return co_await request_impl (rq, 0);
@@ -624,7 +624,7 @@ namespace launcher
   }
 
   asio::awaitable<http_response> http_client::
-  request_ssl (const http_request& rq)
+  request_ssl (http_request rq)
   {
     using stream = beast::ssl_stream<beast::tcp_stream>;
     using beast_req = http_beast::request<http_beast::string_body>;
@@ -724,7 +724,7 @@ namespace launcher
   }
 
   asio::awaitable<http_response> http_client::
-  request_tcp (const http_request& rq)
+  request_tcp (http_request rq)
   {
     using beast_req = http_beast::request<http_beast::string_body>;
     using beast_res = http_beast::response<http_beast::string_body>;
@@ -817,8 +817,8 @@ namespace launcher
   }
 
   asio::awaitable<uint64_t> http_client::
-  download (const string& u,
-            const fs::path& f,
+  download (string u,
+            fs::path f,
             progress_callback cb,
             optional<uint64_t> rs,
             uint64_t rl)
@@ -828,8 +828,8 @@ namespace launcher
   }
 
   asio::awaitable<uint64_t> http_client::
-  download_impl (const string& u,
-                 const fs::path& f,
+  download_impl (string u,
+                 fs::path f,
                  progress_callback cb,
                  optional<uint64_t> rs,
                  uint64_t rl,

@@ -285,9 +285,9 @@ namespace launcher
   }
 
   asio::awaitable<vector<fs::path>> manifest_coordinator::
-  extract_archive (const archive_type& a,
-                   const fs::path& ap,
-                   const fs::path& d)
+  extract_archive (archive_type a,
+                   fs::path ap,
+                   fs::path d)
   {
     if (!fs::exists (ap))
       throw runtime_error ("archive file does not exist: " + ap.string ());

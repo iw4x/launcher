@@ -201,7 +201,7 @@ namespace launcher
     // don't suspend.
     //
     static asio::awaitable<manifest>
-    parse_async (const std::string& json_str,
+    parse_async (std::string json_str,
                  manifest_format k = manifest_format::update);
 
     asio::awaitable<bool>

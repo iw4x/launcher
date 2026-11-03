@@ -59,7 +59,7 @@ namespace launcher
   }
 
   boost::asio::awaitable<boost::json::value> json_http_client::
-  get_json (const std::string& u)
+  get_json (std::string u)
   {
     http_request q (http_method::get, u);
     q.set_header ("Accept", "application/json");
@@ -72,7 +72,7 @@ namespace launcher
   }
 
   boost::asio::awaitable<boost::json::value> json_http_client::
-  post_json (const std::string& u, const boost::json::value& j)
+  post_json (std::string u, boost::json::value j)
   {
     http_request q (make_json_request (http_method::post, u, j));
     http_response r (co_await client_.request (q));
@@ -82,7 +82,7 @@ namespace launcher
   }
 
   boost::asio::awaitable<boost::json::value> json_http_client::
-  put_json (const std::string& u, const boost::json::value& j)
+  put_json (std::string u, boost::json::value j)
   {
     http_request q (make_json_request (http_method::put, u, j));
     http_response r (co_await client_.request (q));
@@ -92,7 +92,7 @@ namespace launcher
   }
 
   boost::asio::awaitable<boost::json::value> json_http_client::
-  patch_json (const std::string& u, const boost::json::value& j)
+  patch_json (std::string u, boost::json::value j)
   {
     http_request q (make_json_request (http_method::patch, u, j));
     http_response r (co_await client_.request (q));
@@ -102,7 +102,7 @@ namespace launcher
   }
 
   boost::asio::awaitable<boost::json::value> json_http_client::
-  delete_json (const std::string& u)
+  delete_json (std::string u)
   {
     http_request q (http_method::delete_, u);
     q.set_header ("Accept", "application/json");

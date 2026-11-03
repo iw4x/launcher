@@ -45,18 +45,18 @@ namespace launcher
     // error status and the client's exceptions if the request fails.
     //
     asio::awaitable<std::string>
-    get (const std::string& url);
+    get (std::string url);
 
     // As above but return the whole response.
     //
     asio::awaitable<response_type>
-    get_response (const std::string& url);
+    get_response (std::string url);
 
     // Issue the POST request with the JSON body and return the response body
     // the same way as get().
     //
     asio::awaitable<std::string>
-    post_json (const std::string& url, const std::string& json);
+    post_json (std::string url, std::string json);
 
     // Download the URL into the file, creating its directory if necessary,
     // and return the number of bytes received. If resume_from is specified,
@@ -64,8 +64,8 @@ namespace launcher
     // server supports range requests.
     //
     asio::awaitable<std::uint64_t>
-    download_file (const std::string& url,
-                   const fs::path& target,
+    download_file (std::string url,
+                   fs::path target,
                    progress_callback progress = nullptr,
                    std::optional<std::uint64_t> resume_from = std::nullopt);
 
@@ -73,13 +73,13 @@ namespace launcher
     // reports it. Throw the same way as get().
     //
     asio::awaitable<std::optional<std::uint64_t>>
-    get_content_length (const std::string& url);
+    get_content_length (std::string url);
 
     // Return true if the HEAD request gets a 2xx status and false otherwise,
     // including if the request fails.
     //
     asio::awaitable<bool>
-    check_url (const std::string& url);
+    check_url (std::string url);
 
     client_type&
     client () noexcept;
