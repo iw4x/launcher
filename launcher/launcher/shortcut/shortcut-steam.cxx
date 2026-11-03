@@ -12,7 +12,7 @@
 #include <system_error>
 #include <thread>
 
-#include <boost/process/v1.hpp>
+#include <boost/process/v2/environment.hpp>
 
 #ifdef _WIN32
 #  include <windows.h>
@@ -882,7 +882,9 @@ namespace launcher
       if (r.string ().find ("/com.valvesoftware.Steam/") != string::npos)
         return steam_program {"flatpak", {"run", "com.valvesoftware.Steam"}};
 
-      string w (boost::process::v1::search_path ("steam").string ());
+      namespace bp = boost::process::v2;
+
+      string w (bp::environment::find_executable ("steam").string ());
 
       if (!w.empty ())
         return steam_program {std::move (w), {}};

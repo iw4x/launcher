@@ -24,7 +24,9 @@
 #include <boost/asio.hpp>
 #include <boost/asio/experimental/awaitable_operators.hpp>
 
-#include <boost/process/v1.hpp>
+#include <boost/process/v2/process.hpp>
+#include <boost/process/v2/start_dir.hpp>
+#include <boost/process/v2/environment.hpp>
 
 #include <launcher/arch/arch.hxx>
 
@@ -48,7 +50,7 @@
 #include <launcher/installation.hxx>
 #include <launcher/version.hxx>
 
-namespace process = boost::process::v1;
+namespace bp = boost::process::v2;
 namespace asio = boost::asio;
 namespace views = std::views;
 namespace ranges = std::ranges;
@@ -1147,7 +1149,7 @@ namespace launcher
     {
       warning ("proton execution failed, attempting fallback to wine");
 
-      path wine_exe (from_utf8 (process::search_path ("wine").string ()));
+      path wine_exe (bp::environment::find_executable ("wine").native ());
 
       if (wine_exe.empty ())
         throw runtime_error ("wine is not installed or not in PATH");
@@ -1167,9 +1169,10 @@ namespace launcher
 
       info ("launching via wine: {} {}", to_utf8 (wine_exe), to_utf8 (bin));
 
-      process::spawn (wine_exe.string (),
-                      process::args (wa),
-                      process::start_dir (root.string ()));
+      bp::process (io,
+                   bp::filesystem::path (wine_exe.native ()),
+                   wa,
+                   bp::process_start_dir (root.native ())).detach ();
 
       info ("wine game process spawned");
     }
@@ -1180,7 +1183,7 @@ namespace launcher
   }
 #else
   asio::awaitable<void>
-  execute (asio::io_context& /* io */,
+  execute (asio::io_context& io,
             const path& root,
             const string& exe,
             const vector<string>& args,
@@ -1201,20 +1204,14 @@ namespace launcher
 
     info ("launching native game process: {}", to_utf8 (bin));
 
-    // Boost.Process passes narrow strings in the ANSI code page, which can't
-    // represent every path and argument (e.g., Cyrillic on a Western
-    // installation). So we pass wide strings, which it passes to
-    // CreateProcessW() as is.
+    // Note that Boost.Process converts the arguments from UTF-8 for
+    // CreateProcessW(), so they can represent any path and argument (e.g.,
+    // Cyrillic on a Western installation).
     //
-    vector<wstring> wa;
-    wa.reserve (args.size ());
-
-    for (const auto& a : args)
-      wa.push_back (from_utf8 (a).wstring ());
-
-    process::spawn (process::exe = bin.wstring (),
-                    process::args (wa),
-                    process::start_dir (root.wstring ()));
+    bp::process (io,
+                 bp::filesystem::path (bin.native ()),
+                 args,
+                 bp::process_start_dir (root.native ())).detach ();
 
     info ("native game process spawned");
 

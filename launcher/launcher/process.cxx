@@ -11,8 +11,12 @@
 // <windows.h>.
 //
 #ifdef _WIN32
-#  include <boost/process/v1.hpp>
-#  include <boost/process/v1/extend.hpp>
+#  include <boost/asio/io_context.hpp>
+
+#  include <boost/process/v2/stdio.hpp>
+#  include <boost/process/v2/process.hpp>
+#  include <boost/process/v2/environment.hpp>
+#  include <boost/process/v2/windows/creation_flags.hpp>
 
 #  include <windows.h>
 #else
@@ -22,6 +26,8 @@
 #  include <sys/stat.h>
 #  include <sys/wait.h>
 #endif
+
+#include <launcher/utility.hxx> // from_utf8()
 
 using namespace std;
 
@@ -129,25 +135,43 @@ namespace launcher
   start_detached (const string& p, const vector<string>& as)
   {
 #ifdef _WIN32
-    namespace process = boost::process::v1;
-    namespace extend = boost::process::v1::extend;
+    namespace bp = boost::process::v2;
 
-    // Note that CreateProcess() searches for the program in PATH itself and
-    // that once we are done with the handles a process that exits leaves
-    // nothing behind.
+    // Note that once we detach from the process (that is, close its
+    // handles) it leaves nothing behind when it exits.
     //
     try
     {
-      process::spawn (p,
-                      process::args (as),
-                      process::std_in  < process::null,
-                      process::std_out > process::null,
-                      process::std_err > process::null,
-                      extend::on_setup = [] (auto& e)
-                      {
-                        e.creation_flags |= DETACHED_PROCESS |
-                                            CREATE_NEW_PROCESS_GROUP;
-                      });
+      // CreateProcessW() only searches PATH for the program in the command
+      // line, which Boost.Process doesn't use to find it.
+      //
+      bp::filesystem::path f (from_utf8 (p).native ());
+
+      if (p.find_first_of ("/\\") == string::npos)
+      {
+        f = bp::environment::find_executable (f);
+
+        if (f.empty ())
+          throw process_error (error_code (ERROR_FILE_NOT_FOUND,
+                                           system_category ()),
+                               "unable to execute {}",
+                               p);
+      }
+
+      boost::asio::io_context ctx;
+      bp::process c (
+        ctx,
+        f,
+        as,
+        bp::process_stdio {nullptr, nullptr, nullptr},
+        bp::windows::process_creation_flags<DETACHED_PROCESS |
+                                            CREATE_NEW_PROCESS_GROUP> ());
+
+      c.detach ();
+    }
+    catch (const process_error&)
+    {
+      throw;
     }
     catch (const system_error& e)
     {

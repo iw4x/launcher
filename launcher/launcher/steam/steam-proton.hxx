@@ -167,8 +167,6 @@ namespace launcher
 
     bool force_steam_runtime_;
 
-    // @@ Nothing uses the io_context.
-    //
     asio::io_context& ioc_;
   };
 }

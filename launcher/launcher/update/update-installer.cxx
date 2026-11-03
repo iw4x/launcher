@@ -10,15 +10,22 @@
 #include <optional>
 #include <stdexcept>
 
+// Note that Boost.Process includes <winsock2.h>, which has to come before
+// <windows.h>.
+//
+#include <boost/asio/io_context.hpp>
+
+#include <boost/process/v2/process.hpp>
+#include <boost/process/v2/environment.hpp>
+
+#include <miniz.h>
+
 #ifdef _WIN32
 #  include <windows.h>
 #else
 #  include <sys/stat.h>
 #  include <unistd.h>
 #endif
-
-#include <boost/process/v1.hpp>
-#include <miniz.h>
 
 #include <launcher/launcher-log.hxx>
 
@@ -496,14 +503,17 @@ namespace launcher
     {
       launcher::log::trace_l3 (categories::update{}, "extracting as .tar.xz format");
 
-      boost::process::v1::child c (
-        boost::process::v1::search_path ("tar"),
-        "-xJf", ap.string (),
-        "-C", d.string ());
+      namespace bp = boost::process::v2;
 
-      c.wait ();
+      boost::asio::io_context ctx;
+      bp::process c (ctx,
+                     bp::environment::find_executable ("tar"),
+                     {string ("-xJf"),
+                      ap.string (),
+                      string ("-C"),
+                      d.string ()});
 
-      int r (c.exit_code ());
+      int r (c.wait ());
       if (r != 0)
       {
         launcher::log::error (categories::update{}, "tar command failed with exit code {}", r);

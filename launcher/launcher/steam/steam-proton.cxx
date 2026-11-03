@@ -3,9 +3,18 @@
 
 #include <launcher/steam/steam-proton.hxx>
 
-#include <boost/process/v1.hpp>
-#include <boost/asio/use_awaitable.hpp>
+#include <boost/asio/read.hpp>
+#include <boost/asio/as_tuple.hpp>
+#include <boost/asio/io_context.hpp>
 #include <boost/asio/steady_timer.hpp>
+#include <boost/asio/use_awaitable.hpp>
+#include <boost/asio/readable_pipe.hpp>
+#include <boost/asio/experimental/awaitable_operators.hpp>
+
+#include <boost/process/v2/stdio.hpp>
+#include <boost/process/v2/process.hpp>
+#include <boost/process/v2/start_dir.hpp>
+#include <boost/process/v2/environment.hpp>
 
 #include <cctype>   // isdigit()
 #include <charconv> // from_chars()
@@ -14,6 +23,7 @@
 #include <fstream>
 #include <algorithm>
 #include <regex>
+#include <sstream>
 
 #include <launcher/process.hxx>
 #include <launcher/launcher-log.hxx>
@@ -23,7 +33,34 @@ using namespace std::chrono_literals;
 
 namespace launcher
 {
-  namespace bp = boost::process::v1;
+  namespace bp = boost::process::v2;
+
+  using namespace boost::asio::experimental::awaitable_operators;
+
+  namespace
+  {
+    // Return our environment with the variables overridden, as NAME=VALUE
+    // strings.
+    //
+    vector<string>
+    merge_environment (const map<string, string>& vs)
+    {
+      vector<string> r;
+
+      for (const auto& kv : bp::environment::current ())
+      {
+        string v (kv.string ());
+
+        if (!vs.contains (v.substr (0, v.find ('='))))
+          r.push_back (move (v));
+      }
+
+      for (const auto& [k, v] : vs)
+        r.push_back (k + '=' + v);
+
+      return r;
+    }
+  }
 
   string
   to_string (proton_status s)
@@ -92,11 +129,13 @@ namespace launcher
   {
     launcher::log::trace_l3 (categories::steam{}, "checking if steam is running via pgrep");
 
-    bp::ipstream is;
-    bp::child c ("pgrep -x steam", bp::std_out > is);
+    asio::io_context ctx;
+    bp::process c (ctx,
+                   bp::environment::find_executable ("pgrep"),
+                   {"-x", "steam"},
+                   bp::process_stdio {{}, nullptr, {}});
 
-    c.wait ();
-    bool running (c.exit_code () == 0);
+    bool running (c.wait () == 0);
 
     launcher::log::trace_l3 (categories::steam{}, "pgrep check finished, steam running: {}", running);
     return running;
@@ -486,30 +525,43 @@ namespace launcher
     {
       launcher::log::trace_l2 (categories::steam{}, "spawning standard ghost process probe");
 
-      bp::environment pe (boost::this_process::environment ());
       auto m (e.build_env_map ());
 
       for (const auto& [k, v] : m)
-      {
         launcher::log::trace_l3 (categories::steam{}, "ghost env: {}={}", k, v);
-        pe[k] = v;
-      }
 
-      bp::ipstream o;
-      bp::ipstream er;
-      bp::child g (
-        e.proton_bin.string (),
-        bp::args ({string ("run"), h.string (), string ("check")}),
-        pe,
-        bp::std_out > o,
-        bp::std_err > er
-      );
+      asio::readable_pipe o (ioc_);
+      asio::readable_pipe er (ioc_);
 
-      g.wait ();
-      launcher::log::trace_l2 (categories::steam{}, "ghost process exited with code {}", g.exit_code ());
+      bp::process g (ioc_,
+                     bp::filesystem::path (e.proton_bin.native ()),
+                     {string ("run"), h.string (), string ("check")},
+                     bp::process_environment (merge_environment (m)),
+                     bp::process_stdio {{}, o, er});
+
+      // Read both outputs to the end at once since the probe would block on
+      // the one that we don't read once its pipe is full. Note that the
+      // reads end with the end of file error, which is how we expect them to
+      // end.
+      //
+      string os;
+      string es;
+
+      co_await (asio::async_read (o,
+                                  asio::dynamic_buffer (os),
+                                  asio::as_tuple (asio::use_awaitable)) &&
+                asio::async_read (er,
+                                  asio::dynamic_buffer (es),
+                                  asio::as_tuple (asio::use_awaitable)));
+
+      int x (co_await g.async_wait (asio::use_awaitable));
+      launcher::log::trace_l2 (categories::steam{}, "ghost process exited with code {}", x);
+
+      istringstream oi (os);
+      istringstream ei (es);
 
       string r;
-      getline (o, r);
+      getline (oi, r);
 
       launcher::log::trace_l3 (categories::steam{}, "ghost process stdout: {}", r);
 
@@ -517,12 +569,12 @@ namespace launcher
       // probe.
       //
       string l;
-      while (getline (er, l))
+      while (getline (ei, l))
       {
         launcher::log::trace_l3 (categories::steam{}, "ghost process stderr: {}", l);
       }
 
-      if (g.exit_code () == 0 && r == "running")
+      if (x == 0 && r == "running")
       {
         launcher::log::debug (categories::steam{}, "ghost process confirmed steam is running");
         co_return ghost_result::steam_running;
@@ -558,11 +610,7 @@ namespace launcher
       // Prepare the environment variables.
       //
       launcher::log::trace_l2 (categories::steam{}, "preparing launch environment");
-      bp::environment pe (boost::this_process::environment ());
-      auto m (e.build_env_map ());
-
-      for (const auto& [k, v] : m)
-        pe[k] = v;
+      bp::process_environment pe (merge_environment (e.build_env_map ()));
 
       string b;           // Binary to run.
       vector<string> cs;  // Command strings.
@@ -623,13 +671,12 @@ namespace launcher
       // the terminal while the game is running, nor do we want the game to
       // die if the launcher is closed.
       //
-      bp::child c (
-        b,
-        bp::args (cs),
-        pe,
-        bp::std_out > bp::null,
-        bp::std_err > bp::null,
-        bp::start_dir (x.parent_path ().string ()));
+      bp::process c (ioc_,
+                     b,
+                     cs,
+                     pe,
+                     bp::process_stdio {{}, nullptr, nullptr},
+                     bp::process_start_dir (x.parent_path ().native ()));
 
       c.detach ();
 
