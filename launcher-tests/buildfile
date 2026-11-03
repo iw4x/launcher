@@ -3,7 +3,8 @@
 
 ./: glibc/ launcher/ doc{README.md} legal{LICENSE.md AUTHORS} manifest
 
-# The test drivers link the launcher library, so without it (see
-# build/root.build) only the tests that run the launcher itself remain.
+# The test drivers link the launcher library, which is not installed, so for
+# an installed launcher only the tests that run the launcher itself remain
+# (see build/root.build).
 #
-./: {*/ -build/ -glibc/ -launcher/}: include = ($libs != [null])
+./: {*/ -build/ -glibc/ -launcher/}: include = (!$installed)

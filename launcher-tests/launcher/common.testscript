@@ -13,16 +13,19 @@
 # We make the copy the test program so that $* runs it the same way as the
 # original, including through the test runner, if any.
 #
-# Note that we hard link the executable rather than copy it. While a copy is
-# being written, a process that a parallel test forks inherits the open file
-# until it executes its program, and running the copy in the meantime fails
-# with "text file busy" (ETXTBSY). Where hard links aren't supported, ln
-# falls back to copying.
+# Note that we hard link the executable from a build rather than copy it.
+# While a copy is being written, a process that a parallel test forks
+# inherits the open file until it executes its program, and running the copy
+# in the meantime fails with "text file busy" (ETXTBSY). An installed
+# launcher, however, is normally on another filesystem, so there we copy.
 #
 launcher = [path] $0
 test = [path] "root/$leaf($launcher)"
 
-clone_launcher = [cmdline] mkdir root && ln $launcher root/
+if $installed
+  clone_launcher = [cmdline] mkdir root && cp $launcher root/
+else
+  clone_launcher = [cmdline] mkdir root && ln $launcher root/
 
 # On Windows the copy also needs the DLLs of the in-tree dependencies, if
 # any (there are none in a static build). They are in the assembly directory

@@ -14,16 +14,22 @@ ixx{*}: extension = ixx
 txx{*}: extension = txx
 cxx{*}: extension = cxx
 
+# Whether we test an installed launcher, as opposed to one from a build.
+#
+installed = false
+
 if ($build.mode != 'skeleton')
 {
   # Import the launcher executable, which the functional tests run, and the
   # library with everything except its main(), which the test drivers link.
-  # Note that the launcher package doesn't install the library, so when we
-  # test an installed launcher, the import doesn't find it and leaves libs
-  # null (see buildfile).
+  # Note that the launcher package doesn't install the library, so the
+  # import only finds it in a build. Which is also how we tell an installed
+  # launcher.
   #
   import! [metadata] launcher = launcher%exe{iw4x-launcher}
   import? libs = launcher%liba{launcher}
+
+  installed = ($libs == [null])
 }
 
 # Disable "unknown pragma" warnings for the ODB pragmas in the launcher's
