@@ -1,4 +1,9 @@
 # Copyright (c) the IW4x authors (see the AUTHORS file).
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-./: {*/ -build/} doc{README.md} legal{LICENSE.md AUTHORS} manifest
+./: glibc/ launcher/ doc{README.md} legal{LICENSE.md AUTHORS} manifest
+
+# The test drivers link the launcher library, so without it (see
+# build/root.build) only the tests that run the launcher itself remain.
+#
+./: {*/ -build/ -glibc/ -launcher/}: include = ($libs != [null])
