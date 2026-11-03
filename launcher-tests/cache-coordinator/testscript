@@ -35,6 +35,11 @@ $* sync a.txt b.txt >>EOO &cache/*** &a.txt &b.txt
   {
     $* sync a.txt >- &cache/*** &a.txt
 
+    # The modification time on Windows only has a one second resolution, so
+    # make sure the change is in the next second.
+    #
+    sleep 1
+
     echo 'changed' >=a.txt
 
     $* installed >'false'
