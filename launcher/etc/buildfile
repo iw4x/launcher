@@ -4,12 +4,17 @@
 # Maintainer scripts. We distribute them with the package but don't install
 # them.
 #
-./: private/exe{compose-artwork}
+./: private/exe{compose-artwork glibc-symbols}
 
-# Note that the script doesn't import any modules, so we have to select the
+# Note that the scripts don't import any modules, so we have to select the
 # bash rule with a hint.
 #
 [rule_hint=bash] private/exe{compose-artwork}: private/in{compose-artwork}
+{
+  install = false
+}
+
+[rule_hint=bash] private/exe{glibc-symbols}: private/in{glibc-symbols}
 {
   install = false
 }
