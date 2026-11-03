@@ -91,13 +91,6 @@ namespace launcher
     });
 
     constexpr auto
-    trace_l3 ([] (auto&&... args)
-    {
-      log::trace_l3 (categories::launcher (),
-                     std::forward<decltype (args)> (args)...);
-    });
-
-    constexpr auto
     trace_l2 ([] (auto&&... args)
     {
       log::trace_l2 (categories::launcher (),
@@ -1350,7 +1343,7 @@ try
       if (ep)
         rethrow_exception (ep);
 
-    } (), [&io, &ex] (exception_ptr ep) { ex = ep; });
+    } (), [&ex] (exception_ptr ep) { ex = ep; });
 
     io.restart ();
     io.run ();

@@ -311,7 +311,6 @@ namespace launcher
       }
     }
 
-    bool ok (false);
     for (size_t i (0); i < t->request.urls.size (); ++i)
     {
       if (t->should_cancel ())
@@ -336,7 +335,7 @@ namespace launcher
         t->set_state (download_state::connecting);
         t->set_state (download_state::downloading);
 
-        auto cb ([t, this] (uint64_t tx, uint64_t tot)
+        auto cb ([t] (uint64_t tx, uint64_t tot)
         {
           if (t->should_cancel ())
             throw runtime_error ("Download cancelled");
@@ -358,7 +357,6 @@ namespace launcher
 
         t->response.successful_url_index = i;
         t->set_state (download_state::completed);
-        ok = true;
         break;
       }
       catch (const http_status_error& e)

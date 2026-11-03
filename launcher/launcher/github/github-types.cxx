@@ -37,7 +37,7 @@ namespace launcher
 
   github_asset::
   github_asset (string n, string u, uint64_t s)
-    : name (move (n)), browser_download_url (move (u)), size (s)
+    : name (move (n)), size (s), browser_download_url (move (u))
   {
   }
 

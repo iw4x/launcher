@@ -952,16 +952,17 @@ namespace launcher
           if (rl > 0)
           {
             auto now (steady_clock::now ());
-            auto el (duration_cast<milliseconds> (now - start).count ());
-            auto ex ((tr * 1000) / rl);
+            auto el (duration_cast<milliseconds> (now - start));
+            milliseconds ex (
+              static_cast<milliseconds::rep> ((tr * 1000) / rl));
 
             if (el < ex)
             {
-              asio::steady_timer tm (c, milliseconds (ex - el));
+              asio::steady_timer tm (c, ex - el);
               co_await tm.async_wait (asio::use_awaitable);
             }
 
-            if (el >= 1000)
+            if (el >= seconds (1))
             {
               start = now;
               tr = 0;

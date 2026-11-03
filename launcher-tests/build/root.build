@@ -29,6 +29,18 @@ if ($build.mode != 'skeleton')
 if ($cxx.target.system == 'mingw32' && $cxx.id == 'gcc')
   cxx.libs += -lstdc++exp
 
+# Disable "unknown pragma" warnings for the ODB pragmas in the launcher's
+# database classes, which some test drivers include.
+#
+switch $cxx.class
+{
+  case 'msvc'
+    cxx.coptions += /wd4068
+
+  case 'gcc'
+    cxx.coptions += -Wno-unknown-pragmas
+}
+
 # Every exe{} in this project is by default a test.
 #
 exe{*}: test = true

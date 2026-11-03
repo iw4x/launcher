@@ -166,7 +166,6 @@ namespace launcher
     asio::strand<asio::any_io_executor> strand_;
     std::vector<std::shared_ptr<progress_entry>> entries_buffers_[2];
     std::atomic<int> entries_buffer_ {0};
-    bool entries_dirty_ {false};
 
     progress_metrics overall_metrics_;
     progress_tracker overall_tracker_;

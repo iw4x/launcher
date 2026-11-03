@@ -157,7 +157,6 @@ namespace launcher
 
       std::uint64_t total (0);
       std::uint64_t current (0);
-      float speed_sum (0.0f);
 
       for (const auto& e : entries)
       {
@@ -174,7 +173,6 @@ namespace launcher
 
         total += to;
         current += c;
-        speed_sum += s;
       }
 
       auto& om (overall_metrics_);

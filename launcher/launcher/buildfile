@@ -126,6 +126,28 @@ if $glibc
 #
 obje{launcher-glibc}: cxx.poptions = "-I$out_root" "-I$src_root"
 
+# Disable "unknown pragma" warnings for the ODB pragmas in the database
+# classes (see cache/cache-types.hxx).
+#
+switch $cxx.class
+{
+  case 'msvc'
+    cxx.coptions += /wd4068
+
+  case 'gcc'
+    cxx.coptions += -Wno-unknown-pragmas
+}
+
+# Disable "mismatched new/delete" warnings that GCC issues for Asio's
+# coroutine frames. Once it inlines either the allocation or the deallocation
+# of a frame into the frame's class-specific operator new or delete, it no
+# longer pairs the two and reports the inlined std::aligned_alloc() or
+# std::free() as mismatched. Note that this only happens in optimized
+# builds.
+#
+if ($cxx.id == 'gcc')
+  cxx.coptions += -Wno-mismatched-new-delete
+
 # Our Asio and Beast heavy translation units can exceed the section limit of
 # the default COFF object format. Note that Clang targeting MSVC switches to
 # the big object format by itself.
