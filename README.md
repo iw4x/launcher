@@ -1,27 +1,78 @@
-# launcher - Launcher and updater for IW4x.
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset=".github/logo-dark.svg">
+    <img alt="IW4x" src=".github/logo-light.svg" width="320">
+  </picture>
+</p>
 
-The `iw4x-launcher` executable keeps the IW4x installation in its directory
-up to date with the latest IW4x release and starts the selected IW4x client,
-through Proton on Linux. It also installs shortcuts for both clients, in
-Steam and on the desktop.
+<h3 align="center">Launcher and updater for IW4x</h3>
 
-This file contains setup instructions and other details for developing
-`launcher`. If you want to use `launcher` in your `build2`-based project,
-then see the accompanying package [`README.md`](launcher/README.md) file.
+<p align="center">
+  <a href="https://github.com/iw4x/launcher/releases"><img alt="Release" src="https://img.shields.io/github/v/release/iw4x/launcher?include_prereleases&label=release&color=89BD24"></a>
+  <a href="https://github.com/iw4x/launcher/releases"><img alt="Downloads" src="https://img.shields.io/github/downloads/iw4x/launcher/total?color=89BD24"></a>
+  <img alt="Platforms" src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux-89BD24">
+  <a href="LICENSE.md"><img alt="License" src="https://img.shields.io/badge/license-GPL--3.0--or--later-89BD24"></a>
+  <a href="https://build2.org"><img alt="Built with build2" src="https://img.shields.io/badge/built%20with-build2-89BD24"></a>
+</p>
 
-## Usage
+<p align="center">
+  <a href="#getting-started">Getting started</a> ·
+  <a href="#command-line">Command line</a> ·
+  <a href="#development">Development</a>
+</p>
 
-The launcher requires the Steam version of Call of Duty: Modern Warfare 2
-(2009). Download the archive for your platform from the
-[releases](https://github.com/iw4x/launcher/releases) page, extract it into
-the game directory, and run `iw4x-launcher` from there.
+![The launcher downloading an IW4x release](.github/screenshot.png)
+
+## Getting started
+
+> [!IMPORTANT]
+> The launcher requires the Steam version of Call of Duty: Modern Warfare 2
+> (2009).
+
+1. Download the archive for your platform from the
+   [releases](https://github.com/iw4x/launcher/releases) page:
+
+   | Platform | Archive                                        |
+   |----------|------------------------------------------------|
+   | Windows  | `launcher-<version>-x86_64-windows.zip`        |
+   | Linux    | `launcher-<version>-x86_64-linux-glibc.tar.xz` |
+
+2. Extract it into the game directory, next to `iw4mp.exe`.
+3. Run `iw4x-launcher` from there. The first run downloads IW4x and asks
+   which client to start. After that, use the shortcuts it installs.
+
+## Command line
+
+The launcher works without any options, but these come in handy.
+
+<details>
+<summary>Options</summary>
+
+| Option                     | Description                                                    |
+|----------------------------|----------------------------------------------------------------|
+| `--arch x86\|x64`          | Start IW4x (`x86`) or IW4x (mm) (`x64`) without asking.        |
+| `--prerelease`             | Update to pre-releases to try upcoming features.               |
+| `--game-args <arg>`        | Pass an argument to the game. Repeat for several.              |
+| `--skip-launch`            | Update everything but don't start the game.                    |
+| `--skip-remote`            | Start the game without contacting GitHub or checking files.    |
+| `--no-self-update`         | Leave the launcher itself as it is.                            |
+| `--no-shortcuts`           | Leave the Steam, desktop, and menu shortcuts as they are.      |
+| `--proxy <url>`            | Route all traffic through an HTTP, HTTPS, or SOCKS5 proxy.     |
+| `--jobs <num>`             | Limit the number of parallel downloads.                        |
+| `--force-steam-runtime`    | Run Proton inside the Steam Linux Runtime container.           |
+
+Run `iw4x-launcher --help` for the complete list.
+
+</details>
 
 ## Development
 
 The development setup for `launcher` uses the standard `bdep`-based
 workflow. Note that development builds regenerate the files kept in
 `launcher/launcher/pregenerated/`. For this `bdep` builds the `cli` and
-`odb` compilers automatically and `xxd` comes from the system.
+`odb` compilers automatically and `xxd` comes from the system. If you want
+to use `launcher` in your `build2`-based project, then see the package
+[`README.md`](launcher/README.md) file.
 
 On Linux we build with GCC. For example:
 
