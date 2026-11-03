@@ -215,9 +215,14 @@ main (int argc, char* argv[])
   {
     if (c == "get" || c == "post")
     {
-      http_response rs (c == "get"
-                        ? co_await hc.get (u)
-                        : co_await hc.post (u, as.size () == 3 ? as[2] : ""));
+      // Note that GCC 14 crashes on co_await in a conditional expression.
+      //
+      http_response rs;
+
+      if (c == "get")
+        rs = co_await hc.get (u);
+      else
+        rs = co_await hc.post (u, as.size () == 3 ? as[2] : "");
 
       co_return "status " + to_string (rs.status_code ()) +
                 (rs.body ? "\nbody " + *rs.body : "");
