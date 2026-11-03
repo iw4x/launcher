@@ -15,8 +15,7 @@
 #include <boost/asio/steady_timer.hpp>
 #include <boost/asio/use_awaitable.hpp>
 
-#include <boost/process/v1.hpp>
-
+#include <launcher/process.hxx>
 #include <launcher/launcher-log.hxx>
 
 using namespace std;
@@ -24,8 +23,6 @@ using namespace std::chrono_literals;
 
 namespace launcher
 {
-  namespace bp = boost::process::v1;
-
   namespace
   {
     // The Companion launcher that the rawfiles release ships in the game
@@ -322,20 +319,12 @@ namespace launcher
 
     try
     {
-      // Start Steam detached and find it in PATH, the same way as Companion
-      // does.
+      // Find Steam in PATH, the same way as Companion does.
       //
-      bp::child p (
-        c
-        ? bp::child (companion_program (gd).string (),
-                     bp::args ({string ("--steam")}),
-                     bp::std_out > bp::null,
-                     bp::std_err > bp::null)
-        : bp::child (bp::search_path ("steam"),
-                     bp::std_out > bp::null,
-                     bp::std_err > bp::null));
-
-      p.detach ();
+      if (c)
+        start_detached (companion_program (gd).string (), {"--steam"});
+      else
+        start_detached ("steam", {});
 
       if (verbose_)
         launcher::log::info (categories::steam{},

@@ -15,6 +15,7 @@
 #include <algorithm>
 #include <regex>
 
+#include <launcher/process.hxx>
 #include <launcher/launcher-log.hxx>
 
 using namespace std;
@@ -457,16 +458,11 @@ namespace launcher
         //
         try
         {
-          bp::child s ("steam");
-          s.detach ();
+          start_detached ("steam", {});
         }
-        catch (const std::exception& e)
+        catch (const process_error& e)
         {
-          launcher::log::warning (categories::steam{}, "failed to spawn steam child process: {}", e.what ());
-        }
-        catch (...)
-        {
-          launcher::log::warning (categories::steam{}, "unknown exception spawning steam");
+          launcher::log::warning (categories::steam{}, "unable to start steam: {}", e.what ());
         }
 
         // Give it a moment to spin up.

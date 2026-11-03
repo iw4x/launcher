@@ -1,0 +1,27 @@
+# Copyright (c) the IW4x authors (see the AUTHORS file).
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+: start
+: Test starting a program that is found in PATH
+:
+{
+  $* sh -c 'touch ran' >'no children' &?ran
+
+  # The program runs on its own, so give it some time to get there.
+  #
+  i = [uint64] 0
+  while ($i != 10 && !$file_exists($~/ran))
+  {
+    sleep 1
+    i += 1
+  }
+
+  test -f ran
+}
+
+: missing
+: Test starting a program that does not exist
+:
+$* no-such-program 2>>~/EOE/ >'no children' != 0
+  /error: unable to execute no-such-program: .+/
+  EOE

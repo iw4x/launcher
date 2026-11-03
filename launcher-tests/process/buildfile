@@ -1,0 +1,9 @@
+# Copyright (c) the IW4x authors (see the AUTHORS file).
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+# The test only exists for POSIX since on Windows a process that exits
+# leaves nothing behind for its parent.
+#
+./: exe{driver}: include = ($cxx.target.class != 'windows')
+
+exe{driver}: {hxx ixx txx cxx}{**} $libs testscript

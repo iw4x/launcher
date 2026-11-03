@@ -34,3 +34,7 @@ Version 1.1.8-b.28
     unavailable. It warns about each component that it could not update
     and only fails if the selected client requires one that is not
     installed. With --skip-launch any failed update is an error.
+
+  * Launches that restart Steam no longer stall for minutes on Linux. The
+    Steam processes that the launcher started remained its zombies once
+    they exited, which Companion took for a running client and waited for.

@@ -13,7 +13,6 @@
 #include <thread>
 
 #include <boost/process/v1.hpp>
-#include <boost/process/v1/extend.hpp>
 
 #ifdef _WIN32
 #  include <windows.h>
@@ -26,6 +25,7 @@
 
 #include <miniz.h>
 
+#include <launcher/process.hxx>
 #include <launcher/shortcut/shortcut-vdf.hxx>
 
 using namespace std;
@@ -218,45 +218,24 @@ namespace launcher
     optional<steam_program>
     program (const fs::path& root);
 
-    // Start the program in its own process group (session on POSIX), so
-    // that it outlives us.
+    // Start the program detached with the extra arguments (see
+    // start_detached()). Return false if unable to.
     //
     bool
     run (const steam_program& p, const vector<string>& extra = {})
     {
-      namespace process = boost::process::v1;
-      namespace extend = boost::process::v1::extend;
-
       vector<string> as (p.args);
       as.insert (as.end (), extra.begin (), extra.end ());
 
       try
       {
-        process::spawn (p.file,
-                        process::args (as),
-                        process::std_in  < process::null,
-                        process::std_out > process::null,
-                        process::std_err > process::null,
-#ifdef _WIN32
-                        extend::on_setup = [] (auto& e)
-                        {
-                          e.creation_flags |= DETACHED_PROCESS |
-                                              CREATE_NEW_PROCESS_GROUP;
-                        }
-#else
-                        extend::on_exec_setup = [] (auto&)
-                        {
-                          ::setsid ();
-                        }
-#endif
-                        );
+        start_detached (p.file, as);
+        return true;
       }
-      catch (const exception&)
+      catch (const process_error&)
       {
         return false;
       }
-
-      return true;
     }
 
     bool
