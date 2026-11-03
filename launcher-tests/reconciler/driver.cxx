@@ -132,11 +132,19 @@ main (int argc, char* argv[])
       // Pick a time that every platform can represent. Wine, for example,
       // stops at 2106.
       //
+      // Note that libc++ doesn't support clock_cast() for file_clock while
+      // MSVC's file_clock doesn't have from_sys(). Note also that with
+      // libstdc++ 13 the conversion only compiles from seconds.
+      //
       using namespace chrono;
 
-      filesystem::last_write_time (
-        as[1],
-        clock_cast<file_clock> (sys_days (year (2000) / January / 1)));
+      sys_seconds t (sys_days (year (2000) / January / 1));
+
+#ifdef _LIBCPP_VERSION
+      filesystem::last_write_time (as[1], file_clock::from_sys (t));
+#else
+      filesystem::last_write_time (as[1], clock_cast<file_clock> (t));
+#endif
       return 0;
     }
 
