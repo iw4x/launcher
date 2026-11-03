@@ -8,7 +8,7 @@
 #include <exception>
 #include <filesystem>
 
-#include <launcher/installation.hxx>
+#include <launcher/launcher-installation.hxx>
 
 using namespace std;
 using namespace launcher;

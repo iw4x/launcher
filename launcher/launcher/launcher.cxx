@@ -35,6 +35,7 @@
 #include <launcher/launcher-download.hxx>
 #include <launcher/launcher-github.hxx>
 #include <launcher/launcher-http.hxx>
+#include <launcher/launcher-installation.hxx>
 #include <launcher/launcher-log.hxx>
 #include <launcher/launcher-manifest.hxx>
 #include <launcher/launcher-options.hxx>
@@ -47,7 +48,6 @@
 #endif
 
 #include <launcher/utility.hxx>
-#include <launcher/installation.hxx>
 #include <launcher/version.hxx>
 
 namespace bp = boost::process::v2;
