@@ -2,10 +2,10 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 # Test that the launcher stays within the glibc floor (see glibc.cxx in the
-# launcher package), which only exists for Linux on x86_64.
+# launcher package), which only exists for glibc on x86_64.
 #
 ./: testscript $launcher: \
-  include = ($cxx.target.class == 'linux' && $cxx.target.cpu == 'x86_64')
+  include = ($cxx.target.system == 'linux-gnu' && $cxx.target.cpu == 'x86_64')
 
 testscript{*}: test = $launcher
 

@@ -28,7 +28,7 @@ tcpu   = $cxx.target.cpu
 linux   = ($tclass == 'linux')
 windows = ($tclass == 'windows')
 
-glibc = ($linux && $tcpu == 'x86_64')
+glibc = ($tsys == 'linux-gnu' && $tcpu == 'x86_64')
 
 define cli: file
 cli{*}: extension = cli
