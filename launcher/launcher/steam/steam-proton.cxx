@@ -42,6 +42,9 @@ namespace launcher
     // Return our environment with the variables overridden, as NAME=VALUE
     // strings.
     //
+    // Note that bp::process_environment only refers to these strings, so
+    // they must outlive it.
+    //
     vector<string>
     merge_environment (const map<string, string>& vs)
     {
@@ -530,13 +533,15 @@ namespace launcher
       for (const auto& [k, v] : m)
         launcher::log::trace_l3 (categories::steam{}, "ghost env: {}={}", k, v);
 
+      vector<string> ev (merge_environment (m));
+
       asio::readable_pipe o (ioc_);
       asio::readable_pipe er (ioc_);
 
       bp::process g (ioc_,
                      bp::filesystem::path (e.proton_bin.native ()),
                      {string ("run"), h.string (), string ("check")},
-                     bp::process_environment (merge_environment (m)),
+                     bp::process_environment (ev),
                      bp::process_stdio {{}, o, er});
 
       // Read both outputs to the end at once since the probe would block on
@@ -610,7 +615,7 @@ namespace launcher
       // Prepare the environment variables.
       //
       launcher::log::trace_l2 (categories::steam{}, "preparing launch environment");
-      bp::process_environment pe (merge_environment (e.build_env_map ()));
+      vector<string> ev (merge_environment (e.build_env_map ()));
 
       string b;           // Binary to run.
       vector<string> cs;  // Command strings.
@@ -674,7 +679,7 @@ namespace launcher
       bp::process c (ioc_,
                      b,
                      cs,
-                     pe,
+                     bp::process_environment (ev),
                      bp::process_stdio {{}, nullptr, nullptr},
                      bp::process_start_dir (x.parent_path ().native ()));
 
