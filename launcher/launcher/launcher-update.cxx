@@ -280,6 +280,11 @@ namespace launcher
       v.snapshot_id = p->snapshot_id;
     }
 
+    // The version string is the project version, which leaves the revision
+    // out.
+    //
+    v.revision = LAUNCHER_REVISION;
+
     uc->set_current_version (v);
     return uc;
   }

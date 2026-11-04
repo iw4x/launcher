@@ -35,3 +35,5 @@
 
 #define LAUNCHER_SNAPSHOT_SN   $launcher.version.snapshot_sn$ULL
 #define LAUNCHER_SNAPSHOT_ID   "$launcher.version.snapshot_id$"
+
+#define LAUNCHER_REVISION      $launcher.version.revision$

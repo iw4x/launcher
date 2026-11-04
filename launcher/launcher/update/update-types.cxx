@@ -4,6 +4,7 @@
 #include <launcher/update/update-types.hxx>
 
 #include <cctype>
+#include <limits>  // numeric_limits
 #include <sstream>
 
 #include <launcher/launcher-log.hxx>
@@ -45,6 +46,23 @@ namespace launcher
     return false;
   }
 
+  // Parse the +<revision> at position p into v, if it is there, advancing
+  // past it. Return false if it is there but invalid.
+  //
+  static bool
+  parse_revision (const string& s, size_t& p, launcher_version& v)
+  {
+    if (!parse_c (s, p, '+'))
+      return true;
+
+    auto r (parse_u64 (s, p));
+    if (!r || *r > numeric_limits<uint16_t>::max ())
+      return false;
+
+    v.revision = static_cast<uint16_t> (*r);
+    return true;
+  }
+
   int launcher_version::
   compare (const launcher_version& v) const noexcept
   {
@@ -76,6 +94,11 @@ namespace launcher
     if (snapshot_sn != v.snapshot_sn)
       return snapshot_sn < v.snapshot_sn ? -1 : 1;
 
+    // A revision comes after the version it revises.
+    //
+    if (revision != v.revision)
+      return revision < v.revision ? -1 : 1;
+
     return 0;
   }
 
@@ -99,6 +122,9 @@ namespace launcher
           o << '.' << snapshot_id;
       }
     }
+
+    if (revision != 0)
+      o << '+' << revision;
 
     return o.str ();
   }
@@ -160,6 +186,20 @@ namespace launcher
       return v;
     }
 
+    // A release may have a revision (e.g., 1.1.8+1).
+    //
+    if (s[p] == '+')
+    {
+      if (!parse_revision (s, p, v))
+      {
+        launcher::log::trace_l3 (categories::update{}, "invalid revision");
+        return nullopt;
+      }
+
+      launcher::log::trace_l3 (categories::update{}, "parsed release version with revision: {}", v.string ());
+      return v;
+    }
+
     if (!parse_c (s, p, '-'))
     {
       launcher::log::trace_l3 (categories::update{}, "unexpected character after patch version");
@@ -199,6 +239,12 @@ namespace launcher
     //
     if (p >= s.size () || !parse_c (s, p, '.'))
     {
+      if (!parse_revision (s, p, v))
+      {
+        launcher::log::trace_l3 (categories::update{}, "invalid revision");
+        return nullopt;
+      }
+
       launcher::log::trace_l3 (categories::update{}, "parsed pre-release version: {}", v.string ());
       return v;
     }
@@ -211,6 +257,13 @@ namespace launcher
     {
       ++p;
       v.snapshot_sn = 1; // Smallest snapshot.
+
+      if (!parse_revision (s, p, v))
+      {
+        launcher::log::trace_l3 (categories::update{}, "invalid revision");
+        return nullopt;
+      }
+
       launcher::log::trace_l3 (categories::update{}, "parsed build2 placeholder '.z' snapshot version: {}", v.string ());
       return v;
     }
@@ -236,10 +289,32 @@ namespace launcher
         ++e;
 
       v.snapshot_id = s.substr (p, e - p);
+      p = e;
+    }
+
+    if (!parse_revision (s, p, v))
+    {
+      launcher::log::trace_l3 (categories::update{}, "invalid revision");
+      return nullopt;
     }
 
     launcher::log::trace_l3 (categories::update{}, "parsed full snapshot version: {}", v.string ());
     return v;
+  }
+
+  launcher_version
+  merge_revision (launcher_version a, const launcher_version& t)
+  {
+    if (a.revision == 0 && t.revision != 0)
+    {
+      launcher_version b (t);
+      b.revision = 0;
+
+      if (a.compare (b) == 0)
+        a.revision = t.revision;
+    }
+
+    return a;
   }
 
   platform_type

@@ -49,7 +49,7 @@ namespace
   }
 }
 
-// Usage: argv[0] (-p|-k|-c)
+// Usage: argv[0] (-p|-k|-c|-m)
 //
 // Read versions from stdin, one per line, and print the result for each to
 // stdout, one per line. Fail on the first version that doesn't parse.
@@ -64,21 +64,26 @@ namespace
 //    Read two space-separated versions per line and print the sign of their
 //    comparison (-1 if the first is older).
 //
+// -m
+//    Read the versions of a release asset and its tag, space-separated, per
+//    line and print the version that the release resolves to (see
+//    merge_revision()).
+//
 int
 main (int argc, char* argv[])
 {
   string_view m (argc == 2 ? argv[1] : "");
 
-  if (m != "-p" && m != "-k" && m != "-c")
+  if (m != "-p" && m != "-k" && m != "-c" && m != "-m")
   {
     cerr << "error: invalid arguments\n"
-         << "  info: usage: driver (-p|-k|-c)" << endl;
+         << "  info: usage: driver (-p|-k|-c|-m)" << endl;
     return 1;
   }
 
   for (string l; getline (cin, l); )
   {
-    if (m == "-c")
+    if (m == "-c" || m == "-m")
     {
       size_t p (l.find (' '));
 
@@ -88,8 +93,16 @@ main (int argc, char* argv[])
         return 1;
       }
 
-      int r (parse (l.substr (0, p)).compare (parse (l.substr (p + 1))));
-      cout << (r < 0 ? -1 : r > 0 ? 1 : 0) << endl;
+      launcher_version x (parse (l.substr (0, p)));
+      launcher_version y (parse (l.substr (p + 1)));
+
+      if (m == "-c")
+      {
+        int r (x.compare (y));
+        cout << (r < 0 ? -1 : r > 0 ? 1 : 0) << endl;
+      }
+      else
+        cout << merge_revision (move (x), y).string () << endl;
     }
     else
     {

@@ -24,6 +24,7 @@ namespace launcher
   // 1.2.0-b.2                              Second beta.
   // 1.2.0-a.1.z                            Development snapshot after a.1.
   // 1.2.0-a.1.20260201010251.fe4660334ed0  Snapshot after a.1.
+  // 1.1.8+1                                First revision of 1.1.8.
   //
   struct launcher_version
   {
@@ -46,6 +47,10 @@ namespace launcher
     //
     std::string snapshot_id;
 
+    // Package revision (for example, 1 for 1.1.8+1) or 0 if there is none.
+    //
+    std::uint16_t revision = 0;
+
     launcher_version () = default;
 
     launcher_version (std::uint32_t mj,
@@ -53,13 +58,15 @@ namespace launcher
                       std::uint32_t pa,
                       std::uint16_t pr = 0,
                       std::uint64_t sn = 0,
-                      std::string   si = "")
+                      std::string   si = "",
+                      std::uint16_t rv = 0)
       : major (mj),
         minor (mi),
         patch (pa),
         pre_release (pr),
         snapshot_sn (sn),
-        snapshot_id (std::move (si))
+        snapshot_id (std::move (si)),
+        revision (rv)
     {
     }
 
@@ -118,7 +125,7 @@ namespace launcher
     int
     compare (const launcher_version& v) const noexcept;
 
-    // Return the version in the standard form (e.g., 1.2.0-a.1).
+    // Return the version in the standard form (e.g., 1.2.0-a.1 or 1.1.8+1).
     //
     // @@ The .z placeholder comes back as the .1 snapshot.
     //
@@ -166,10 +173,21 @@ namespace launcher
   // v1.2.0). Return nullopt if it is invalid.
   //
   // Note that we ignore what follows the patch number unless it starts with
-  // '-', so 1.2.0x is 1.2.0.
+  // '-' or '+', so 1.2.0x is 1.2.0.
   //
   std::optional<launcher_version>
   parse_launcher_version (const std::string& s);
+
+  // Return the version in a release asset's name with the revision of the
+  // release tag's version if the name has none but is otherwise the same
+  // version.
+  //
+  // GitHub rewrites the special characters in asset names, which may well
+  // include the + of a revision (launcher-1.1.8+1-... becoming, say,
+  // launcher-1.1.8.1-...), so the revision may only survive in the tag.
+  //
+  launcher_version
+  merge_revision (launcher_version asset, const launcher_version& tag);
 
   // Outcome of an update check.
   //

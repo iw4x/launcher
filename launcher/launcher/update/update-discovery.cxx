@@ -210,6 +210,12 @@ namespace launcher
         return ui;
       }
     }
+    else if (optional<launcher_version> t = parse_launcher_version (r.tag_name))
+    {
+      // The revision may only be in the tag (see merge_revision()).
+      //
+      v = merge_revision (move (*v), *t);
+    }
 
     launcher::log::debug (categories::update{}, "resolved update info for version (from tag: {})", r.tag_name);
 

@@ -63,6 +63,22 @@
     1.2.0-b.7.20260201010251.abc123
     EOO
 
+  : revision
+  :
+  $* <<EOI >>EOO
+    1.1.8+1
+    v1.1.8+2
+    1.2.3-a.1+3
+    1.2.0-a.1.z+4
+    1.2.0-a.1.20260201010251.fe4660334ed0+5
+    EOI
+    1.1.8+1
+    1.1.8+2
+    1.2.3-a.1+3
+    1.2.0-a.1.1+4
+    1.2.0-a.1.20260201010251.fe4660334ed0+5
+    EOO
+
   : snapshot-z
   : Test mapping the .z development snapshot to sequence number 1
   :
@@ -88,6 +104,9 @@
     $* <'1.2.3-a.500' 2>"error: invalid version '1.2.3-a.500'" != 0 : alpha-max
     $* <'1.2.3-b.500' 2>"error: invalid version '1.2.3-b.500'" != 0 : beta-max
     $* <'1.2.3-a.1.x' 2>"error: invalid version '1.2.3-a.1.x'" != 0 : snapshot
+    $* <'1.2.3+'      2>"error: invalid version '1.2.3+'"      != 0 : revision
+    $* <'1.2.3+x'     2>"error: invalid version '1.2.3+x'"     != 0 : revision-letter
+    $* <'1.2.3+65536' 2>"error: invalid version '1.2.3+65536'" != 0 : revision-max
   }}
 }}
 
@@ -166,4 +185,41 @@ $* -k <<EOI >>EOO
   : Test that a development snapshot is newer than its release tag
   :
   $* <'1.1.8-b.7.z v1.1.8-b.7' >'1'
+
+  : revision
+  : Test that a revision is newer than the version it revises
+  :
+  $* <<EOI >>EOO
+    1.1.8+1 1.1.8
+    1.1.8+1 1.1.8+2
+    1.1.8+1 1.1.8-b.27
+    1.1.8+1 1.1.9-a.1
+    EOI
+    1
+    -1
+    1
+    -1
+    EOO
+}}
+
+: merge
+: Test taking the revision from the release tag
+:
+{{
+  test.options += -m
+
+  : renamed
+  : Test the asset name with the + of the revision rewritten
+  :
+  $* <'1.1.8.1 v1.1.8+1' >'1.1.8+1'
+
+  : asset
+  : Test keeping the revision of the asset name
+  :
+  $* <'1.1.8+2 v1.1.8+1' >'1.1.8+2'
+
+  : other
+  : Test ignoring the tag of another version
+  :
+  $* <'1.1.9 v1.1.8+1' >'1.1.9'
 }}
