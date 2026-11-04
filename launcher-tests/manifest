@@ -1,6 +1,6 @@
 : 1
 name: launcher-tests
-version: 1.1.8-b.27.z
+version: 1.1.8
 language: c++
 project: launcher
 summary: Tests for the launcher and updater for IW4x.
