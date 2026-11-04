@@ -1328,18 +1328,51 @@ try
   //
   if (!ins.contains_game ())
   {
-    cerr << "error: no iw4mp.exe in '" << to_utf8 (root) << "'" << endl;
+    string e ("no iw4mp.exe in '" + to_utf8 (root) + "'");
+    vector<string> is;
 
     path p (root.parent_path ());
 
     if (p != root && installation (p).contains_game ())
-      cerr << "  info: Modern Warfare 2 is in parent directory '"
-           << to_utf8 (p) << "'" << '\n'
-           << "  info: consider moving "
-           << to_utf8 (self_path ().filename ()) << " there" << endl;
+    {
+      is.push_back ("Modern Warfare 2 is in parent directory '" +
+                    to_utf8 (p) + "'");
+      is.push_back ("consider moving " +
+                    to_utf8 (self_path ().filename ()) + " there");
+    }
     else
-      cerr << "  info: launcher must be in Modern Warfare 2 directory, "
-           << "next to iw4mp.exe" << endl;
+      is.push_back ("launcher must be in Modern Warfare 2 directory, next "
+                    "to iw4mp.exe");
+
+    cerr << "error: " << e << endl;
+
+    for (const string& i: is)
+      cerr << "  info: " << i << endl;
+
+#ifdef _WIN32
+    // If the console is ours alone, then we were started from Explorer
+    // (e.g., by double-clicking) and the console window closes as soon as
+    // we exit, taking the diagnostics with it. So in this case we also show
+    // them in a message box.
+    //
+    DWORD ps[2];
+    if (GetConsoleProcessList (ps, 2) == 1)
+    {
+      string m (e);
+      m += '\n';
+
+      for (const string& i: is)
+      {
+        m += '\n';
+        m += i;
+      }
+
+      MessageBoxW (nullptr,
+                   from_utf8 (m).wstring ().c_str (),
+                   L"IW4x Launcher",
+                   MB_OK | MB_ICONERROR);
+    }
+#endif
 
     return 1;
   }
