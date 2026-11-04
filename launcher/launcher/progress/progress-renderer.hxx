@@ -60,7 +60,12 @@ namespace launcher
     static constexpr int default_bar_width = 15;
     static constexpr std::size_t max_log_messages = 5;
 
-    static ftxui::Element render_item (const std::string& label,
+    // Render the row of the file at the specified position among the total
+    // number of files.
+    //
+    static ftxui::Element render_item (std::size_t position,
+                                       std::size_t total,
+                                       const std::string& label,
                                        const progress_snapshot& snapshot,
                                        int bar_width = default_bar_width,
                                        unsigned frame = 0);
