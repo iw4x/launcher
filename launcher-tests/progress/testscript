@@ -48,21 +48,3 @@
 : Test that the bar of the unknown total is as wide as the others
 :
 $* indeterminate 10 >'[ <==>     ]'
-
-: item
-: Test the colors of a file's row
-:
-$* item 512 1024 10 >>EOO
-[ 1/ 2] file                                                      50% [====>     ] |        0 B/s |      512 B |   0m00s
-llllllll                                                              ggggggggggggdddlllllllllllldddlllllllllldddlllllll
-
-EOO
-
-: summary
-: Test the colors of the total row
-:
-$* summary 512 1024 >>EOO
-[ 0/ 2] Total                                                50% [======>        ] |        0 B/s |      512 B |   0m00s
-                                                                 gggggggggggggggggddd            ddd          ddd
-*****************************************************      ******
-EOO

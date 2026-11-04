@@ -6,76 +6,14 @@
 
 #include <sstream>
 #include <iomanip>
-#include <iterator>  // back_inserter()
-#include <algorithm> // ranges::move()
+#include <algorithm>
 
 namespace launcher
 {
   using namespace ftxui;
 
-  namespace
-  {
-    // Render the bar, brackets included, in green.
-    //
-    Element
-    render_bar (float p, bool ind, int w, unsigned frame)
-    {
-      return text (progress_tracker::format_bar (p, ind, w, frame)) |
-             color (Color::Green);
-    }
-
-    // Render the [n/t] position that starts a row.
-    //
-    Element
-    render_position (std::size_t n, std::size_t t)
-    {
-      std::ostringstream o;
-      o << "[" << std::setw (2) << n << "/" << std::setw (2) << t << "] ";
-      return text (o.str ());
-    }
-
-    // Render the percentage, bar, and statistics columns of a row, the
-    // statistics in the specified color. The dividers between them are
-    // fainter still so that the numbers line up as columns.
-    //
-    Elements
-    render_columns (const progress_snapshot& s,
-                    bool ind,
-                    int w,
-                    unsigned frame,
-                    Color c)
-    {
-      float p (s.progress_ratio ());
-      int pct (static_cast<int> (p * 100));
-      int eta (s.eta_seconds ());
-
-      std::ostringstream pr, sp, by, et;
-      pr << std::setw (4) << pct << "% ";
-      sp << std::setw (12) << progress_tracker::format_speed (s.speed);
-      by << std::setw (10) << progress_tracker::format_bytes (s.current_bytes);
-      et << std::setw (7) << (eta > 0
-                              ? progress_tracker::format_duration (eta)
-                              : std::string ("0m00s"));
-
-      auto divider = [] () {return text (" | ") | color (Color::GrayDark);};
-
-      return {
-        text (pr.str ()),
-        render_bar (p, ind, w, frame),
-        divider (),
-        text (sp.str ()) | color (c),
-        divider (),
-        text (by.str ()) | color (c),
-        divider (),
-        text (et.str ()) | color (c)
-      };
-    }
-  }
-
   ftxui::Element progress_renderer::
-  render_item (std::size_t n,
-               std::size_t total,
-               const std::string& label,
+  render_item (const std::string& label,
                const progress_snapshot& s,
                int w,
                unsigned frame)
@@ -83,19 +21,31 @@ namespace launcher
     bool i (s.total_bytes == 0 ||
             (s.state == progress_state::active && s.total_bytes == 0));
 
+    float p (s.progress_ratio ());
+    int pct (static_cast<int> (p * 100));
+
     std::ostringstream l;
-    l << std::left << std::setw (45) << label;
+    l << label;
 
-    Elements es {
-      render_position (n, total) | color (Color::GrayLight),
+    std::ostringstream r;
+    r << std::right << std::setw (4) << pct << "%"
+      << " " << progress_tracker::format_bar (p, i, w, frame)
+      << " | " << std::setw (12) << progress_tracker::format_speed (s.speed)
+      << " | " << std::setw (10) << progress_tracker::format_bytes (s.current_bytes)
+      << " | " << std::setw (7);
+
+    int eta (s.eta_seconds ());
+
+    if (eta > 0)
+      r << progress_tracker::format_duration (eta);
+    else
+      r << "0m00s";
+
+    return hbox ({
       text (l.str ()),
-      filler ()
-    };
-
-    std::ranges::move (render_columns (s, i, w, frame, Color::GrayLight),
-                       std::back_inserter (es));
-
-    return hbox (std::move (es));
+      filler (),
+      text (r.str ())
+    });
   }
 
   ftxui::Element progress_renderer::
@@ -105,26 +55,33 @@ namespace launcher
                   unsigned frame)
   {
     bool i (s.total_bytes == 0);
+    float p (s.progress_ratio ());
+    int pct (static_cast<int> (p * 100));
 
     std::ostringstream l;
-    l << std::left << std::setw (45) << "Total";
+    l << "[" << std::setw (2) << done << "/"
+      << std::setw (2) << total << "] Total"
+      << std::left << std::setw (40) << "";
 
-    Elements es {
-      render_position (done, total) | bold,
-      text (l.str ()) | bold,
-      filler ()
-    };
+    std::ostringstream r;
+    r << std::right << std::setw (4) << pct << "%"
+      << " " << progress_tracker::format_bar (p, i, default_bar_width, frame)
+      << " | " << std::setw (12) << progress_tracker::format_speed (s.speed)
+      << " | " << std::setw (10) << progress_tracker::format_bytes (s.current_bytes)
+      << " | " << std::setw (7);
 
-    // The total's own numbers stay in the terminal's color, only its
-    // percentage is bold like the rest of the label.
-    //
-    Elements cs (
-      render_columns (s, i, default_bar_width, frame, Color::Default));
-    cs.front () = std::move (cs.front ()) | bold;
+    int eta (s.eta_seconds ());
 
-    std::ranges::move (cs, std::back_inserter (es));
+    if (eta > 0)
+      r << progress_tracker::format_duration (eta);
+    else
+      r << "0m00s";
 
-    return hbox (std::move (es));
+    return hbox ({
+      text (l.str ()),
+      filler (),
+      text (r.str ())
+    });
   }
 
   ftxui::Element progress_renderer::
@@ -237,13 +194,18 @@ namespace launcher
         for (std::size_t i (0); i < max; ++i)
         {
           const auto& item (c.items[i]);
+          ++n;
 
-          es.push_back (render_item (++n,
-                                     c.total_count,
-                                     item.label,
-                                     item.snapshot,
-                                     default_bar_width,
-                                     c.frame));
+          std::ostringstream l;
+          l << "[" << std::setw (2) << n << "/"
+            << std::setw (2) << c.total_count << "] "
+            << std::left << std::setw (45) << item.label;
+
+          es.push_back (render_item (
+            l.str (),
+            item.snapshot,
+            default_bar_width,
+            c.frame));
         }
 
         if (max < c.items.size ())
@@ -251,12 +213,12 @@ namespace launcher
           std::size_t k (c.items.size () - max);
           std::ostringstream s;
           s << "... (" << k << " more files not shown)";
-          es.push_back (text (s.str ()) | color (Color::GrayDark));
+          es.push_back (text (s.str ()) | dim);
         }
       }
 
       Elements bottom_es;
-      bottom_es.push_back (separator () | color (Color::GrayDark));
+      bottom_es.push_back (separator ());
       bottom_es.push_back (render_summary (
         c.completed_count,
         c.total_count,
