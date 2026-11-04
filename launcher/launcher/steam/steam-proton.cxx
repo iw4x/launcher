@@ -24,6 +24,7 @@
 #include <algorithm>
 #include <regex>
 #include <sstream>
+#include <utility>  // pair
 
 #include <launcher/launcher-process.hxx>
 #include <launcher/launcher-log.hxx>
@@ -76,6 +77,26 @@ namespace launcher
     }
 
     return "unknown";
+  }
+
+  optional<string>
+  steam_helper_file (const string& a)
+  {
+    // The helper's release assets and the names that we install them under.
+    //
+    static const pair<const char*, const char*> files[] =
+    {
+      {"steam.exe",       steam_helper_probe},
+      {"steam_api64.dll", "steam_api64.dll"}
+    };
+
+    for (const auto& [n, f]: files)
+    {
+      if (a == n)
+        return string (f);
+    }
+
+    return nullopt;
   }
 
   string

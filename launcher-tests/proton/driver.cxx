@@ -3,9 +3,12 @@
 
 #include <string>
 #include <vector>
+#include <cstdlib>   // exit()
 #include <utility>   // move()
+#include <optional>
 #include <iostream>
 #include <exception>
+#include <string_view>
 
 #include <boost/asio/co_spawn.hpp>
 
@@ -14,44 +17,79 @@
 using namespace std;
 using namespace launcher;
 
-// Usage: argv[0] <steam-root>
+namespace
+{
+  [[noreturn]] void
+  fail (const string& m)
+  {
+    cerr << "error: " << m << endl;
+    exit (1);
+  }
+
+  // Print the Proton installations of the Steam installed in sr, best
+  // first.
+  //
+  void
+  print_versions (const fs::path& sr)
+  {
+    asio::io_context ioc;
+    proton_manager pm (ioc);
+
+    vector<proton_version> r;
+    exception_ptr e;
+
+    asio::co_spawn (ioc,
+                    pm.detect_proton_versions (sr),
+                    [&r, &e] (exception_ptr x, vector<proton_version> vs)
+    {
+      e = move (x);
+      r = move (vs);
+    });
+
+    ioc.run ();
+
+    if (e != nullptr)
+      rethrow_exception (e);
+
+    for (const proton_version& v: r)
+      cout << v.name << endl;
+  }
+}
+
+// Usage: argv[0] <command> [<argument>...]
 //
-// Detect the Proton installations under <steam-root>/steamapps/common/ and
-// print their names to stdout, one per line, in the order of preference.
+// versions <steam-root>
+//    Detect the Proton installations under <steam-root>/steamapps/common/
+//    and print their names to stdout, one per line, in the order of
+//    preference.
+//
+// helper-file <asset>
+//    Print the name that the Steam helper's release asset is installed
+//    under and nothing if the asset is not part of the helper.
 //
 int
 main (int argc, char* argv[])
 {
-  if (argc != 2)
+  vector<string> as (argv + 1, argv + argc);
+  string_view c (!as.empty () ? string_view (as[0]) : string_view ());
+
+  try
   {
-    cerr << "error: steam root argument expected" << endl;
-    return 1;
+    if (c == "versions" && as.size () == 2)
+    {
+      print_versions (as[1]);
+    }
+    else if (c == "helper-file" && as.size () == 2)
+    {
+      if (optional<string> f = steam_helper_file (as[1]))
+        cout << *f << endl;
+    }
+    else
+      fail ("invalid arguments\n"
+            "  info: usage: driver <command> [<argument>...]");
   }
-
-  // The coroutine refers to the Steam root, so keep it alive until the run
-  // below returns.
-  //
-  fs::path sr (argv[1]);
-
-  asio::io_context ioc;
-  proton_manager pm (ioc);
-
-  vector<proton_version> r;
-  exception_ptr e;
-
-  asio::co_spawn (ioc,
-                  pm.detect_proton_versions (sr),
-                  [&r, &e] (exception_ptr x, vector<proton_version> vs)
+  catch (const exception& e)
   {
-    e = move (x);
-    r = move (vs);
-  });
-
-  ioc.run ();
-
-  if (e != nullptr)
-    rethrow_exception (e);
-
-  for (const proton_version& v: r)
-    cout << v.name << endl;
+    fail (e.what ());
+  }
 }

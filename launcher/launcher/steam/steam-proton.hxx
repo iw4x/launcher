@@ -77,6 +77,22 @@ namespace launcher
     build_env_map () const;
   };
 
+  // Our Steam helper (see proton_manager::run_ghost_process()) is a probe
+  // executable and the Steam API library, which its releases publish as
+  // steam.exe and steam_api64.dll.
+  //
+  // We install the probe as iw4x-steam.exe since Proton runs every program
+  // through its own steam.exe, which takes a program of that name for
+  // itself and runs the program's first argument instead.
+  //
+  constexpr const char* steam_helper_probe = "iw4x-steam.exe";
+
+  // Return the name to install the helper's release asset under in the game
+  // directory or nullopt if the asset is not part of the helper.
+  //
+  std::optional<std::string>
+  steam_helper_file (const std::string& asset);
+
   // Outcome of the Steam probe (see run_ghost_process()).
   //
   enum class ghost_result

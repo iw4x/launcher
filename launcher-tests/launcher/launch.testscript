@@ -22,7 +22,7 @@
 }
 
 : missing-helper
-: Test handling of a missing steam.exe helper
+: Test handling of a missing Steam helper
 :
 if ($cxx.target.class == 'linux')
 {
@@ -32,7 +32,7 @@ if ($cxx.target.class == 'linux')
 
   $* $offline --arch x86 >>:~%EOO% &root/cache/*** != 0
     %.*%*
-    %.+\[E\] exception caught in main: runtime dependency missing: steam\.exe%
+    %.+\[E\] exception caught in main: runtime dependency missing: iw4x-steam\.exe%
     %.+\[E\] please report this to the IW4x developers on Discord: .+%
     %.*%*
     EOO

@@ -1060,7 +1060,11 @@ namespace launcher
       bool ok (ranges::all_of (s | views::values, [] (auto st) {
         return st == file_state::valid; }));
 
-      if (ok)
+      // Note that the cache may have the probe under the name that we used
+      // to install it under (see steam_helper_file()), so make sure it is
+      // there under the current one.
+      //
+      if (ok && exists (root / steam_helper_probe))
       {
         info ("steam helper components are valid and up to date");
         co_return;
@@ -1072,11 +1076,13 @@ namespace launcher
     manifest m;
     for (const auto& a : rel.assets)
     {
-      if (a.name != "steam.exe" && a.name != "steam_api64.dll")
+      optional<string> f (steam_helper_file (a.name));
+
+      if (!f)
         continue;
 
       manifest_archive x;
-      x.name = a.name;
+      x.name = std::move (*f);
       x.url = a.browser_download_url;
       x.size = a.size;
 
@@ -1090,7 +1096,7 @@ namespace launcher
     {
       string fn (to_utf8 (from_utf8 (i.path).filename ()));
       auto it (ranges::find_if (rel.assets, [&fn] (const auto& a) {
-        return a.name == fn; }));
+        return steam_helper_file (a.name) == fn; }));
 
       if (it != rel.assets.end ())
         i.url = it->browser_download_url;
@@ -1133,8 +1139,9 @@ namespace launcher
 
     proton_coordinator proton (io, force_steam_runtime);
 
-    if (!exists (root / "steam.exe"))
-      throw runtime_error ("runtime dependency missing: steam.exe");
+    if (!exists (root / steam_helper_probe))
+      throw runtime_error (string ("runtime dependency missing: ") +
+                           steam_helper_probe);
 
     path steam_root;
 

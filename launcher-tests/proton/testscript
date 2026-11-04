@@ -14,7 +14,7 @@
     touch "steamapps/common/$n/proton"
   }
 
-  $* $~ >>EOO
+  $* versions $~ >>EOO
     Proton 10.0
     Proton 9.0
     EOO
@@ -30,7 +30,7 @@
     touch "steamapps/common/$n/proton"
   }
 
-  $* $~ >>EOO
+  $* versions $~ >>EOO
     Proton 9.0
     Proton Hotfix
     EOO
@@ -46,8 +46,17 @@
     touch "steamapps/common/$n/proton"
   }
 
-  $* $~ >>EOO
+  $* versions $~ >>EOO
     Proton - Experimental
     Proton 10.0
     EOO
 }
+
+: helper-file
+: Test the names that the Steam helper's release assets are installed under
+:
+{{
+  $* helper-file steam.exe       >'iw4x-steam.exe'  : probe
+  $* helper-file steam_api64.dll >'steam_api64.dll' : api
+  $* helper-file README.md                          : other
+}}

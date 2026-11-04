@@ -170,12 +170,12 @@ namespace launcher
     // The helper initializes the Steam API through Proton, which only
     // succeeds if Proton works and Steam is running.
     //
-    fs::path h (gd / "steam.exe");
+    fs::path h (gd / steam_helper_probe);
 
     if (!fs::exists (h))
     {
       launcher::log::warning (categories::steam{},
-                              "steam.exe helper not found at {}, assuming Steam is not running",
+                              "steam helper not found at {}, assuming Steam is not running",
                               h.string ());
       co_return false;
     }
