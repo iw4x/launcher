@@ -519,17 +519,21 @@ namespace launcher
       // Run the downloads and the wait together. Note that with
       // wait_for_all() neither keeps running if the other throws.
       //
-      auto [order, err_dl, err_ui](
+      // We keep the result whole rather than binding its parts since GCC 15.2
+      // and 16.1 otherwise warn that the coroutine's temporary for it may be
+      // used uninitialized.
+      //
+      auto r (
         co_await asio::experimental::make_parallel_group (
           asio::co_spawn (io, dc.execute_all (), asio::deferred),
           asio::co_spawn (io, ml (), asio::deferred))
           .async_wait (asio::experimental::wait_for_all (),
                        asio::use_awaitable));
 
-      if (err_dl)
-        std::rethrow_exception (err_dl);
-      if (err_ui)
-        std::rethrow_exception (err_ui);
+      if (const exception_ptr& e (get<1> (r)); e)
+        rethrow_exception (e);
+      if (const exception_ptr& e (get<2> (r)); e)
+        rethrow_exception (e);
 
       co_await pc.stop ();
 
