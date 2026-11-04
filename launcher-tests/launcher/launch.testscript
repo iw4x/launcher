@@ -11,7 +11,7 @@
 : Test handling of a game executable that does not exist
 :
 {
-  $clone_launcher
+  $clone_game
 
   $* $offline --game-exe missing.exe >>:~%EOO% &root/cache/*** != 0
     %.*%*
@@ -26,7 +26,7 @@
 :
 if ($cxx.target.class == 'linux')
 {
-  $clone_launcher
+  $clone_game
 
   touch root/iw4x.exe
 

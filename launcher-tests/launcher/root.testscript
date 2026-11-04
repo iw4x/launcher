@@ -1,0 +1,35 @@
+# Copyright (c) the IW4x authors (see the AUTHORS file).
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+.include common.testscript
+
+# Note that the launcher fails before it writes anything to the directory,
+# so these tests don't register its cache for cleanup.
+#
+
+: missing-game
+: Test handling of a launcher outside of the game directory
+:
+{
+  $clone_launcher
+
+  $* $offline 2>>~%EOE% != 0
+    %error: no iw4mp\.exe in '.+root'%
+      info: launcher must be in Modern Warfare 2 directory, next to iw4mp.exe
+    EOE
+}
+
+: parent-game
+: Test handling of a launcher in a subdirectory of the game directory
+:
+{
+  touch iw4mp.exe
+
+  $clone_launcher
+
+  $* $offline 2>>~%EOE% != 0
+    %error: no iw4mp\.exe in '.+root'%
+    %  info: Modern Warfare 2 is in parent directory '.+'%
+    %  info: consider moving iw4x-launcher(\.exe)? there%
+    EOE
+}

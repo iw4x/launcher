@@ -1284,6 +1284,52 @@ try
 
   reanchor_cwd ();
 
+  // The installation root is the working directory (see reanchor_cwd()).
+  //
+  // Note that we have no logger yet, so we report the failures of these
+  // steps to stderr ourselves.
+  //
+  path root;
+  {
+    path cwd (current_path ());
+
+    error_code ec;
+    root = canonical (cwd, ec);
+
+    if (ec)
+    {
+      cerr << "error: unable to canonicalize installation root '"
+           << to_utf8 (cwd) << "': " << ec.message () << endl;
+      return 1;
+    }
+  }
+
+  installation ins (root);
+
+  // Make sure the launcher is in the game directory before we create our
+  // cache there and install the clients into it. Users regularly run it
+  // from wherever they downloaded it to or from the directory that they
+  // extracted it into within the game directory. In the latter case point
+  // them to the game directory.
+  //
+  if (!ins.contains_game ())
+  {
+    cerr << "error: no iw4mp.exe in '" << to_utf8 (root) << "'" << endl;
+
+    path p (root.parent_path ());
+
+    if (p != root && installation (p).contains_game ())
+      cerr << "  info: Modern Warfare 2 is in parent directory '"
+           << to_utf8 (p) << "'" << '\n'
+           << "  info: consider moving "
+           << to_utf8 (self_path ().filename ()) << " there" << endl;
+    else
+      cerr << "  info: launcher must be in Modern Warfare 2 directory, "
+           << "next to iw4mp.exe" << endl;
+
+    return 1;
+  }
+
   {
     error_code ec;
     create_directories (path ("cache"), ec);
@@ -1291,22 +1337,8 @@ try
 
   active_logger = new logger;
 
-  // The installation root is the working directory (see reanchor_cwd()).
-  //
-  path cwd (current_path ());
-
-  error_code root_ec;
-
-  path root (canonical (cwd, root_ec));
-
-  if (root_ec)
-    throw system_error (root_ec,
-                        "failed to canonicalize installation root: " +
-                          to_utf8 (cwd));
-
   info ("installation root: {}", to_utf8 (root));
 
-  installation ins (root);
   ins.remove_retired ();
 
   asio::io_context io;

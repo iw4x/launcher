@@ -57,6 +57,16 @@ namespace launcher
   {
   }
 
+  bool installation::
+  contains_game () const
+  {
+    // Treat an entry that we cannot stat the same as a missing one, since
+    // we couldn't use the game's files either way.
+    //
+    error_code ec;
+    return is_regular_file (root_ / "iw4mp.exe", ec);
+  }
+
   path installation::
   cache () const
   {

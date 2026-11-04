@@ -43,6 +43,13 @@ if ($cxx.target.class == 'windows' && $directory_exists("$(launcher).dlls"))
     clone_launcher = [cmdline] $clone_launcher && ln -s "$(launcher).dlls" root/
 }
 
+# The launcher only runs in the Modern Warfare 2 directory, which it
+# recognizes by the game's iw4mp.exe (see root.testscript). So a test that
+# gets the launcher past this check clones it into a game directory, with an
+# empty iw4mp.exe next to the clone.
+#
+clone_game = [cmdline] $clone_launcher && touch root/iw4mp.exe
+
 # Options that keep the launcher from reaching outside the installation
 # root (see launcher.cli for each).
 #

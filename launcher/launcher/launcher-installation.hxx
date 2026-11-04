@@ -24,6 +24,13 @@ namespace launcher
     const std::filesystem::path&
     root () const noexcept {return root_;}
 
+    // Return true if the root is the Modern Warfare 2 directory, which we
+    // recognize by the game's iw4mp.exe. Note that the launcher installs
+    // its clients next to the game's files, so it only runs from there.
+    //
+    bool
+    contains_game () const;
+
     // Return the cache directory.
     //
     std::filesystem::path
