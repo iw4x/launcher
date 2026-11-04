@@ -66,20 +66,23 @@ namespace launcher
     // GitHub repositories of the component releases and the CDN that serves
     // the DLC.
     //
-    constexpr const char* github_org          = "iw4x";
-    constexpr const char* client_repo         = "iw4x-client";
-    constexpr const char* rawfiles_repo       = "iw4x-rawfiles";
-    constexpr const char* steam_helper_repo   = "launcher-steam";
-    constexpr const char* cdn_manifest_url    = "https://cdn.iw4x.io/update.json";
-    constexpr const char* cdn_base_url        = "https://cdn.iw4x.io/";
+    constexpr const char* github_org       = "iw4x";
+    constexpr const char* client_repo      = "iw4x-client";
+    constexpr const char* rawfiles_repo    = "iw4x-rawfiles";
+    constexpr const char* cdn_manifest_url = "https://cdn.iw4x.io/update.json";
+    constexpr const char* cdn_base_url     = "https://cdn.iw4x.io/";
 
-    constexpr const char* client_x64_org      = "iw4x-x64";
-    constexpr const char* client_x64_repo     = "Releases";
-    constexpr const char* assets_x64_repo     = "assets";
+    constexpr const char* client_x64_org   = "iw4x-x64";
+    constexpr const char* client_x64_repo  = "Releases";
+    constexpr const char* assets_x64_repo  = "assets";
 
-    // Steam app id of Call of Duty: Modern Warfare 2.
+#ifdef __linux__
+    // Only launching through Proton needs the Steam helper and the game's
+    // Steam app id (that of Call of Duty: Modern Warfare 2).
     //
-    constexpr std::uint32_t steam_app_id = 10190;
+    constexpr const char*   steam_helper_repo = "launcher-steam";
+    constexpr std::uint32_t steam_app_id      = 10190;
+#endif
 
     // Log in the launcher category.
     //
