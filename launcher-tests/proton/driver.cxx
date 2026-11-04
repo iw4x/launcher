@@ -67,6 +67,9 @@ namespace
 //    Print the name that the Steam helper's release asset is installed
 //    under and nothing if the asset is not part of the helper.
 //
+// ghost-result <exit-status>
+//    Print the outcome that the exit status of the Steam probe reports.
+//
 int
 main (int argc, char* argv[])
 {
@@ -83,6 +86,10 @@ main (int argc, char* argv[])
     {
       if (optional<string> f = steam_helper_file (as[1]))
         cout << *f << endl;
+    }
+    else if (c == "ghost-result" && as.size () == 2)
+    {
+      cout << to_string (to_ghost_result (stoi (as[1]))) << endl;
     }
     else
       fail ("invalid arguments\n"

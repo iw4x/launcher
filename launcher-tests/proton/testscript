@@ -60,3 +60,12 @@
   $* helper-file steam_api64.dll >'steam_api64.dll' : api
   $* helper-file README.md                          : other
 }}
+
+: ghost-result
+: Test the outcomes that the exit status of the Steam probe reports
+:
+{{
+  $* ghost-result 0 >'steam-running'     : success
+  $* ghost-result 1 >'steam-not-running' : failure
+  $* ghost-result 3 >'steam-not-running' : proton
+}}

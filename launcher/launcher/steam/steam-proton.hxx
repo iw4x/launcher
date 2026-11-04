@@ -105,6 +105,14 @@ namespace launcher
   std::string
   to_string (ghost_result);
 
+  // Return the outcome that the exit status of the Steam probe reports. The
+  // probe exits with 0 only if it initializes the Steam API, which is all
+  // that we go by since Proton doesn't pass the output of the program it
+  // runs through.
+  //
+  ghost_result
+  to_ghost_result (int exit_status);
+
   // Proton installations of a Steam library and the programs that we run
   // through them.
   //

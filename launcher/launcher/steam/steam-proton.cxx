@@ -112,6 +112,14 @@ namespace launcher
     return "unknown";
   }
 
+  ghost_result
+  to_ghost_result (int s)
+  {
+    return s == 0
+      ? ghost_result::steam_running
+      : ghost_result::steam_not_running;
+  }
+
   // Return true if we run on SteamOS, that is, on the Steam Deck.
   //
   bool
@@ -600,16 +608,14 @@ namespace launcher
         launcher::log::trace_l3 (categories::steam{}, "ghost process stderr: {}", l);
       }
 
-      if (x == 0 && r == "running")
-      {
+      ghost_result gr (to_ghost_result (x));
+
+      if (gr == ghost_result::steam_running)
         launcher::log::debug (categories::steam{}, "ghost process confirmed steam is running");
-        co_return ghost_result::steam_running;
-      }
       else
-      {
         launcher::log::warning (categories::steam{}, "ghost process implies steam is not running or failed probe");
-        co_return ghost_result::steam_not_running;
-      }
+
+      co_return gr;
     }
     catch (const exception& ex)
     {
