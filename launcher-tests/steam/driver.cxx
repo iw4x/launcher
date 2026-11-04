@@ -120,6 +120,9 @@ namespace
 // app-id <exe> <name>
 //    Print the app id that Steam assigns to the non-Steam game shortcut.
 //
+// started-us
+//    Print true if Steam started us and false otherwise.
+//
 // lists
 //    Print the shortcuts lists of the Steam installation in .steam/steam/
 //    of the home directory, relative to it, sorted.
@@ -152,6 +155,12 @@ main (int argc, char* argv[])
     if (c == "app-id" && as.size () == 3)
     {
       cout << steam_shortcuts::app_id (as[1], as[2]) << endl;
+      return 0;
+    }
+
+    if (c == "started-us" && as.size () == 1)
+    {
+      cout << (steam_shortcuts::started_us () ? "true" : "false") << endl;
       return 0;
     }
 

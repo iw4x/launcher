@@ -184,4 +184,29 @@ $* lists 2>'error: HOME is not the current working directory' != 0
   env "HOME=$~" -- $* write <=../iw4x >>EOO
     not installed
     EOO
+
+  : parent
+  : Test leaving the lists alone while the Steam that started us runs
+  :
+  {
+    # Process 1 always exists, so Steam appears to be running. Note that
+    # Steam's directory goes first since its cleanup is the last.
+    #
+    mkdir .steam
+    echo 1 >=.steam/steam.pid
+    mkdir --no-cleanup -p .steam/steam/userdata/12345
+
+    env "HOME=$~" SteamGameId=10190 -- $* write <=../iw4x >>EOO &.steam/steam/***
+      started the launcher, left running
+      .steam/steam/userdata/12345/config/shortcuts.vdf
+      EOO
+  }
+}}
+
+: started-us
+: Test telling whether Steam started us
+:
+{{
+  env SteamGameId=10190 -- $* started-us >'true'  : steam
+  env -u SteamGameId    -- $* started-us >'false' : other
 }}

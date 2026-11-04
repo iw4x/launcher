@@ -17,6 +17,7 @@
 
 #include <launcher/launcher-process.hxx>
 #include <launcher/launcher-log.hxx>
+#include <launcher/shortcut/shortcut-steam.hxx>
 
 using namespace std;
 using namespace std::chrono_literals;
@@ -253,15 +254,19 @@ namespace launcher
     fs::path gd (x.parent_path ());
     fs::path ld (fs::current_path ());
 
+    // Note that we never (re)start the Steam that started us (for example,
+    // through the library shortcut) since its shutdown would take us down
+    // with it.
+    //
+    bool parent (steam_shortcuts::started_us ());
+
     // The Steam client only loads the Companion module at startup. So unless
     // it is already active, we (re)start Steam through Companion, which asks
-    // a running client to exit first. That is impossible if Steam itself
-    // started us (for example, through the library shortcut), since its
-    // shutdown would take us down with it.
+    // a running client to exit first.
     //
     if (companion_installed (gd) && !companion_active ())
     {
-      if (getenv ("SteamGameId") != nullptr)
+      if (parent)
         launcher::log::warning (categories::steam{},
                                 "steam started the launcher without companion, so steam friends will not see the game being played");
       else if (!co_await start_steam (gd))
@@ -271,7 +276,14 @@ namespace launcher
 
     bool r (co_await setup_for_launch (e, gd, ld));
 
-    if (!r)
+    // The Steam that started us is running, whatever our Steam helper says.
+    //
+    if (!r && parent)
+    {
+      launcher::log::warning (categories::steam{},
+                              "steam helper did not find the steam that started the launcher, launching anyway");
+    }
+    else if (!r)
     {
       // Start Steam, which the game requires, and check again.
       //

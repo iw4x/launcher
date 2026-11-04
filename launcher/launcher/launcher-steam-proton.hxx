@@ -93,6 +93,8 @@ namespace launcher
     // Launch the executable through the best Proton installation, starting
     // Steam first if it isn't running. If Companion is installed, then also
     // make sure Steam runs with its module, restarting Steam if necessary.
+    // Note that we neither start nor restart the Steam that started us (see
+    // steam_shortcuts::started_us()).
     //
     asio::awaitable<bool>
     complete_launch (fs::path steam_path,

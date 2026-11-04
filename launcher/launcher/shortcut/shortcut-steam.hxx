@@ -27,6 +27,7 @@ namespace launcher
     not_installed, // No Steam installation found.
     no_users,      // No account has signed in to Steam yet.
     running,       // Steam would not close, so nothing was written.
+    parent,        // Steam started us, so we left it and the lists alone.
     unreadable     // A list that we cannot parse, left unchanged.
   };
 
@@ -58,6 +59,13 @@ namespace launcher
     static bool
     running ();
 
+    // Return true if Steam started us, as one of its library entries or
+    // games, which it runs with SteamGameId in the environment. Closing
+    // such a Steam also closes us.
+    //
+    static bool
+    started_us ();
+
     // Return the list paths of the accounts that have signed in to the
     // Steam installed in root. A list file may not exist yet.
     //
@@ -71,7 +79,9 @@ namespace launcher
     // and present (Linux only). Throw std::runtime_error on failures.
     //
     // Note that we first check every list, so we only close Steam if there
-    // is something to write.
+    // is something to write. Also note that we never close the Steam that
+    // started us (see started_us()) since we wouldn't be there to start it
+    // again.
     //
     static steam_status
     write (const std::vector<shortcut_spec>&,

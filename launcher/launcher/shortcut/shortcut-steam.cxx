@@ -537,6 +537,7 @@ namespace launcher
       case steam_status::not_installed: return "not installed";
       case steam_status::no_users:      return "no signed-in accounts";
       case steam_status::running:       return "running and would not close";
+      case steam_status::parent:        return "started the launcher, left running";
       case steam_status::unreadable:    return "unreadable";
     }
 
@@ -601,6 +602,13 @@ namespace launcher
       return false;
 
     return await_exit ();
+  }
+
+  bool steam_shortcuts::
+  started_us ()
+  {
+    const char* v (getenv ("SteamGameId"));
+    return v != nullptr && *v != '\0';
   }
 
   bool steam_shortcuts::
@@ -710,6 +718,9 @@ namespace launcher
 
     if (running ())
     {
+      if (started_us ())
+        return steam_status::parent;
+
       if (!shutdown (*r))
         return steam_status::running;
 

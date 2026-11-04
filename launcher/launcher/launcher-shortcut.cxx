@@ -301,6 +301,12 @@ namespace launcher
                  "them");
         break;
 
+      case steam_status::parent:
+        info ("steam started the launcher and closing it would close the "
+              "launcher as well, so its library entries were left alone; run "
+              "the launcher outside steam to add them");
+        break;
+
       case steam_status::unreadable:
         warning ("steam's shortcut list is in a form this launcher does not "
                  "recognize and was left untouched");
