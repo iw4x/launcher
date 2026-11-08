@@ -1,6 +1,6 @@
 : 1
 name: launcher
-version: 1.1.9-a.4
+version: 1.1.9-a.4.z
 language: c++
 project: launcher
 summary: Launcher and updater for IW4x.
