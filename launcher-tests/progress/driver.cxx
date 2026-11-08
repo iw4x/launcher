@@ -7,6 +7,7 @@
 #include <exception>
 
 #include <launcher/progress/progress-tracker.hxx>
+#include <launcher/progress/progress-renderer.hxx>
 
 using namespace std;
 using namespace launcher;
@@ -21,9 +22,14 @@ using namespace launcher;
 //    duration <seconds>
 //    bar <progress> <width> [<frame>]
 //    indeterminate <width>
+//    restart <count>
 //
 // The progress is a ratio from 0 to 1. At no progress the bar shows the idle
 // animation, with the frame selecting its step.
+//
+// The restart command starts and stops the renderer <count> times back to
+// back, the way the launcher does between download batches, and draws
+// nothing worth checking.
 //
 int
 main (int argc, char* argv[])
@@ -49,6 +55,16 @@ main (int argc, char* argv[])
                               n == 4 ? stoul (as[3]) : 0) << endl;
     else if (c == "indeterminate" && n == 2)
       cout << pt::format_bar (0, true, stoi (as[1])) << endl;
+    else if (c == "restart" && n == 2)
+    {
+      progress_renderer r;
+
+      for (int i (stoi (as[1])); i != 0; --i)
+      {
+        r.start ();
+        r.stop ();
+      }
+    }
     else
     {
       cerr << "error: invalid arguments\n"

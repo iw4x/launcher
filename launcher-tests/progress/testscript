@@ -48,3 +48,8 @@
 : Test that the bar of the unknown total is as wide as the others
 :
 $* indeterminate 10 >'[ <==>     ]'
+
+: restart-immediate
+: Test restarting the renderer before its previous loop has finished
+:
+$* restart 100 >-

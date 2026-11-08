@@ -4,9 +4,12 @@
 #include <launcher/progress/progress-renderer.hxx>
 #include <launcher/progress/progress-tracker.hxx>
 
+#include <ftxui/component/loop.hpp>
+
 #include <sstream>
 #include <iomanip>
 #include <algorithm>
+#include <stop_token>
 
 namespace launcher
 {
@@ -124,14 +127,38 @@ namespace launcher
   void progress_renderer::
   start ()
   {
-    if (running_.exchange (true, std::memory_order_relaxed))
+    if (running ())
       return;
+
+    // A stopped loop may still be restoring the terminal and joining the
+    // screen's listener threads, so we wait for it before the next loop
+    // starts on the same screen. Note that the old thread clears running_
+    // when it finishes, which is why we set it only after the join.
+    //
+    if (ui_thread_.joinable ())
+    {
+      ui_thread_.request_stop ();
+      ui_thread_.join ();
+    }
+
+    running_.store (true, std::memory_order_relaxed);
 
     component_ = create_component ();
 
-    ui_thread_ = std::jthread ([this]
+    // The screen drops the exit request of stop() if it arrives before the
+    // loop has installed the screen, so we also check for the stop request.
+    // Note that the loop installs the screen before the first check, which
+    // means that a stop requested after the check is delivered.
+    //
+    ui_thread_ = std::jthread ([this] (std::stop_token st)
     {
-      screen_.Loop (component_);
+      {
+        ftxui::Loop l (&screen_, component_);
+
+        while (!st.stop_requested () && !l.HasQuitted ())
+          l.RunOnceBlocking ();
+      }
+
       running_.store (false, std::memory_order_relaxed);
     });
   }
@@ -142,6 +169,7 @@ namespace launcher
     if (!running_.exchange (false, std::memory_order_relaxed))
       return;
 
+    ui_thread_.request_stop ();
     screen_.Exit ();
   }
 
